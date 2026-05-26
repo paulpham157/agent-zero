@@ -41,6 +41,9 @@ class TelegramAutoReply(Extension):
             typing_stop = context.data.pop(CTX_TG_TYPING_STOP, None)
             if typing_stop:
                 typing_stop.set()
+            from plugins._telegram_integration.helpers import draft_stream
+
+            draft_stream.clear(context)
             context.data.pop(CTX_TG_REPLY_TO, None)
 
     async def _send_reply(

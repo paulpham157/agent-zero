@@ -13,12 +13,16 @@ class TelegramResponseIntercept(Extension):
     async def execute(
         self, tool_name: str = "", response: Response | None = None, **kwargs,
     ):
-        if tool_name != "response":
-            return
         if not self.agent:
             return
         context = self.agent.context
         if not context.data.get(CTX_TG_BOT):
+            return
+
+        from plugins._telegram_integration.helpers import draft_stream
+
+        if tool_name != "response":
+            await draft_stream.add_tool_done(context, tool_name, ok=response is not None)
             return
 
         tool = self.agent.loop_data.current_tool

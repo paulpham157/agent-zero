@@ -1,6 +1,7 @@
 import os
 import re
 
+import aiohttp
 from aiogram import Bot
 from aiogram.exceptions import TelegramBadRequest
 from aiogram.types import (
@@ -17,6 +18,7 @@ _UNSET = object()  # sentinel: "not provided" (lets Bot default apply)
 # Text messages
 
 MAX_MESSAGE_LENGTH: int = 4096  # Telegram message length limit
+TELEGRAM_API_BASE: str = "https://api.telegram.org"
 
 
 async def send_text(
@@ -170,6 +172,88 @@ async def send_typing(bot: Bot, chat_id: int):
         await bot.send_chat_action(chat_id=chat_id, action="typing")
     except Exception:
         pass
+
+
+async def raw_send_text(
+    token: str,
+    chat_id: int,
+    text: str,
+    reply_to_message_id: int | None = None,
+    parse_mode: str | None = "HTML",
+    reply_markup: dict | None = None,
+) -> int | None:
+    payload: dict[str, object] = {
+        "chat_id": chat_id,
+        "text": text[:MAX_MESSAGE_LENGTH],
+    }
+    if parse_mode:
+        payload["parse_mode"] = parse_mode
+    if reply_to_message_id:
+        payload["reply_parameters"] = {"message_id": int(reply_to_message_id)}
+    if reply_markup:
+        payload["reply_markup"] = reply_markup
+    data = await _raw_post(token, "sendMessage", payload)
+    result = data.get("result") if isinstance(data, dict) else None
+    if isinstance(result, dict):
+        return result.get("message_id")
+    return None
+
+
+async def raw_edit_text(
+    token: str,
+    chat_id: int,
+    message_id: int,
+    text: str,
+    parse_mode: str | None = "HTML",
+    reply_markup: dict | None = None,
+) -> bool:
+    payload: dict[str, object] = {
+        "chat_id": chat_id,
+        "message_id": message_id,
+        "text": text[:MAX_MESSAGE_LENGTH],
+    }
+    if parse_mode:
+        payload["parse_mode"] = parse_mode
+    if reply_markup:
+        payload["reply_markup"] = reply_markup
+    data = await _raw_post(token, "editMessageText", payload)
+    if not isinstance(data, dict):
+        return False
+    if data.get("ok"):
+        return True
+    description = str(data.get("description") or "").lower()
+    return "message is not modified" in description
+
+
+async def raw_edit_reply_markup(
+    token: str,
+    chat_id: int,
+    message_id: int,
+    reply_markup: dict | None = None,
+) -> bool:
+    payload: dict[str, object] = {
+        "chat_id": chat_id,
+        "message_id": message_id,
+    }
+    if reply_markup:
+        payload["reply_markup"] = reply_markup
+    data = await _raw_post(token, "editMessageReplyMarkup", payload)
+    return bool(isinstance(data, dict) and data.get("ok"))
+
+
+async def _raw_post(token: str, method: str, payload: dict[str, object]) -> dict:
+    url = f"{TELEGRAM_API_BASE}/bot{token}/{method}"
+    try:
+        timeout = aiohttp.ClientTimeout(total=10)
+        async with aiohttp.ClientSession(timeout=timeout) as session:
+            async with session.post(url, json=payload) as response:
+                data = await response.json(content_type=None)
+                if response.status != 200 or not data.get("ok"):
+                    PrintStyle.debug(f"Telegram {method} failed: {data}")
+                return data if isinstance(data, dict) else {}
+    except Exception as e:
+        PrintStyle.debug(f"Telegram {method} failed: {format_error(e)}")
+        return {}
 
 # File download
 
