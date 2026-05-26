@@ -6,7 +6,7 @@ from pathlib import Path
 import uuid
 from typing import Any
 
-from helpers import history
+from helpers import history, media_artifacts
 from helpers.print_style import PrintStyle
 from helpers.tool import Response, Tool
 from helpers.ws import NAMESPACE
@@ -750,7 +750,7 @@ class ComputerUseRemote(Tool):
         if isinstance(artifact, dict) and str(artifact.get("encoding", "")).strip().lower() == "base64":
             encoded = str(artifact.get("data") or "")
             if encoded:
-                estimated_size = _estimated_base64_decoded_size(encoded)
+                estimated_size = media_artifacts.estimated_base64_decoded_size(encoded)
                 if estimated_size > MAX_CAPTURE_ARTIFACT_SIZE_BYTES:
                     raise RuntimeError(
                         "Computer-use capture artifact is too large to attach safely "
@@ -759,7 +759,11 @@ class ComputerUseRemote(Tool):
                 mime = str(artifact.get("mime") or "image/png").strip()
                 if not mime.startswith("image/"):
                     mime = "image/png"
-                filename = _safe_filename(str(artifact.get("filename") or "computer-use-capture.png"))
+                filename = media_artifacts.safe_filename(
+                    str(artifact.get("filename") or "computer-use-capture.png"),
+                    default=f"computer-use-{uuid.uuid4().hex}.png",
+                    default_extension=".png",
+                )
                 return f"data:{mime};base64,{encoded}", Path(filename).stem
 
         if path_error is not None:
@@ -843,19 +847,6 @@ class ComputerUseRemote(Tool):
         if isinstance(value, (int, float)):
             return bool(value)
         return str(value or "").strip().lower() in {"1", "true", "yes", "on"}
-
-
-def _safe_filename(value: str) -> str:
-    cleaned = "".join(char if char.isalnum() or char in {"-", "_", "."} else "_" for char in value)
-    cleaned = cleaned.strip("._") or f"computer-use-{uuid.uuid4().hex}.png"
-    if "." not in cleaned:
-        cleaned += ".png"
-    return cleaned
-
-
-def _estimated_base64_decoded_size(data: str) -> int:
-    compact_length = sum(1 for char in data if not char.isspace())
-    return (compact_length * 3) // 4
 
 
 def _sanitize_tool_text(value: str) -> str:

@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 
-from helpers import ephemeral_images
+from helpers import ephemeral_images, media_artifacts
 
 try:
     from helpers.ws import NAMESPACE
@@ -425,13 +425,17 @@ class ConnectorBrowserRuntime:
         data = str(artifact.get("data") or "")
         if not data:
             return result
-        estimated_size = _estimated_base64_decoded_size(data)
+        estimated_size = media_artifacts.estimated_base64_decoded_size(data)
         if estimated_size > MAX_ARTIFACT_SIZE_BYTES:
             raise RuntimeError(
                 "Host browser artifact is too large to attach safely "
                 f"({estimated_size} bytes, limit {MAX_ARTIFACT_SIZE_BYTES} bytes)."
             )
-        filename = _safe_filename(str(artifact.get("filename") or "host-browser.jpg"))
+        filename = media_artifacts.safe_filename(
+            str(artifact.get("filename") or "host-browser.jpg"),
+            default=f"host-browser-{uuid.uuid4().hex}.jpg",
+            default_extension=".jpg",
+        )
         try:
             ref = ephemeral_images.put_image(
                 context_id=self.context_id,
@@ -558,15 +562,3 @@ def _api_base_is_local(api_base: str) -> bool:
     hostname = (parsed.hostname or "").strip().lower()
     return hostname in _LOCAL_HOSTS
 
-
-def _safe_filename(value: str) -> str:
-    cleaned = "".join(char if char.isalnum() or char in {"-", "_", "."} else "_" for char in value)
-    cleaned = cleaned.strip("._") or f"host-browser-{uuid.uuid4().hex}.jpg"
-    if "." not in cleaned:
-        cleaned += ".jpg"
-    return cleaned
-
-
-def _estimated_base64_decoded_size(data: str) -> int:
-    compact_length = sum(1 for char in data if not char.isspace())
-    return (compact_length * 3) // 4
