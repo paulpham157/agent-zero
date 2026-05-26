@@ -32,6 +32,7 @@ from plugins._browser.helpers.url import normalize_url
 
 
 PLUGIN_DIR = Path(__file__).resolve().parents[1]
+DOM_HELPER_PATH = PLUGIN_DIR / "assets" / "browser-dom-helper.js"
 CONTENT_HELPER_PATH = PLUGIN_DIR / "assets" / "browser-page-content.js"
 RUNTIME_DATA_KEY = "_browser_runtime"
 DEFAULT_VIEWPORT = {"width": 1024, "height": 768}
@@ -558,6 +559,7 @@ class _BrowserRuntimeCore:
         self.screencasts: dict[str, _BrowserScreencast] = {}
         self.next_browser_id = 1
         self.last_interacted_browser_id: int | None = None
+        self._dom_helper_source: str | None = None
         self._content_helper_source: str | None = None
         self._start_lock: asyncio.Lock | None = None
         self._registry_lock: asyncio.Lock | None = None
@@ -811,6 +813,7 @@ class _BrowserRuntimeCore:
         self.context.set_default_navigation_timeout(30000)
         self.context.on("close", self._on_context_closed)
         self.context.on("page", self._on_new_page_sync)
+        await self.context.add_init_script(path=str(DOM_HELPER_PATH))
         await self.context.add_init_script(path=str(CONTENT_HELPER_PATH))
 
         for page in list(self.context.pages):
@@ -2325,6 +2328,7 @@ class _BrowserRuntimeCore:
             await self.stop_screencast(stream_id)
 
     async def _ensure_content_helper(self, page: Any) -> None:
+        await self._ensure_dom_helper(page)
         has_helper = await page.evaluate(
             "() => Boolean(globalThis.__spaceBrowserPageContent__?.ready?.())"
         )
@@ -2333,6 +2337,30 @@ class _BrowserRuntimeCore:
         if self._content_helper_source is None:
             self._content_helper_source = CONTENT_HELPER_PATH.read_text(encoding="utf-8")
         await page.evaluate(self._content_helper_source)
+
+    async def _ensure_dom_helper(self, page: Any) -> None:
+        if self._dom_helper_source is None:
+            self._dom_helper_source = DOM_HELPER_PATH.read_text(encoding="utf-8")
+        await self._ensure_helper_source(
+            page,
+            self._dom_helper_source,
+            "() => Boolean(globalThis.__spaceBrowserDomHelper__?.captureDocument)",
+        )
+
+    async def _ensure_helper_source(self, page: Any, source: str, ready_script: str) -> None:
+        targets = [page]
+        frames = getattr(page, "frames", None)
+        if isinstance(frames, list) and frames:
+            targets = frames
+        for target in targets:
+            try:
+                has_helper = await target.evaluate(ready_script)
+            except Exception:
+                continue
+            if has_helper:
+                continue
+            with contextlib.suppress(Exception):
+                await target.evaluate(source)
 
 _runtimes: dict[str, BrowserRuntime] = {}
 _runtime_lock = threading.RLock()

@@ -448,6 +448,9 @@ def test_connector_runtime_ensures_preparable_host_browser_before_action(monkeyp
             assert result == {"id": 1, "state": {"runtime": "host"}}
             assert [payload["action"] for payload in emitted] == ["ensure", "open"]
             assert [payload["profile_mode"] for payload in emitted] == ["existing", "existing"]
+            assert "__spaceBrowserDomHelper__" in emitted[0]["dom_helper"]["source"]
+            assert "captureDocument" in emitted[0]["dom_helper"]["required_apis"]
+            assert emitted[0]["dom_helper"]["sha256"]
             assert "__spaceBrowserPageContent__" in emitted[0]["content_helper"]["source"]
             assert "capture" in emitted[0]["content_helper"]["required_apis"]
             assert emitted[0]["content_helper"]["sha256"]

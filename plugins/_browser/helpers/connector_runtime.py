@@ -39,6 +39,7 @@ from plugins._browser.helpers.url import normalize_url
 
 BROWSER_OP_EVENT = "connector_browser_op"
 BROWSER_OP_TIMEOUT = 120.0
+DOM_HELPER_PATH = Path(__file__).resolve().parents[1] / "assets" / "browser-dom-helper.js"
 CONTENT_HELPER_PATH = Path(__file__).resolve().parents[1] / "assets" / "browser-page-content.js"
 MAX_ARTIFACT_SIZE_BYTES = 25 * 1024 * 1024
 HOST_BROWSER_PRIVACY_POLICY_KEY = getattr(
@@ -287,7 +288,7 @@ class ConnectorBrowserRuntime:
             )
             sid = self._select_sid() or sid
 
-        return await self._send_browser_op(sid, self._with_content_helper(sid, payload))
+        return await self._send_browser_op(sid, self._with_browser_helpers(sid, payload))
 
     def _host_browser_profile_mode(self) -> str:
         config = get_browser_config(self.agent)
@@ -295,11 +296,25 @@ class ConnectorBrowserRuntime:
         return "agent" if mode == "agent" else "existing"
 
     def _with_content_helper(self, sid: str, payload: dict[str, Any]) -> dict[str, Any]:
+        return self._with_browser_helpers(sid, payload)
+
+    def _with_browser_helpers(self, sid: str, payload: dict[str, Any]) -> dict[str, Any]:
         metadata = host_browser_metadata_for_sid(sid) or {}
-        if str(metadata.get("content_helper_sha256") or "").strip().lower() == _content_helper_sha256():
+        content_helper_current = (
+            str(metadata.get("content_helper_sha256") or "").strip().lower()
+            == _content_helper_sha256()
+        )
+        dom_helper_current = (
+            str(metadata.get("dom_helper_sha256") or "").strip().lower()
+            == _dom_helper_sha256()
+        )
+        if content_helper_current and dom_helper_current:
             return payload
         payload = dict(payload)
-        payload["content_helper"] = _content_helper_payload()
+        if not dom_helper_current:
+            payload["dom_helper"] = _dom_helper_payload()
+        if not content_helper_current:
+            payload["content_helper"] = _content_helper_payload()
         return payload
 
     async def _send_browser_op(self, sid: str, payload: dict[str, Any]) -> Any:
@@ -521,6 +536,33 @@ def _content_helper_sha256() -> str:
     return str(_content_helper_payload()["sha256"])
 
 
+@lru_cache(maxsize=1)
+def _dom_helper_payload() -> dict[str, Any]:
+    try:
+        source = DOM_HELPER_PATH.read_text(encoding="utf-8")
+    except OSError as exc:
+        raise RuntimeError(
+            f"Host-browser DOM helper could not be read from {DOM_HELPER_PATH}: {exc}"
+        ) from exc
+    return {
+        "required_apis": [
+            "captureDocument",
+            "clickNode",
+            "detailNode",
+            "scrollNode",
+            "submitNode",
+            "typeNode",
+            "typeSubmitNode",
+        ],
+        "source": source,
+        "sha256": hashlib.sha256(source.encode("utf-8")).hexdigest(),
+    }
+
+
+def _dom_helper_sha256() -> str:
+    return str(_dom_helper_payload()["sha256"])
+
+
 def _content_helper_required_apis(source: str) -> list[str]:
     match = _REQUIRED_API_NAMES_RE.search(source)
     if not match:
@@ -561,4 +603,3 @@ def _api_base_is_local(api_base: str) -> bool:
     parsed = urlparse(api_base if "://" in api_base else f"http://{api_base}")
     hostname = (parsed.hostname or "").strip().lower()
     return hostname in _LOCAL_HOSTS
-

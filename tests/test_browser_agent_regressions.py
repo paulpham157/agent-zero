@@ -1,5 +1,6 @@
 import asyncio
 import json
+import re
 import sys
 import threading
 from pathlib import Path
@@ -1226,7 +1227,13 @@ def test_browser_runtime_and_content_helper_expose_annotation_target():
     helper = (
         PROJECT_ROOT / "plugins" / "_browser" / "assets" / "browser-page-content.js"
     ).read_text(encoding="utf-8")
+    dom_helper = (
+        PROJECT_ROOT / "plugins" / "_browser" / "assets" / "browser-dom-helper.js"
+    ).read_text(encoding="utf-8")
 
+    assert "DOM_HELPER_PATH" in runtime
+    assert "browser-dom-helper.js" in runtime
+    assert "globalThis.__spaceBrowserDomHelper__?.captureDocument" in runtime
     assert "async def annotation_target" in runtime
     assert "globalThis.__spaceBrowserPageContent__.annotate(payload || null)" in runtime
     assert "function annotate(payload = null)" in helper
@@ -1238,6 +1245,11 @@ def test_browser_runtime_and_content_helper_expose_annotation_target():
     assert "fileInputFor," in helper
     assert "sanitizeAnnotationDom" in helper
     assert "password" in helper
+    assert "__spaceBrowserDomHelper__" in dom_helper
+    assert "captureDocument(payload)" in dom_helper
+    assert "clickNode(frameChain, nodeId)" in dom_helper
+    assert "requestChildFrameOperation" in dom_helper
+    assert "data-space-browser-frame-chain" in dom_helper
 
 
 def test_browser_content_helper_keeps_label_wrapped_controls_referenceable():
@@ -1277,6 +1289,77 @@ def test_browser_runtime_requires_current_content_helper_for_modifier_clicks():
     ).read_text(encoding="utf-8")
 
     assert "__spaceBrowserPageContent__?.ready?.()" in runtime
+
+
+@pytest.mark.anyio
+async def test_browser_dom_helper_clicks_content_ref_inside_iframe():
+    pytest.importorskip("playwright.async_api")
+    from playwright.async_api import async_playwright
+
+    browser_binary = get_playwright_binary()
+    if not browser_binary:
+        pytest.skip("Playwright Chromium binary is not installed")
+
+    dom_helper = (
+        PROJECT_ROOT / "plugins" / "_browser" / "assets" / "browser-dom-helper.js"
+    ).read_text(encoding="utf-8")
+    content_helper = (
+        PROJECT_ROOT / "plugins" / "_browser" / "assets" / "browser-page-content.js"
+    ).read_text(encoding="utf-8")
+
+    async with async_playwright() as playwright:
+        try:
+            browser = await playwright.chromium.launch(
+                executable_path=str(browser_binary),
+                headless=True,
+                args=["--no-sandbox"],
+            )
+        except Exception as exc:
+            pytest.skip(f"Playwright Chromium could not launch: {exc}")
+
+        try:
+            context = await browser.new_context()
+            await context.add_init_script(dom_helper)
+            await context.add_init_script(content_helper)
+            page = await context.new_page()
+            await page.set_content(
+                """
+                <html>
+                  <body>
+                    <iframe srcdoc="
+                      <html>
+                        <body>
+                          <button id='inside' onclick=&quot;document.body.dataset.clicked = 'yes'; this.textContent = 'Clicked inside frame'&quot;>
+                            Frame Launch
+                          </button>
+                        </body>
+                      </html>
+                    "></iframe>
+                  </body>
+                </html>
+                """
+            )
+            await page.wait_for_function(
+                "() => Boolean(document.querySelector('iframe')?.contentWindow?.__spaceBrowserDomHelper__)"
+            )
+
+            captured = await page.evaluate(
+                "(payload) => globalThis.__spaceBrowserPageContent__.capture(payload || null)",
+                None,
+            )
+            document_content = str(captured.get("document") or "")
+            match = re.search(r"\[button (\d+)\]\s*Frame Launch", document_content)
+            assert match, document_content
+
+            action = await page.evaluate(
+                "(ref) => globalThis.__spaceBrowserPageContent__.click(ref)",
+                match.group(1),
+            )
+            frame = next(frame for frame in page.frames if frame != page.main_frame)
+            assert await frame.evaluate("() => document.body.dataset.clicked") == "yes"
+            assert action["status"]["reacted"] is True
+        finally:
+            await browser.close()
 
 
 @pytest.mark.anyio
