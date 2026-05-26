@@ -9,6 +9,20 @@ import {
 const CATALOG_API = "/plugins/_skills/skills_catalog";
 const MAX_ACTIVE_SKILLS_FALLBACK = 20;
 
+function normalizeMaxActiveSkills(value) {
+  if (typeof value === "boolean") return MAX_ACTIVE_SKILLS_FALLBACK;
+
+  const numeric = typeof value === "number"
+    ? value
+    : Number.parseInt(String(value ?? "").trim(), 10);
+
+  if (!Number.isFinite(numeric) || numeric < 1) {
+    return MAX_ACTIVE_SKILLS_FALLBACK;
+  }
+
+  return Math.floor(numeric);
+}
+
 function normalizeEntry(entry) {
   if (!entry) return null;
   if (typeof entry === "string") {
@@ -48,10 +62,11 @@ function entriesMatch(left, right) {
 
 function ensureConfig(config) {
   if (!config || typeof config !== "object") return;
+  config.max_active_skills = normalizeMaxActiveSkills(config.max_active_skills);
   const activeSkills = Array.isArray(config.active_skills) ? config.active_skills : [];
   const hiddenSkills = Array.isArray(config.hidden_skills) ? config.hidden_skills : [];
 
-  config.active_skills = compactEntries(activeSkills, MAX_ACTIVE_SKILLS_FALLBACK);
+  config.active_skills = compactEntries(activeSkills, config.max_active_skills);
   config.hidden_skills = compactEntries(hiddenSkills);
 }
 
@@ -87,6 +102,7 @@ window.createSkillsConfigModel = (context, config) => ({
 
   initDefaults() {
     ensureConfig(config);
+    this.maxActiveSkills = config.max_active_skills;
     this.mode = this.isChatMode ? "visible" : "pinned";
     this.selectedSkills = [...this.activeEntries];
     this.hiddenSkills = [...this.hiddenEntries];
@@ -108,6 +124,36 @@ window.createSkillsConfigModel = (context, config) => ({
 
   get selectedCount() {
     return this.selectedSkills.length;
+  },
+
+  async applyMaxActiveSkills(value, { notify = false } = {}) {
+    ensureConfig(config);
+
+    const nextLimit = normalizeMaxActiveSkills(value);
+    const previousLimit = this.maxActiveSkills;
+    const previousCount = this.selectedSkills.length;
+
+    config.max_active_skills = nextLimit;
+    this.maxActiveSkills = nextLimit;
+
+    if (previousCount > nextLimit) {
+      this._setSelectedSkills(this.selectedSkills.slice(0, nextLimit));
+
+      if (notify) {
+        await toastFrontendInfo(
+          `Trimmed ${previousCount - nextLimit} pinned skill${previousCount - nextLimit === 1 ? "" : "s"} to match the new cap of ${nextLimit}.`,
+          "Skills"
+        );
+      }
+      return;
+    }
+
+    if (notify && previousLimit !== nextLimit) {
+      await toastFrontendInfo(
+        `Pinned skill cap set to ${nextLimit}.`,
+        "Skills"
+      );
+    }
   },
 
   get catalogMap() {
@@ -346,11 +392,15 @@ window.createSkillsConfigModel = (context, config) => ({
       }
 
       this.catalog = Array.isArray(response.skills) ? response.skills : [];
-      this.maxActiveSkills = Number(response.max_active_skills) || MAX_ACTIVE_SKILLS_FALLBACK;
+      this.maxActiveSkills = normalizeMaxActiveSkills(response.max_active_skills);
+      if (!this.isChatMode) {
+        config.max_active_skills = this.maxActiveSkills;
+      }
       this.applyCatalogState(response);
     } catch (error) {
       this.catalog = [];
-      this.maxActiveSkills = MAX_ACTIVE_SKILLS_FALLBACK;
+      ensureConfig(config);
+      this.maxActiveSkills = config.max_active_skills;
       this.chatContextAvailable = false;
       this._setSelectedSkills(this.activeEntries);
       this._setHiddenSkills(this.hiddenEntries);
@@ -382,7 +432,10 @@ window.createSkillsConfigModel = (context, config) => ({
       }
 
       this.catalog = Array.isArray(response.skills) ? response.skills : this.catalog;
-      this.maxActiveSkills = Number(response.max_active_skills) || this.maxActiveSkills;
+      this.maxActiveSkills = normalizeMaxActiveSkills(response.max_active_skills);
+      if (!this.isChatMode) {
+        config.max_active_skills = this.maxActiveSkills;
+      }
       this.chatContextAvailable = !!response.context_available;
       this.applyCatalogState(response);
       return true;

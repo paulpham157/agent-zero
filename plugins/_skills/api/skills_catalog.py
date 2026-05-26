@@ -114,7 +114,10 @@ class SkillsCatalog(ApiHandler):
             "context_id": context.id if context else "",
             "project_name": project_name,
             "skills": catalog,
-            "max_active_skills": skills.get_max_active_skills(),
+            "max_active_skills": skills.get_max_active_skills(
+                agent=agent,
+                project_name=project_name,
+            ),
             "active_skills": [
                 self._serialize_entry(
                     entry,

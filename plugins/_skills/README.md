@@ -22,7 +22,7 @@ The shared active-skill state and prompt-resolution logic live in `helpers/skill
 ## Notes
 
 - keep the active list short because every active skill is injected into prompt extras every turn
-- the framework-wide cap is 20 active skills
+- the default cap is 20 active skills, and it can be raised or lowered in Skills plugin config
 - hidden skills are not capped because they are stored as control data, not injected into the prompt
 - selected skills are stored in normalized `/a0/...` form so configs stay portable across development and Docker-style layouts
 - scope defaults can be hidden or supplemented per chat without creating a new conversation

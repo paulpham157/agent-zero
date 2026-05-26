@@ -581,14 +581,46 @@ def validate_skill_md(skill_md_path: Path) -> List[str]:
     return validate_skill(skill)
 
 
-def get_max_active_skills() -> int:
-    return MAX_ACTIVE_SKILLS
+def _normalize_max_active_skills(value: Any) -> int:
+    if isinstance(value, bool):
+        return MAX_ACTIVE_SKILLS
+
+    try:
+        normalized = int(value)
+    except (TypeError, ValueError):
+        return MAX_ACTIVE_SKILLS
+
+    return normalized if normalized >= 1 else MAX_ACTIVE_SKILLS
+
+
+def get_max_active_skills(
+    agent: Agent | None = None,
+    project_name: str | None = None,
+) -> int:
+    if agent is None and project_name is None:
+        return MAX_ACTIVE_SKILLS
+
+    config = (
+        plugin_helpers.get_plugin_config(
+            ACTIVE_SKILLS_PLUGIN_NAME,
+            agent=agent,
+            project_name=project_name or "",
+            agent_profile="",
+        )
+        or {}
+    )
+    return _normalize_max_active_skills(config.get("max_active_skills"))
 
 
 def normalize_skills_config(config: dict[str, Any] | None) -> dict[str, Any]:
     normalized = dict(config or {})
+    max_active_skills = _normalize_max_active_skills(
+        normalized.get("max_active_skills")
+    )
+    normalized["max_active_skills"] = max_active_skills
     normalized["active_skills"] = normalize_active_skills(
-        normalized.get("active_skills")
+        normalized.get("active_skills"),
+        limit=max_active_skills,
     )
     normalized["hidden_skills"] = normalize_hidden_skills(
         normalized.get("hidden_skills")
@@ -596,8 +628,15 @@ def normalize_skills_config(config: dict[str, Any] | None) -> dict[str, Any]:
     return normalized
 
 
-def normalize_active_skills(raw: Any) -> list[ActiveSkillEntry]:
-    return normalize_skill_entries(raw, limit=get_max_active_skills())
+def normalize_active_skills(
+    raw: Any,
+    *,
+    limit: int | None = None,
+) -> list[ActiveSkillEntry]:
+    return normalize_skill_entries(
+        raw,
+        limit=get_max_active_skills() if limit is None else limit,
+    )
 
 
 def normalize_hidden_skills(raw: Any) -> list[ActiveSkillEntry]:
@@ -686,7 +725,10 @@ def get_scope_active_skills(agent: Agent | None) -> list[ActiveSkillEntry]:
         )
         or {}
     )
-    return normalize_active_skills(config.get("active_skills"))
+    return normalize_active_skills(
+        config.get("active_skills"),
+        limit=get_max_active_skills(agent=agent, project_name=project_name),
+    )
 
 
 def get_scope_hidden_skills(agent: Agent | None) -> list[ActiveSkillEntry]:
@@ -709,7 +751,11 @@ def get_scope_hidden_skills(agent: Agent | None) -> list[ActiveSkillEntry]:
 def get_chat_active_skills(context: Any | None) -> list[ActiveSkillEntry]:
     if not context:
         return []
-    return normalize_active_skills(context.get_data(CONTEXT_DATA_NAME_CHAT_ACTIVE_SKILLS))
+    agent = context.get_agent() if hasattr(context, "get_agent") else None
+    return normalize_active_skills(
+        context.get_data(CONTEXT_DATA_NAME_CHAT_ACTIVE_SKILLS),
+        limit=get_max_active_skills(agent=agent),
+    )
 
 
 def get_chat_disabled_skills(context: Any | None) -> list[ActiveSkillEntry]:
@@ -752,7 +798,7 @@ def _build_active_skills(
         return []
 
     context = getattr(agent, "context", None)
-    effective_limit = get_max_active_skills() if limit is None else limit
+    effective_limit = get_max_active_skills(agent=agent) if limit is None else limit
     scope_entries = get_scope_active_skills(agent)
     current_chat_entries = list(
         chat_entries if chat_entries is not None else get_chat_active_skills(context)
@@ -781,7 +827,7 @@ def _build_active_skills(
 
 
 def get_active_skills(agent: Agent | None) -> list[ActiveSkillEntry]:
-    return _build_active_skills(agent, limit=get_max_active_skills())
+    return _build_active_skills(agent, limit=get_max_active_skills(agent=agent))
 
 
 def get_loaded_skill_entries(agent: Agent | None) -> list[ActiveSkillEntry]:
@@ -864,9 +910,10 @@ def activate_chat_skill(agent: Agent, entry: Any) -> list[ActiveSkillEntry]:
         visible_entries=visible_entries,
         limit=-1,
     )
-    if len(merged_entries) > get_max_active_skills():
+    max_active_skills = get_max_active_skills(agent=agent)
+    if len(merged_entries) > max_active_skills:
         raise ValueError(
-            f"You can activate at most {get_max_active_skills()} skills."
+            f"You can activate at most {max_active_skills} skills."
         )
 
     _store_context_active_skill_entries(
@@ -1219,7 +1266,11 @@ def _store_context_active_skill_entries(
     key: str,
     entries: list[ActiveSkillEntry],
 ) -> None:
-    normalized_entries = normalize_active_skills(entries)
+    agent = context.get_agent() if hasattr(context, "get_agent") else None
+    normalized_entries = normalize_active_skills(
+        entries,
+        limit=get_max_active_skills(agent=agent),
+    )
     context.set_data(key, normalized_entries or None)
 
 

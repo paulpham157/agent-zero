@@ -94,6 +94,7 @@ runtime = _load_skills_helper_module()
 class DummyContext:
     def __init__(self):
         self.data = {}
+        self.agent = None
 
     def get_data(self, key, recursive=True):
         return self.data.get(key)
@@ -101,20 +102,43 @@ class DummyContext:
     def set_data(self, key, value, recursive=True):
         self.data[key] = value
 
+    def get_agent(self):
+        return self.agent
+
 
 class DummyAgent:
     def __init__(self):
         self.context = DummyContext()
+        self.context.agent = self
         self.data = {}
 
 
-def _scope_config(entries):
-    return {"active_skills": entries}
+def _scope_config(entries=None, *, hidden_entries=None, max_active_skills=None):
+    config = {}
+    if entries is not None:
+        config["active_skills"] = entries
+    if hidden_entries is not None:
+        config["hidden_skills"] = hidden_entries
+    if max_active_skills is not None:
+        config["max_active_skills"] = max_active_skills
+    return config
 
 
 def test_active_skills_cap_is_twenty():
     assert runtime.MAX_ACTIVE_SKILLS == 20
     assert runtime.get_max_active_skills() == 20
+
+
+def test_skills_config_can_raise_active_cap_above_default():
+    config = runtime.normalize_skills_config(
+        {
+            "max_active_skills": 25,
+            "active_skills": [{"name": f"Skill {index}"} for index in range(25)],
+        }
+    )
+
+    assert config["max_active_skills"] == 25
+    assert len(config["active_skills"]) == 25
 
 
 def test_hidden_skills_are_not_capped_like_active_skills():
@@ -394,6 +418,38 @@ def test_activating_new_skill_fails_once_limit_is_full(monkeypatch):
         runtime.activate_chat_skill(agent, {"name": "Overflow"})
 
     assert len(runtime.get_active_skills(agent)) == 20
+
+
+def test_chat_activation_respects_scope_configured_cap(monkeypatch):
+    monkeypatch.setattr(
+        runtime.plugin_helpers,
+        "get_plugin_config",
+        lambda *args, **kwargs: _scope_config(max_active_skills=25),
+    )
+    agent = DummyAgent()
+
+    for index in range(21):
+        runtime.activate_chat_skill(agent, {"name": f"Extra {index}"})
+
+    assert len(runtime.get_chat_active_skills(agent.context)) == 21
+    assert len(runtime.get_active_skills(agent)) == 21
+
+
+def test_activating_new_skill_uses_scope_configured_limit(monkeypatch):
+    monkeypatch.setattr(
+        runtime.plugin_helpers,
+        "get_plugin_config",
+        lambda *args, **kwargs: _scope_config(
+            [{"name": f"Pinned {index}"} for index in range(3)],
+            max_active_skills=3,
+        ),
+    )
+    agent = DummyAgent()
+
+    with pytest.raises(ValueError, match="at most 3"):
+        runtime.activate_chat_skill(agent, {"name": "Overflow"})
+
+    assert len(runtime.get_active_skills(agent)) == 3
 
 
 def test_hidden_skills_filter_agent_visible_skill_catalog(monkeypatch, tmp_path: Path):
