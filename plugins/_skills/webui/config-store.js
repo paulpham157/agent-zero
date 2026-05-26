@@ -110,26 +110,6 @@ window.createSkillsConfigModel = (context, config) => ({
     return this.selectedSkills.length;
   },
 
-  get selectedCountLabel() {
-    return `${this.selectedCount} / ${this.maxActiveSkills}`;
-  },
-
-  get hiddenCount() {
-    return this.catalog.filter((skill) => this.isHidden(skill)).length;
-  },
-
-  get visibleCount() {
-    return Math.max(0, this.catalog.length - this.hiddenCount);
-  },
-
-  get visibilityCountLabel() {
-    return `${this.visibleCount} visible / ${this.hiddenCount} hidden`;
-  },
-
-  get currentCountLabel() {
-    return this.mode === "visible" ? this.visibilityCountLabel : this.selectedCountLabel;
-  },
-
   get catalogMap() {
     const byKey = new Map();
     for (const skill of this.catalog) {
