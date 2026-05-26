@@ -829,6 +829,53 @@ def test_self_update_manager_usr_backup_skips_runtime_sockets():
         )
 
 
+def test_self_update_manager_usr_backup_skips_transient_desktop_ssh_agent_dir(tmp_path):
+    manager = load_self_update_manager()
+    repo_dir = tmp_path / "repo"
+    usr_dir = repo_dir / "usr"
+    ssh_dir = (
+        usr_dir
+        / "plugins"
+        / "_desktop"
+        / "profiles"
+        / "agent-zero-desktop"
+        / ".ssh"
+    )
+    transient_agent_dir = ssh_dir / "agent"
+    transient_agent_dir.mkdir(parents=True)
+    (transient_agent_dir / "socket").write_text("ephemeral\n", encoding="utf-8")
+    (ssh_dir / "config").write_text("Host github.com\n", encoding="utf-8")
+    (usr_dir / "settings.json").write_text('{"ok": true}\n', encoding="utf-8")
+    messages = []
+
+    class ListLogger:
+        def log(self, message=""):
+            messages.append(message)
+
+    backup_path = manager.create_usr_backup(
+        repo_dir=repo_dir,
+        backup_path=str(tmp_path / "backups"),
+        backup_name="usr-backup.zip",
+        conflict_policy="rename",
+        logger=ListLogger(),
+    )
+
+    with zipfile.ZipFile(backup_path) as archive:
+        names = set(archive.namelist())
+
+    assert "usr/settings.json" in names
+    assert "usr/plugins/_desktop/profiles/agent-zero-desktop/.ssh/config" in names
+    assert (
+        "usr/plugins/_desktop/profiles/agent-zero-desktop/.ssh/agent/socket"
+        not in names
+    )
+    assert any(
+        "Skipping transient usr backup directory: "
+        "usr/plugins/_desktop/profiles/agent-zero-desktop/.ssh/agent" in message
+        for message in messages
+    )
+
+
 def test_self_update_manager_clean_uv_cache_uses_uv_when_available(monkeypatch):
     manager = load_self_update_manager()
     commands = []

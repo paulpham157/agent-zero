@@ -363,8 +363,17 @@ def create_usr_backup(
             compression=zipfile.ZIP_DEFLATED,
             compresslevel=6,
         ) as archive:
-            for root, _, files in os.walk(usr_dir):
+            for root, dirs, files in os.walk(usr_dir):
                 root_path = Path(root)
+                root_relative = root_path.relative_to(usr_dir)
+                dirs[:] = [
+                    dirname
+                    for dirname in dirs
+                    if not should_exclude_from_usr_backup(
+                        root_relative / dirname,
+                        logger,
+                    )
+                ]
                 for filename in files:
                     source_file = root_path / filename
                     if not should_include_usr_backup_entry(source_file, logger):
@@ -384,6 +393,24 @@ def create_usr_backup(
     finally:
         if temporary_backup.exists():
             temporary_backup.unlink(missing_ok=True)
+
+
+def should_exclude_from_usr_backup(
+    relative_dir: Path,
+    logger: AttemptLogger,
+) -> bool:
+    parts = relative_dir.parts
+    if (
+        len(parts) >= 6
+        and parts[0] == "plugins"
+        and parts[1] == "_desktop"
+        and parts[2] == "profiles"
+        and parts[-2] == ".ssh"
+        and parts[-1] == "agent"
+    ):
+        logger.log(f"Skipping transient usr backup directory: {Path('usr') / relative_dir}")
+        return True
+    return False
 
 
 def should_include_usr_backup_entry(source_file: Path, logger: AttemptLogger) -> bool:
