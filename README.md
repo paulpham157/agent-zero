@@ -30,6 +30,8 @@ Agent Zero is an open, dynamic, organic agentic framework. One Docker container 
 </a>
 </div>
 
+# What Makes Agent Zero Different
+
 ## How To Install
 
 ### macOS / Linux
@@ -51,8 +53,6 @@ docker run -p 80:80 -v a0_usr:/a0/usr agent0ai/agent-zero
 ```
 
 Open the Web UI, configure your LLM provider, and start with a concrete task. For the full setup and onboarding experience, see the [Installation guide](./docs/setup/installation.md).
-
-# What Makes Agent Zero Different
 
 ## A Real Linux Desktop in the Canvas
 
