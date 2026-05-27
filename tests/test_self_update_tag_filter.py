@@ -876,6 +876,100 @@ def test_self_update_manager_usr_backup_skips_transient_desktop_ssh_agent_dir(tm
     )
 
 
+def test_self_update_manager_cleans_transient_desktop_ssh_agent_dir():
+    manager = load_self_update_manager()
+    with tempfile.TemporaryDirectory(prefix="a0su-", dir="/tmp") as temp_root:
+        repo_dir = Path(temp_root) / "repo"
+        agent_dir = repo_dir / manager.TRANSIENT_DESKTOP_SSH_AGENT_RELATIVE_DIR
+        nested_dir = agent_dir / "nested"
+        agent_dir.mkdir(parents=True)
+        nested_dir.mkdir()
+        (agent_dir / "socket").write_text("ephemeral\n", encoding="utf-8")
+        (nested_dir / "token").write_text("ephemeral\n", encoding="utf-8")
+        (agent_dir / "broken-link").symlink_to("/missing/ssh-agent-socket")
+        socket_path = agent_dir / "runtime.sock"
+        messages = []
+
+        class ListLogger:
+            def log(self, message=""):
+                messages.append(message)
+
+        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as runtime_socket:
+            runtime_socket.bind(str(socket_path))
+
+        manager.clean_transient_desktop_ssh_agent_dir(repo_dir, ListLogger())
+
+        assert agent_dir.exists()
+        assert list(agent_dir.iterdir()) == []
+        assert any(
+            f"Removed 4 transient desktop SSH agent entries from {agent_dir}" in message
+            for message in messages
+        )
+
+
+def test_self_update_manager_cleans_transient_desktop_ssh_agent_dir_skips_missing(
+    tmp_path,
+):
+    manager = load_self_update_manager()
+    repo_dir = tmp_path / "repo"
+    messages = []
+
+    class ListLogger:
+        def log(self, message=""):
+            messages.append(message)
+
+    manager.clean_transient_desktop_ssh_agent_dir(repo_dir, ListLogger())
+
+    assert any(
+        "Transient desktop SSH agent directory not found, skipping:" in message
+        for message in messages
+    )
+
+
+def test_self_update_manager_desktop_ssh_cleanup_failure_does_not_block_startup(
+    monkeypatch,
+    tmp_path,
+):
+    manager = load_self_update_manager()
+    request_data = {"branch": "main", "tag": "v1.2", "requested_at": "now"}
+    current_info = {
+        "branch": "main",
+        "describe": "v1.2",
+        "short_tag": "v1.2",
+        "commit": "abc1234",
+        "short_commit": "abc1234",
+    }
+    launched = []
+    fake_process = object()
+
+    monkeypatch.setattr(manager, "LOG_FILE", tmp_path / "a0-self-update.log")
+    monkeypatch.setattr(
+        manager,
+        "load_request_file",
+        lambda: (request_data, "branch: main\ntag: v1.2\n"),
+    )
+    monkeypatch.setattr(manager, "clean_uv_cache", lambda logger: None)
+    monkeypatch.setattr(
+        manager,
+        "clean_transient_desktop_ssh_agent_dir",
+        lambda repo_dir, logger: (_ for _ in ()).throw(RuntimeError("cleanup boom")),
+    )
+    monkeypatch.setattr(manager, "get_repo_version_info", lambda repo_dir: current_info)
+    monkeypatch.setattr(manager, "record_result", lambda **kwargs: None)
+    monkeypatch.setattr(
+        manager,
+        "launch_ui_process",
+        lambda repo_dir, logger: launched.append(repo_dir) or fake_process,
+    )
+    monkeypatch.setattr(manager, "wait_for_process", lambda process: 0)
+
+    assert manager.docker_run_ui() == 0
+    assert launched == [manager.REPO_DIR]
+    assert "Transient desktop SSH agent cleanup skipped after error: cleanup boom" in (
+        tmp_path / "a0-self-update.log"
+    ).read_text(encoding="utf-8")
+
+
 def test_self_update_manager_clean_uv_cache_uses_uv_when_available(monkeypatch):
     manager = load_self_update_manager()
     commands = []

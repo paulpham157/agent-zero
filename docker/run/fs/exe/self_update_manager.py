@@ -46,6 +46,9 @@ DEFAULT_BACKUP_CONFLICT_POLICY = "rename"
 BACKUP_CONFLICT_POLICIES = {"rename", "overwrite", "fail"}
 MIN_SELECTOR_VERSION = (1, 0)
 LATEST_SELECTOR_TAG = "latest"
+TRANSIENT_DESKTOP_SSH_AGENT_RELATIVE_DIR = Path(
+    "usr/plugins/_desktop/profiles/agent-zero-desktop/.ssh/agent"
+)
 
 
 def now_iso() -> str:
@@ -446,6 +449,61 @@ def should_include_usr_backup_entry(source_file: Path, logger: AttemptLogger) ->
         return False
 
     return True
+
+
+def clean_transient_desktop_ssh_agent_dir(
+    repo_dir: Path,
+    logger: AttemptLogger,
+) -> None:
+    agent_dir = repo_dir / TRANSIENT_DESKTOP_SSH_AGENT_RELATIVE_DIR
+    try:
+        agent_stat = agent_dir.lstat()
+    except FileNotFoundError:
+        logger.log(
+            f"Transient desktop SSH agent directory not found, skipping: {agent_dir}"
+        )
+        return
+    except OSError as exc:
+        logger.log(
+            f"Transient desktop SSH agent directory could not be inspected: {agent_dir}: {exc}"
+        )
+        return
+
+    if stat.S_ISLNK(agent_stat.st_mode) or not stat.S_ISDIR(agent_stat.st_mode):
+        logger.log(
+            f"Transient desktop SSH agent path is not a directory, skipping: {agent_dir}"
+        )
+        return
+
+    removed = 0
+    try:
+        entries = list(agent_dir.iterdir())
+    except OSError as exc:
+        logger.log(
+            f"Transient desktop SSH agent directory could not be listed: {agent_dir}: {exc}"
+        )
+        return
+
+    for entry in entries:
+        try:
+            if entry.is_symlink():
+                entry.unlink(missing_ok=True)
+            elif entry.is_dir():
+                shutil.rmtree(entry)
+            else:
+                entry.unlink(missing_ok=True)
+            removed += 1
+        except FileNotFoundError:
+            continue
+        except OSError as exc:
+            logger.log(
+                f"Skipping transient desktop SSH agent entry after error: {entry}: {exc}"
+            )
+
+    if removed:
+        logger.log(f"Removed {removed} transient desktop SSH agent entries from {agent_dir}")
+    else:
+        logger.log(f"Transient desktop SSH agent directory already empty: {agent_dir}")
 
 
 def run_command(
@@ -1266,6 +1324,10 @@ def docker_run_ui() -> int:
         logger.log(f"Consumed update file at {TRIGGER_FILE}")
         logger.log_block("Trigger file content", raw_text)
         clean_uv_cache(logger)
+        try:
+            clean_transient_desktop_ssh_agent_dir(REPO_DIR, logger)
+        except Exception as exc:
+            logger.log(f"Transient desktop SSH agent cleanup skipped after error: {exc}")
 
         try:
             current = get_repo_version_info(REPO_DIR)
