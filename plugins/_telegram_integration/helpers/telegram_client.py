@@ -115,6 +115,81 @@ async def send_photo(
         return None
 
 
+async def send_voice(
+    bot: Bot,
+    chat_id: int,
+    voice_path: str,
+    caption: str = "",
+    reply_to_message_id: int | None = None,
+) -> int | None:
+    """Send a voice message from local path. Returns message_id or None on error."""
+    try:
+        if not os.path.isfile(voice_path):
+            PrintStyle.error(f"Telegram: voice file not found: {voice_path}")
+            return None
+        input_file = FSInputFile(voice_path)
+        msg = await bot.send_voice(
+            chat_id=chat_id,
+            voice=input_file,
+            caption=caption[:1024] if caption else None,
+            reply_to_message_id=reply_to_message_id,
+        )
+        return msg.message_id
+    except Exception as e:
+        PrintStyle.error(f"Telegram send_voice failed: {format_error(e)}")
+        return None
+
+
+async def send_audio(
+    bot: Bot,
+    chat_id: int,
+    audio_path: str,
+    caption: str = "",
+    reply_to_message_id: int | None = None,
+) -> int | None:
+    """Send an audio message from local path. Returns message_id or None on error."""
+    try:
+        if not os.path.isfile(audio_path):
+            PrintStyle.error(f"Telegram: audio file not found: {audio_path}")
+            return None
+        input_file = FSInputFile(audio_path)
+        msg = await bot.send_audio(
+            chat_id=chat_id,
+            audio=input_file,
+            caption=caption[:1024] if caption else None,
+            reply_to_message_id=reply_to_message_id,
+        )
+        return msg.message_id
+    except Exception as e:
+        PrintStyle.error(f"Telegram send_audio failed: {format_error(e)}")
+        return None
+
+
+async def send_video(
+    bot: Bot,
+    chat_id: int,
+    video_path: str,
+    caption: str = "",
+    reply_to_message_id: int | None = None,
+) -> int | None:
+    """Send a video message from local path. Returns message_id or None on error."""
+    try:
+        if not os.path.isfile(video_path):
+            PrintStyle.error(f"Telegram: video file not found: {video_path}")
+            return None
+        input_file = FSInputFile(video_path)
+        msg = await bot.send_video(
+            chat_id=chat_id,
+            video=input_file,
+            caption=caption[:1024] if caption else None,
+            reply_to_message_id=reply_to_message_id,
+        )
+        return msg.message_id
+    except Exception as e:
+        PrintStyle.error(f"Telegram send_video failed: {format_error(e)}")
+        return None
+
+
 # Inline keyboards
 
 def build_inline_keyboard(
@@ -294,11 +369,29 @@ def _split_text(text: str, max_len: int) -> list[str]:
 
 
 _IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp"}
+_VOICE_EXTENSIONS = {".ogg", ".oga", ".opus"}
+_AUDIO_EXTENSIONS = {".mp3", ".m4a", ".aac", ".wav", ".flac"}
+_VIDEO_EXTENSIONS = {".mp4", ".m4v", ".mov", ".webm"}
 
 
 def is_image_file(path: str) -> bool:
     _, ext = os.path.splitext(path.lower())
     return ext in _IMAGE_EXTENSIONS
+
+
+def is_voice_file(path: str) -> bool:
+    _, ext = os.path.splitext(path.lower())
+    return ext in _VOICE_EXTENSIONS
+
+
+def is_audio_file(path: str) -> bool:
+    _, ext = os.path.splitext(path.lower())
+    return ext in _AUDIO_EXTENSIONS
+
+
+def is_video_file(path: str) -> bool:
+    _, ext = os.path.splitext(path.lower())
+    return ext in _VIDEO_EXTENSIONS
 
 
 def md_to_telegram_html(text: str) -> str:

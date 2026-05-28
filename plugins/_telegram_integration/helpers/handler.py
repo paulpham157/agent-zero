@@ -526,6 +526,12 @@ async def send_telegram_reply(
                     local_path = files.fix_dev_path(path)
                     if tc.is_image_file(local_path):
                         await tc.send_photo(reply_bot, chat_id, local_path, reply_to_message_id=reply_to)
+                    elif tc.is_voice_file(local_path):
+                        await tc.send_voice(reply_bot, chat_id, local_path, reply_to_message_id=reply_to)
+                    elif tc.is_audio_file(local_path):
+                        await tc.send_audio(reply_bot, chat_id, local_path, reply_to_message_id=reply_to)
+                    elif tc.is_video_file(local_path):
+                        await tc.send_video(reply_bot, chat_id, local_path, reply_to_message_id=reply_to)
                     else:
                         await tc.send_file(reply_bot, chat_id, local_path, reply_to_message_id=reply_to)
 
