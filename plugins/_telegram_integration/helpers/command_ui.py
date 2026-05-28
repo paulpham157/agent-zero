@@ -1,9 +1,10 @@
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 
 from agent import AgentContext
-from helpers import projects, subagents
+from helpers import files, projects, subagents
 from helpers import integration_commands
 from helpers.persist_chat import save_tmp_chat
 from helpers.state_monitor_integration import mark_dirty_for_context
@@ -12,9 +13,16 @@ from plugins._telegram_integration.helpers import telegram_client as tc
 from plugins._telegram_integration.helpers.constants import (
     CTX_TG_STREAM_ENABLED,
     CTX_TG_TOOLS_ENABLED,
+    CTX_TG_BOT,
+    CTX_TG_CHAT_ID,
+    CTX_TG_CHAT_TYPE,
+    CTX_TG_USER_ID,
+    CTX_TG_USERNAME,
+    STATE_FILE,
 )
 
 PAGE_SIZE = 8
+SESSION_PAGE_SIZE = 4
 CALLBACK_PREFIX = "tg"
 
 
@@ -22,6 +30,14 @@ CALLBACK_PREFIX = "tg"
 class PickerItem:
     key: str
     label: str
+
+
+@dataclass(frozen=True)
+class SessionItem:
+    context: AgentContext
+    label: str
+    last_message: str
+    running: bool
 
 
 async def handle_command(
@@ -43,6 +59,9 @@ async def handle_command(
         return True
     if command in {"/agent", "/profile"} and not args:
         await send_agent_picker(context, token, chat_id, reply_to_message_id, 0)
+        return True
+    if command in {"/sessions", "/session"} and not args:
+        await send_session_picker(context, token, chat_id, reply_to_message_id, 0)
         return True
     if command == "/stream":
         await send_toggle_picker(
@@ -91,6 +110,8 @@ async def handle_callback(
             await edit_project_picker(context, token, chat_id, message_id, page)
         elif kind == "agent":
             await edit_agent_picker(context, token, chat_id, message_id, page)
+        elif kind == "session":
+            await edit_session_picker(context, token, chat_id, message_id, page)
         return True
     if kind == "model" and action in {"set", "clear"}:
         await _select_model(context, _safe_int(value), clear=(action == "clear"))
@@ -103,6 +124,10 @@ async def handle_callback(
     if kind == "agent" and action == "set":
         await _select_agent(context, _safe_int(value))
         await edit_agent_picker(context, token, chat_id, message_id, 0, selected=True)
+        return True
+    if kind == "session" and action == "set":
+        selected_context = await _select_session(context, _safe_int(value))
+        await edit_session_picker(selected_context or context, token, chat_id, message_id, 0, selected=bool(selected_context))
         return True
     if kind in {"stream", "tools"} and action in {"on", "off"}:
         key = CTX_TG_STREAM_ENABLED if kind == "stream" else CTX_TG_TOOLS_ENABLED
@@ -217,6 +242,30 @@ async def edit_toggle_picker(
     await tc.raw_edit_text(token, chat_id, message_id, text, "HTML", markup)
 
 
+async def send_session_picker(
+    context: AgentContext,
+    token: str,
+    chat_id: int,
+    reply_to_message_id: int | None,
+    page: int,
+) -> None:
+    text, markup = _session_view(context, page)
+    await tc.raw_send_text(token, chat_id, text, reply_to_message_id, "HTML", markup)
+
+
+async def edit_session_picker(
+    context: AgentContext,
+    token: str,
+    chat_id: int,
+    message_id: int,
+    page: int,
+    *,
+    selected: bool = False,
+) -> None:
+    text, markup = _session_view(context, page, selected=selected)
+    await tc.raw_edit_text(token, chat_id, message_id, text, "HTML", markup)
+
+
 def _model_view(
     context: AgentContext,
     page: int,
@@ -295,6 +344,48 @@ def _toggle_view(context: AgentContext, key: str, label: str) -> tuple[str, dict
     return text, {"inline_keyboard": rows}
 
 
+def _session_view(
+    context: AgentContext,
+    page: int,
+    *,
+    selected: bool = False,
+) -> tuple[str, dict | None]:
+    items = _session_items()
+    current_label = _session_label(context)
+    status = f"Current session: <b>{_html(current_label)}</b>"
+    if context.is_running():
+        status += "\nSession switching is available after the current run finishes."
+    elif selected:
+        status = "Session switched.\n" + status
+    if not items:
+        return status + "\nNo sessions were found.", None
+
+    total = len(items)
+    page = _clamp_page(page, total, SESSION_PAGE_SIZE)
+    start = page * SESSION_PAGE_SIZE
+    end = min(start + SESSION_PAGE_SIZE, total)
+    rows: list[list[dict[str, str]]] = []
+    for index, item in enumerate(items[start:end], start=start):
+        marker = "• " if item.context.id == context.id else ""
+        suffix = " (running)" if item.running else ""
+        action = "noop" if context.is_running() or item.running else "set"
+        rows.append([{
+            "text": f"{marker}{item.label}{suffix}"[:64],
+            "callback_data": f"tg:session:{action}:{index}",
+        }])
+
+    nav: list[dict[str, str]] = []
+    if page > 0:
+        nav.append({"text": "Prev", "callback_data": f"tg:session:page:{page - 1}"})
+    if end < total:
+        nav.append({"text": "Next", "callback_data": f"tg:session:page:{page + 1}"})
+    if nav:
+        rows.append(nav)
+
+    range_text = f"\nShowing {start + 1}-{end} of {total}."
+    return status + range_text, {"inline_keyboard": rows}
+
+
 async def _select_model(context: AgentContext, index: int, *, clear: bool = False) -> None:
     if not model_config.is_chat_override_allowed(context.agent0):
         return
@@ -337,6 +428,86 @@ async def _select_agent(context: AgentContext, index: int) -> None:
         agent = agent.get_data(Agent.DATA_NAME_SUBORDINATE)
     save_tmp_chat(context)
     mark_dirty_for_context(context.id, reason="telegram.agent_select")
+
+
+async def _select_session(context: AgentContext, index: int) -> AgentContext | None:
+    if context.is_running():
+        return None
+    items = _session_items()
+    if index < 0 or index >= len(items):
+        return None
+    target = items[index].context
+    if target.is_running():
+        return None
+
+    _copy_telegram_binding(context, target)
+    _set_session_mapping(target)
+    save_tmp_chat(target)
+    mark_dirty_for_context(context.id, reason="telegram.session_unselect")
+    mark_dirty_for_context(target.id, reason="telegram.session_select")
+    return target
+
+
+def _session_items() -> list[SessionItem]:
+    contexts = sorted(
+        AgentContext.all(),
+        key=lambda item: str(item.output().get("last_message") or ""),
+        reverse=True,
+    )
+    return [
+        SessionItem(
+            context=item,
+            label=_session_label(item),
+            last_message=str(item.output().get("last_message") or ""),
+            running=item.is_running(),
+        )
+        for item in contexts
+    ]
+
+
+def _session_label(context: AgentContext) -> str:
+    return str(context.name or context.id or "Session")
+
+
+def _copy_telegram_binding(source: AgentContext, target: AgentContext) -> None:
+    for key in (
+        CTX_TG_BOT,
+        CTX_TG_CHAT_ID,
+        CTX_TG_CHAT_TYPE,
+        CTX_TG_USER_ID,
+        CTX_TG_USERNAME,
+    ):
+        if key in source.data:
+            target.data[key] = source.data[key]
+
+
+def _set_session_mapping(context: AgentContext) -> None:
+    bot_name = str(context.data.get(CTX_TG_BOT) or "")
+    user_id = context.data.get(CTX_TG_USER_ID)
+    chat_id = context.data.get(CTX_TG_CHAT_ID)
+    if not bot_name or user_id is None or chat_id is None:
+        return
+    key = f"{bot_name}:{int(user_id)}:{int(chat_id)}"
+    state = _load_telegram_state()
+    chats = state.setdefault("chats", {})
+    chats[key] = context.id
+    _save_telegram_state(state)
+
+
+def _load_telegram_state() -> dict:
+    path = files.get_abs_path(STATE_FILE)
+    if not files.exists(path):
+        return {}
+    try:
+        return json.loads(files.read_file(path))
+    except Exception:
+        return {}
+
+
+def _save_telegram_state(state: dict) -> None:
+    path = files.get_abs_path(STATE_FILE)
+    files.make_dirs(path)
+    files.write_file(path, json.dumps(state))
 
 
 def _paged_buttons(
@@ -388,6 +559,11 @@ def _safe_int(value: str) -> int:
         return int(value)
     except (TypeError, ValueError):
         return 0
+
+
+def _clamp_page(page: int, total_items: int, page_size: int) -> int:
+    total_pages = max(1, (total_items + page_size - 1) // page_size)
+    return min(max(0, page), total_pages - 1)
 
 
 def _label_for(items: list[PickerItem], key: str) -> str:

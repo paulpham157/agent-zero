@@ -35,6 +35,12 @@ COMMAND_REGISTRY: tuple[IntegrationCommandDef, ...] = (
         "Info",
     ),
     IntegrationCommandDef("new", "Start a fresh chat context.", "Session"),
+    IntegrationCommandDef(
+        "sessions",
+        "Show or switch recent chat sessions.",
+        "Session",
+        aliases=("session",),
+    ),
     IntegrationCommandDef("clear", "Reset the current chat context.", "Session", aliases=("reset",)),
     IntegrationCommandDef(
         "queue",
@@ -168,6 +174,8 @@ def try_handle_command(context: "AgentContext", text: str) -> str | None:
         return help_text(full=True)
     if command == "/status":
         return _handle_status(context)
+    if command == "/sessions":
+        return _handle_sessions(context)
     if command in {"/new", "/clear"}:
         return _handle_clear(context, new_chat=(command == "/new"))
     if command == "/send":
@@ -249,6 +257,24 @@ def _handle_status(context: "AgentContext") -> str:
         f"Agent: {agent_profile}\n"
         f"Queued messages: {queue_count}"
     )
+
+
+def _handle_sessions(context: "AgentContext") -> str:
+    from agent import AgentContext
+
+    contexts = sorted(
+        AgentContext.all(),
+        key=lambda item: str(item.output().get("last_message") or ""),
+        reverse=True,
+    )
+    lines = ["Recent sessions:"]
+    for item in contexts[:4]:
+        marker = " (current)" if item.id == context.id else ""
+        running = " - running" if item.is_running() else ""
+        lines.append(f"- {item.name or item.id}{marker}{running}")
+    if len(contexts) > 4:
+        lines.append(f"And {len(contexts) - 4} more. Use Telegram buttons to page through them.")
+    return "\n".join(lines)
 
 
 def _handle_clear(context: "AgentContext", *, new_chat: bool) -> str:
