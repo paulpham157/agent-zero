@@ -24,7 +24,6 @@ This plugin connects one or more Telegram bots to Agent Zero. Each bot runs inde
   - `/agent <profile>` switches the active agent profile when the current run is idle.
   - `/model`, `/project`, and `/agent` show Telegram inline keyboard pickers when used without arguments.
   - `/stream` toggles live response streaming; `/tools` toggles tool progress messages.
-  - `/speech` toggles spoken replies. When enabled, final text replies also include Kokoro-generated Telegram audio when Kokoro TTS is available.
   - `/send` or `/queue send` flushes queued messages for the current chat.
   - `/steer <message>` sends an intervention to the active run.
 - **Group support**
@@ -36,7 +35,6 @@ This plugin connects one or more Telegram bots to Agent Zero. Each bot runs inde
 - **Reply delivery**
   - Streams tool progress and response text through real Telegram messages updated with `editMessageText`.
   - Tool progress and the AI response are separate messages; only the AI response replies to the user message.
-  - Sends native Telegram media: photos, voice/audio files, videos, and document fallback.
   - `tool_execute_after` intercepts the `response` tool — sends `break_loop=false` updates as separate intermediate Telegram messages.
   - `process_chain_end` auto-sends the final response, with retry logic on failure.
 - **Formatting**
@@ -65,7 +63,6 @@ This plugin connects one or more Telegram bots to Agent Zero. Each bot runs inde
   - `helpers/telegram_client.py` — Low-level Telegram API wrapper: send text/file/photo, Markdown→HTML converter, keyboard builder, message splitting.
   - `helpers/command_ui.py` — Telegram inline keyboard command pickers and callback handling.
   - `helpers/draft_stream.py` — Editable Telegram message streaming for tool progress and response previews.
-  - `helpers/speech.py` — Telegram speech-mode TTS synthesis and audio attachment generation.
 - **Extensions**
   - `extensions/python/job_loop/_10_telegram_bot.py` — Bot lifecycle manager, starts/stops bots on each tick.
   - `extensions/python/message_loop_start/_45_telegram_draft_start.py` — Initializes Telegram response streaming.

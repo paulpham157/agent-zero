@@ -71,12 +71,6 @@ COMMAND_REGISTRY: tuple[IntegrationCommandDef, ...] = (
         args_hint="[on|off]",
     ),
     IntegrationCommandDef(
-        "speech",
-        "Enable or disable Telegram spoken replies.",
-        "Configuration",
-        args_hint="[on|off]",
-    ),
-    IntegrationCommandDef(
         "project",
         "Show or switch the active project.",
         "Configuration",
@@ -200,8 +194,6 @@ def try_handle_command(context: "AgentContext", text: str) -> str | None:
         return _handle_toggle(context, args, "telegram_stream_enabled", "Response streaming")
     if command == "/tools":
         return _handle_toggle(context, args, "telegram_tools_enabled", "Tool progress")
-    if command == "/speech":
-        return _handle_toggle(context, args, "telegram_speech_enabled", "Speech replies")
     if command == "/project":
         return _handle_project(context, args)
     if command == "/model":

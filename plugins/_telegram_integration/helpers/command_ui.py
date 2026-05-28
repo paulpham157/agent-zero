@@ -13,7 +13,6 @@ from plugins._telegram_integration.helpers import telegram_client as tc
 from plugins._telegram_integration.helpers.constants import (
     CTX_TG_STREAM_ENABLED,
     CTX_TG_TOOLS_ENABLED,
-    CTX_TG_SPEECH_ENABLED,
     CTX_TG_BOT,
     CTX_TG_CHAT_ID,
     CTX_TG_CHAT_TYPE,
@@ -86,17 +85,6 @@ async def handle_command(
             args,
         )
         return True
-    if command == "/speech":
-        await send_toggle_picker(
-            context,
-            token,
-            chat_id,
-            reply_to_message_id,
-            CTX_TG_SPEECH_ENABLED,
-            "Speech replies",
-            args,
-        )
-        return True
     return False
 
 
@@ -141,8 +129,9 @@ async def handle_callback(
         selected_context = await _select_session(context, _safe_int(value))
         await edit_session_picker(selected_context or context, token, chat_id, message_id, 0, selected=bool(selected_context))
         return True
-    if kind in {"stream", "tools", "speech"} and action in {"on", "off"}:
-        key, label = _toggle_key_label(kind)
+    if kind in {"stream", "tools"} and action in {"on", "off"}:
+        key = CTX_TG_STREAM_ENABLED if kind == "stream" else CTX_TG_TOOLS_ENABLED
+        label = "Response streaming" if kind == "stream" else "Tool progress"
         context.set_data(key, action == "on")
         save_tmp_chat(context)
         mark_dirty_for_context(context.id, reason=f"telegram.{kind}_toggle")
@@ -345,7 +334,7 @@ def _agent_view(
 
 def _toggle_view(context: AgentContext, key: str, label: str) -> tuple[str, dict]:
     enabled = _toggle_enabled(context, key)
-    kind = _toggle_kind(key)
+    kind = "stream" if key == CTX_TG_STREAM_ENABLED else "tools"
     state = "enabled" if enabled else "disabled"
     text = f"{_html(label)}: <b>{state}</b>"
     rows = [[
@@ -553,25 +542,7 @@ def _paged_buttons(
 
 def _toggle_enabled(context: AgentContext, key: str) -> bool:
     value = context.get_data(key)
-    if key == CTX_TG_SPEECH_ENABLED:
-        return bool(value)
     return True if value is None else bool(value)
-
-
-def _toggle_kind(key: str) -> str:
-    if key == CTX_TG_STREAM_ENABLED:
-        return "stream"
-    if key == CTX_TG_TOOLS_ENABLED:
-        return "tools"
-    return "speech"
-
-
-def _toggle_key_label(kind: str) -> tuple[str, str]:
-    if kind == "stream":
-        return CTX_TG_STREAM_ENABLED, "Response streaming"
-    if kind == "tools":
-        return CTX_TG_TOOLS_ENABLED, "Tool progress"
-    return CTX_TG_SPEECH_ENABLED, "Speech replies"
 
 
 def _parse_toggle(args: str) -> bool | None:

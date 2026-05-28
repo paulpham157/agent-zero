@@ -32,17 +32,7 @@ class TelegramAutoReply(Extension):
 
         try:
             if response_text:
-                from plugins._telegram_integration.helpers import speech
-
-                speech_attachment, speech_warning = await speech.synthesize_attachment(
-                    context, response_text
-                )
-                if speech_attachment:
-                    attachments = [*attachments, speech_attachment]
                 await self._send_reply(context, response_text, attachments, keyboard)
-                warning = speech.consume_warning(context, speech_warning)
-                if warning:
-                    await self._send_reply(context, warning, [], None)
         except Exception as e:
             PrintStyle.error(f"Telegram auto-reply error: {format_error(e)}")
         finally:
