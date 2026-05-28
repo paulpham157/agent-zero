@@ -29,10 +29,10 @@ TOOL_EMOJIS: dict[str, str] = {
     "code": "⌨️",
     "code_execution_tool": "⌨️",
     "duckduckgo_search": "🔎",
+    "read_file": "📖",
     "file": "📄",
     "knowledge_tool": "📚",
     "memory": "🧠",
-    "read_file": "📖",
     "search": "🔎",
     "search_engine": "🔎",
     "search_files": "🔎",
@@ -89,6 +89,12 @@ async def send_intermediate_response(
     response_text: str,
     keyboard: list[list[dict]] | None = None,
 ) -> bool:
+    if context.data.get(CTX_TG_RESPONSE_MESSAGE_ID):
+        sent = await finalize_response(context, response_text, keyboard)
+        if sent:
+            _reset_progress_group(context)
+        return sent
+
     html = _format_response(response_text)
     if not html:
         return False
@@ -104,7 +110,10 @@ async def send_intermediate_response(
             parse_mode="HTML",
             reply_markup=_keyboard_markup(keyboard),
         )
-        return bool(sent_id)
+        sent = bool(sent_id)
+        if sent:
+            _reset_progress_group(context)
+        return sent
     except Exception as e:
         PrintStyle.debug(f"Telegram intermediate response failed: {e}")
         return False
@@ -140,6 +149,11 @@ def clear(context: AgentContext) -> None:
         CTX_TG_RESPONSE_LAST_UPDATE,
     ):
         context.data.pop(key, None)
+
+
+def _reset_progress_group(context: AgentContext) -> None:
+    context.data.pop(CTX_TG_PROGRESS_LINES, None)
+    context.data.pop(CTX_TG_PROGRESS_MESSAGE_ID, None)
 
 
 def _stream_enabled(context: AgentContext) -> bool:
@@ -208,6 +222,7 @@ async def _update_response_message(
     keyboard: list[list[dict]] | None = None,
     force: bool = False,
 ) -> bool:
+    had_message = bool(context.data.get(CTX_TG_RESPONSE_MESSAGE_ID))
     message_id = await _ensure_response_message(context, text)
     bot = _bot_instance(context)
     chat_id = context.data.get(CTX_TG_CHAT_ID)
@@ -215,6 +230,8 @@ async def _update_response_message(
         return False
     markup = _keyboard_markup(keyboard)
     html = _format_response(text)
+    if not had_message and not markup and not force:
+        return True
     try:
         ok = await tc.raw_edit_text(
             bot.bot.token,
