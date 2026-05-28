@@ -18,6 +18,7 @@ from plugins._telegram_integration.helpers.constants import (
     CTX_TG_RESPONSE_TEXT,
     CTX_TG_STREAM_ENABLED,
     CTX_TG_TOOLS_ENABLED,
+    CTX_TG_ERROR_SENT,
 )
 
 MAX_STREAM_CHARS: int = 3900
@@ -42,6 +43,7 @@ TOOL_EMOJIS: dict[str, str] = {
 
 
 async def start(context: AgentContext) -> None:
+    context.data.pop(CTX_TG_ERROR_SENT, None)
     # Do not pre-create a placeholder Telegram message. Wait until we have
     # real assistant text so the stream starts with meaningful content.
     if not _stream_enabled(context):
