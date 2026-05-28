@@ -35,7 +35,7 @@ This plugin connects one or more Telegram bots to Agent Zero. Each bot runs inde
 - **Reply delivery**
   - Streams tool progress and response text through real Telegram messages updated with `editMessageText`.
   - Tool progress and the AI response are separate messages; only the AI response replies to the user message.
-  - `tool_execute_after` intercepts the `response` tool — sends inline progress for `break_loop=false`.
+  - `tool_execute_after` intercepts the `response` tool — sends `break_loop=false` updates as separate intermediate Telegram messages.
   - `process_chain_end` auto-sends the final response, with retry logic on failure.
 - **Formatting**
   - Converts Markdown output to Telegram-compatible HTML (bold, italic, strikethrough, code, links, blockquotes, lists).

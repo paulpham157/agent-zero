@@ -84,6 +84,32 @@ async def update_response(context: AgentContext, response_text: str) -> None:
     context.data[CTX_TG_RESPONSE_LAST_UPDATE] = now
 
 
+async def send_intermediate_response(
+    context: AgentContext,
+    response_text: str,
+    keyboard: list[list[dict]] | None = None,
+) -> bool:
+    html = _format_response(response_text)
+    if not html:
+        return False
+    bot = _bot_instance(context)
+    chat_id = context.data.get(CTX_TG_CHAT_ID)
+    if not bot or not chat_id:
+        return False
+    try:
+        sent_id = await tc.raw_send_text(
+            bot.bot.token,
+            int(chat_id),
+            html,
+            parse_mode="HTML",
+            reply_markup=_keyboard_markup(keyboard),
+        )
+        return bool(sent_id)
+    except Exception as e:
+        PrintStyle.debug(f"Telegram intermediate response failed: {e}")
+        return False
+
+
 async def finalize_response(
     context: AgentContext,
     response_text: str,
