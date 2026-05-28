@@ -12,6 +12,7 @@ class TelegramDraftStart(Extension):
         if not context.data.get(CTX_TG_BOT):
             return
 
-        from plugins._telegram_integration.helpers import draft_stream
+        from plugins._telegram_integration.helpers import draft_stream, heartbeat
 
         await draft_stream.start(context)
+        await heartbeat.start(context)

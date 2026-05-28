@@ -27,7 +27,7 @@ class TelegramFriendlyError(Extension):
 
         context.data[CTX_TG_ERROR_SENT] = True
 
-        from plugins._telegram_integration.helpers import draft_stream, error_ui
+        from plugins._telegram_integration.helpers import draft_stream, error_ui, heartbeat
         from plugins._telegram_integration.helpers.handler import send_telegram_reply
 
         text = error_ui.friendly_error_message(exception)
@@ -38,5 +38,6 @@ class TelegramFriendlyError(Extension):
         typing_stop = context.data.pop(CTX_TG_TYPING_STOP, None)
         if typing_stop:
             typing_stop.set()
+        await heartbeat.stop(context)
         draft_stream.clear(context)
         context.data.pop(CTX_TG_REPLY_TO, None)
