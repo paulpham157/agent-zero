@@ -13,6 +13,7 @@ CTX_TG_TYPING_STOP = "_telegram_typing_stop"
 CTX_TG_REPLY_TO = "_telegram_reply_to_message_id"
 CTX_TG_STREAM_ENABLED = "telegram_stream_enabled"
 CTX_TG_TOOLS_ENABLED = "telegram_tools_enabled"
+CTX_TG_SPEECH_ENABLED = "telegram_speech_enabled"
 
 # Transient
 CTX_TG_ATTACHMENTS = "_telegram_response_attachments"
@@ -25,3 +26,4 @@ CTX_TG_RESPONSE_LAST_UPDATE = "_telegram_response_last_update"
 CTX_TG_ERROR_SENT = "_telegram_error_sent"
 CTX_TG_HEARTBEAT_TASK = "_telegram_heartbeat_task"
 CTX_TG_HEARTBEAT_STOP = "_telegram_heartbeat_stop"
+CTX_TG_SPEECH_WARNING_SENT = "_telegram_speech_warning_sent"
