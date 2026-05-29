@@ -1,0 +1,33 @@
+<html>
+<head>
+    <title>Document Query</title>
+</head>
+
+<body>
+    <div x-data>
+        <template x-if="config">
+            <div>
+                <div class="section-title">Document Query</div>
+                <div class="section-description">
+                    Settings for document parsing and retrieval.
+                </div>
+
+                <div class="field">
+                    <div class="field-label">
+                        <div class="field-title">Max parser concurrency</div>
+                        <div class="field-description">
+                            Maximum document parser jobs allowed to run at the same time in this Agent Zero process.
+                        </div>
+                    </div>
+                    <div class="field-control">
+                        <input type="number" min="1" step="1"
+                            x-init="config.parser_concurrency = Math.max(1, parseInt(config.parser_concurrency || 1, 10) || 1)"
+                            x-model.number="config.parser_concurrency" />
+                    </div>
+                </div>
+            </div>
+        </template>
+    </div>
+</body>
+
+</html>

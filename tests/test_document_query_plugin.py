@@ -122,6 +122,16 @@ def test_default_config_bounds_liteparse_runtime_concurrency():
     assert "liteparse_subprocess: true" in default_config
 
 
+def test_config_panel_exposes_parser_concurrency_setting():
+    config_html = (
+        ROOT / "plugins" / "_document_query" / "webui" / "config.html"
+    ).read_text(encoding="utf-8")
+
+    assert "Max parser concurrency" in config_html
+    assert 'x-model.number="config.parser_concurrency"' in config_html
+    assert 'min="1"' in config_html
+
+
 def test_liteparse_parser_caps_workers_by_default():
     parser = LiteParseParser()
 
