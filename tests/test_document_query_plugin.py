@@ -4,6 +4,7 @@ import asyncio
 from pathlib import Path
 
 import pytest
+from PIL import Image
 
 from plugins._document_query.helpers.fetch import FetchedDocument, fetch_public_resource
 from plugins._document_query.helpers.document_query import DocumentQueryHelper
@@ -122,14 +123,51 @@ def test_default_config_bounds_liteparse_runtime_concurrency():
     assert "liteparse_subprocess: true" in default_config
 
 
-def test_config_panel_exposes_parser_concurrency_setting():
+def test_config_panel_exposes_document_query_settings():
     config_html = (
         ROOT / "plugins" / "_document_query" / "webui" / "config.html"
     ).read_text(encoding="utf-8")
 
     assert "Max parser concurrency" in config_html
-    assert 'x-model.number="config.parser_concurrency"' in config_html
-    assert 'min="1"' in config_html
+    for setting in [
+        "parser_concurrency",
+        "per_document_timeout",
+        "gather_timeout",
+        "chunk_size",
+        "chunk_overlap",
+        "search_threshold",
+        "search_limit",
+        "context_intro_chunks",
+        "fetch_timeout",
+        "fetch_retries",
+        "fetch_retry_backoff",
+        "max_remote_bytes",
+        "liteparse_enabled",
+        "liteparse_ocr_enabled",
+        "liteparse_ocr_language",
+        "liteparse_ocr_server_url",
+        "liteparse_tessdata_path",
+        "liteparse_max_pages",
+        "liteparse_target_pages",
+        "liteparse_dpi",
+        "liteparse_preserve_very_small_text",
+        "liteparse_output_format",
+        "liteparse_num_workers",
+        "liteparse_subprocess",
+        "pdf_ocr_fallback",
+        "thread_offload",
+    ]:
+        assert f"config.{setting}" in config_html
+
+
+def test_document_query_thumbnail_matches_plugin_hub_limits():
+    thumbnail = ROOT / "plugins" / "_document_query" / "webui" / "thumbnail.jpg"
+
+    assert thumbnail.exists()
+    assert thumbnail.stat().st_size <= 20 * 1024
+    with Image.open(thumbnail) as image:
+        assert image.format == "JPEG"
+        assert image.size == (256, 256)
 
 
 def test_liteparse_parser_caps_workers_by_default():
