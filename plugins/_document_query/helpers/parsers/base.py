@@ -2,9 +2,9 @@
 
 import asyncio
 from abc import ABC, abstractmethod
-from typing import Optional
 
 from helpers.print_style import PrintStyle
+from plugins._document_query.helpers.fetch import FetchedDocument
 
 
 class BaseParser(ABC):
@@ -17,6 +17,9 @@ class BaseParser(ABC):
     """
 
     mimetypes: list[str] = []
+
+    def enabled(self, config: dict) -> bool:
+        return True
 
     def can_handle(self, mimetype: str) -> bool:
         """Return True if this parser supports *mimetype*."""
@@ -32,31 +35,31 @@ class BaseParser(ABC):
 
     async def parse(
         self,
-        document_uri: str,
-        scheme: str,
+        document: FetchedDocument,
+        config: dict,
         timeout: float = 60.0,
         thread_offload: bool = True,
     ) -> str:
         try:
             if thread_offload:
                 return await asyncio.wait_for(
-                    asyncio.to_thread(self._parse_sync, document_uri, scheme),
+                    asyncio.to_thread(self._parse_sync, document, config),
                     timeout=timeout,
                 )
             else:
                 return await asyncio.wait_for(
-                    self._parse_async(document_uri, scheme),
+                    self._parse_async(document, config),
                     timeout=timeout,
                 )
         except asyncio.TimeoutError:
             PrintStyle.error(
-                f"Parser {self.__class__.__name__} timed out after {timeout}s on {document_uri}"
+                f"Parser {self.__class__.__name__} timed out after {timeout}s on {document.uri}"
             )
-            raise ValueError(f"Document parsing timed out after {timeout}s: {document_uri}")
+            raise ValueError(f"Document parsing timed out after {timeout}s: {document.uri}")
 
-    async def _parse_async(self, document_uri: str, scheme: str) -> str:
-        return self._parse_sync(document_uri, scheme)
+    async def _parse_async(self, document: FetchedDocument, config: dict) -> str:
+        return self._parse_sync(document, config)
 
     @abstractmethod
-    def _parse_sync(self, document_uri: str, scheme: str) -> str:
+    def _parse_sync(self, document: FetchedDocument, config: dict) -> str:
         ...

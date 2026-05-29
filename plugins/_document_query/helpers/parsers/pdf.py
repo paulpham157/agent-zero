@@ -1,14 +1,9 @@
 """PDF parser with PyMuPDF primary and Tesseract OCR fallback."""
 
 import os
-import tempfile
 
-from langchain_community.document_loaders.pdf import PyMuPDFLoader
-from langchain_community.document_loaders.parsers.images import TesseractBlobParser
-from langchain_core.documents import Document
-
-from helpers import files
 from helpers.print_style import PrintStyle
+from plugins._document_query.helpers.fetch import FetchedDocument
 
 from .base import BaseParser
 
@@ -16,35 +11,21 @@ from .base import BaseParser
 class PdfParser(BaseParser):
     mimetypes = ["application/pdf"]
 
-    def _parse_sync(self, document_uri: str, scheme: str) -> str:
-        temp_file_path = ""
-        if scheme == "file":
-            file_content_bytes = files.read_file_bin(document_uri)
-            with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as f:
-                f.write(file_content_bytes)
-                temp_file_path = f.name
-        elif scheme in ["http", "https"]:
-            import requests
-            with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as f:
-                resp = requests.get(document_uri, timeout=10.0)
-                if resp.status_code != 200:
-                    raise ValueError(f"Failed to download PDF: {resp.status_code}")
-                f.write(resp.content)
-                temp_file_path = f.name
-        else:
-            raise ValueError(f"Unsupported scheme: {scheme}")
-
-        if not os.path.exists(temp_file_path):
-            raise ValueError(f"Temporary file not found: {temp_file_path}")
-        try:
-            contents = self._parse_with_pymupdf(temp_file_path)
+    def _parse_sync(self, document: FetchedDocument, config: dict) -> str:
+        with document.local_file() as file_path:
+            if not os.path.exists(file_path):
+                raise ValueError(f"Temporary file not found: {file_path}")
+            contents = self._parse_with_pymupdf(file_path)
             if not contents:
-                contents = self._parse_with_ocr(temp_file_path)
+                if not config.get("pdf_ocr_fallback", True):
+                    raise ValueError("PyMuPDF returned no content and OCR fallback is disabled")
+                contents = self._parse_with_ocr(file_path)
             return contents
-        finally:
-            os.unlink(temp_file_path)
 
     def _parse_with_pymupdf(self, file_path: str) -> str:
+        from langchain_community.document_loaders.pdf import PyMuPDFLoader
+        from langchain_community.document_loaders.parsers.images import TesseractBlobParser
+
         try:
             loader = PyMuPDFLoader(
                 file_path, mode="single", extract_tables="markdown",

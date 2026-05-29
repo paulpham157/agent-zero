@@ -3,6 +3,8 @@
 
 # --- Timeouts ---
 fetch_timeout: 30            # HTTP fetch connect/read timeout
+fetch_retries: 3             # HTTP retry attempts
+fetch_retry_backoff: 1.0     # delay between HTTP retry attempts
 per_document_timeout: 60     # max time for a single document parse
 gather_timeout: 120          # max time for all documents combined in one call
 
@@ -14,5 +16,16 @@ search_limit: 100
 max_remote_bytes: 52428800   # 50 MB
 
 # --- Feature flags ---
-pdf_ocr_fallback: true       # enable Tesseract fallback for PDFs
+liteparse_enabled: true      # prefer LiteParse before legacy parser fallbacks
+liteparse_ocr_enabled: true
+liteparse_ocr_language: eng
+liteparse_ocr_server_url:
+liteparse_tessdata_path:
+liteparse_max_pages: 1000
+liteparse_target_pages:
+liteparse_dpi: 150
+liteparse_preserve_very_small_text: false
+liteparse_output_format: text
+liteparse_num_workers:
+pdf_ocr_fallback: true       # enable legacy Tesseract fallback after PyMuPDF
 thread_offload: true         # offload sync parsers to thread pool

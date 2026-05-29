@@ -7,13 +7,10 @@ a thread pool and bounded by configurable timeouts.
 
 import asyncio
 import json
-import mimetypes
-import os
 from datetime import datetime
 from typing import Callable, List, Optional, Sequence, Tuple
 from urllib.parse import urlparse
 
-import aiohttp
 from langchain.schema import SystemMessage, HumanMessage
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_core.documents import Document
@@ -23,7 +20,8 @@ from helpers.print_style import PrintStyle
 from helpers.vector_db import VectorDB
 from agent import Agent
 
-from plugins._document_query.helpers.parsers import get_parser_for_mimetype
+from plugins._document_query.helpers.fetch import FetchedDocument, fetch_public_resource
+from plugins._document_query.helpers.parsers import BaseParser, get_parsers_for_mimetype
 
 
 DEFAULT_SEARCH_THRESHOLD = 0.5
@@ -198,8 +196,12 @@ class DocumentQueryHelper:
         self.config = _load_config(agent)
 
     async def document_qa(
-        self, document_uris: List[str], questions: Sequence[str]
+        self, document_uris: List[str] | str, questions: Sequence[str] | str
     ) -> Tuple[bool, str]:
+        if isinstance(document_uris, str):
+            document_uris = [document_uris]
+        if isinstance(questions, str):
+            questions = [questions]
         self.progress_callback(f"Starting Q&A process for {len(document_uris)} documents")
         await self.agent.handle_intervention()
 
@@ -273,74 +275,38 @@ class DocumentQueryHelper:
     ) -> str:
         self.progress_callback(f"Fetching document content")
         await self.agent.handle_intervention()
-        url = urlparse(document_uri)
-        scheme = url.scheme or "file"
-        mimetype, encoding = mimetypes.guess_type(document_uri)
-        mimetype = mimetype or "application/octet-stream"
-
-        if mimetype == "application/octet-stream":
-            if url.scheme in ["http", "https"]:
-                response = None
-                retries = 0
-                last_error = ""
-                while not response and retries < 3:
-                    try:
-                        async with aiohttp.ClientSession() as session:
-                            response = await session.head(
-                                document_uri,
-                                timeout=aiohttp.ClientTimeout(total=2.0),
-                                allow_redirects=True,
-                            )
-                            if response.status > 399:
-                                raise Exception(response.status)
-                            break
-                    except Exception as e:
-                        await asyncio.sleep(1)
-                        last_error = str(e)
-                    retries += 1
-                    await self.agent.handle_intervention()
-                if not response:
-                    raise ValueError(f"Document fetch error: {document_uri} ({last_error})")
-                mimetype = response.headers["content-type"]
-                if "content-length" in response.headers:
-                    content_length = float(response.headers["content-length"]) / 1024 / 1024
-                    if content_length > 50.0:
-                        raise ValueError(f"Document exceeds max 50MB: {content_length} MB ({document_uri})")
-                if mimetype and "; charset=" in mimetype:
-                    mimetype = mimetype.split("; charset=")[0]
-
-        if scheme == "file":
-            try:
-                document_uri = files.fix_dev_path(url.path)
-            except Exception as e:
-                raise ValueError(f"Invalid document path '{url.path}'") from e
-
-        if encoding:
-            raise ValueError(f"Compressed documents are unsupported '{encoding}' ({document_uri})")
-        if mimetype == "application/octet-stream":
-            raise ValueError(f"Unsupported document mimetype '{mimetype}' ({document_uri})")
-
-        document_uri_norm = self.store.normalize_uri(document_uri)
+        document = await fetch_public_resource(
+            document_uri,
+            self.config,
+            self.agent.handle_intervention,
+        )
+        document_uri_norm = self.store.normalize_uri(document.uri)
         await self.agent.handle_intervention()
         exists = await self.store.document_exists(document_uri_norm)
         document_content = ""
 
         if not exists:
             await self.agent.handle_intervention()
-            parser = get_parser_for_mimetype(mimetype)
-            if parser is None:
-                raise ValueError(f"No parser found for mimetype '{mimetype}' ({document_uri})")
+            parsers = get_parsers_for_mimetype(document.mimetype, self.config)
+            if not parsers:
+                raise ValueError(
+                    f"No parser found for mimetype '{document.mimetype}' ({document.uri})"
+                )
             per_doc_timeout = self.config.get("per_document_timeout", 60)
             thread_offload = self.config.get("thread_offload", True)
-            document_content = await parser.parse(
-                document_uri=document_uri, scheme=scheme,
-                timeout=per_doc_timeout, thread_offload=thread_offload,
+            document_content = await self._parse_document(
+                document=document,
+                parsers=parsers,
+                timeout=per_doc_timeout,
+                thread_offload=thread_offload,
             )
             if add_to_db:
                 self.progress_callback(f"Indexing document")
                 await self.agent.handle_intervention()
                 async with self.store_lock:
-                    success, ids = await self.store.add_document(document_content, document_uri_norm)
+                    success, ids = await self.store.add_document(
+                        document_content, document_uri_norm
+                    )
                 if not success:
                     self.progress_callback(f"Failed to index document")
                     raise ValueError(f"Failed to index document: {document_uri_norm}")
@@ -353,3 +319,32 @@ class DocumentQueryHelper:
             else:
                 raise ValueError(f"Document not found: {document_uri_norm}")
         return document_content
+
+    async def _parse_document(
+        self,
+        document: FetchedDocument,
+        parsers: list[BaseParser],
+        timeout: float,
+        thread_offload: bool,
+    ) -> str:
+        errors_seen = []
+        for parser in parsers:
+            try:
+                self.progress_callback("Parsing document content")
+                content = await parser.parse(
+                    document=document,
+                    config=self.config,
+                    timeout=timeout,
+                    thread_offload=thread_offload,
+                )
+                if content:
+                    return content
+                errors_seen.append(f"{parser.__class__.__name__}: no content")
+            except Exception as e:
+                errors_seen.append(f"{parser.__class__.__name__}: {e}")
+                PrintStyle.error(f"Document parser failed: {errors_seen[-1]}")
+
+        raise ValueError(
+            f"No parser succeeded for mimetype '{document.mimetype}' ({document.uri}): "
+            + "; ".join(errors_seen)
+        )
