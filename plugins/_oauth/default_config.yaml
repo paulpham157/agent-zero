@@ -2,8 +2,8 @@
 codex:
   enabled: true
 
-  # Empty means auto-discover CODEX_HOME/auth.json, ~/.codex/auth.json,
-  # CHATGPT_LOCAL_HOME/auth.json, then ~/.chatgpt-local/auth.json.
+  # Empty stores credentials in Agent Zero's private OAuth directory.
+  # Never share a rotating refresh-token file with Codex CLI or another client.
   auth_file_path: ""
 
   issuer: "https://auth.openai.com"
