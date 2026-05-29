@@ -9,6 +9,7 @@ from plugins._document_query.helpers.fetch import FetchedDocument, fetch_public_
 from plugins._document_query.helpers.document_query import DocumentQueryHelper
 from plugins._document_query.helpers.parsers.base import BaseParser
 from plugins._document_query.helpers.parsers import get_parsers_for_mimetype
+from plugins._document_query.helpers.parsers.liteparse import LiteParseParser
 from plugins._document_query.helpers.parsers.text import TextParser
 
 
@@ -25,6 +26,24 @@ class ParserNameShouldNotLeak(BaseParser):
 
     def _parse_sync(self, document: FetchedDocument, config: dict) -> str:
         return "parsed"
+
+
+class CountingAsyncParser(BaseParser):
+    mimetypes = ["text/plain"]
+    active = 0
+    max_active = 0
+
+    async def _parse_async(self, document: FetchedDocument, config: dict) -> str:
+        type(self).active += 1
+        type(self).max_active = max(type(self).max_active, type(self).active)
+        try:
+            await asyncio.sleep(0.02)
+            return document.uri
+        finally:
+            type(self).active -= 1
+
+    def _parse_sync(self, document: FetchedDocument, config: dict) -> str:
+        return document.uri
 
 
 def test_fetch_file_detects_mimetype_and_reads_once(tmp_path):
@@ -92,6 +111,25 @@ def test_liteparse_is_installed_by_docker_and_plugin_hook_requirements():
     assert plugin_requirements.strip().splitlines() == ["liteparse>=2.0.0,<3.0.0"]
 
 
+def test_default_config_bounds_liteparse_runtime_concurrency():
+    default_config = (
+        ROOT / "plugins" / "_document_query" / "default_config.yaml"
+    ).read_text(encoding="utf-8")
+
+    assert "parser_concurrency: 1" in default_config
+    assert "context_intro_chunks: 2" in default_config
+    assert "liteparse_num_workers: 1" in default_config
+    assert "liteparse_subprocess: true" in default_config
+
+
+def test_liteparse_parser_caps_workers_by_default():
+    parser = LiteParseParser()
+
+    assert parser._liteparse_kwargs({})["num_workers"] == 1
+    assert parser._liteparse_kwargs({"liteparse_num_workers": "3"})["num_workers"] == 3
+    assert parser._liteparse_kwargs({"liteparse_num_workers": ""})["num_workers"] == 1
+
+
 def test_query_optimize_prompt_filename_is_spelled_correctly():
     prompt_dir = ROOT / "plugins" / "_document_query" / "prompts"
     helper_source = (
@@ -127,6 +165,52 @@ def test_parser_progress_is_user_facing_and_generic():
 
     assert content == "parsed"
     assert progress == ["Parsing document content"]
+
+
+def test_parse_document_limits_parser_concurrency_across_helpers():
+    CountingAsyncParser.active = 0
+    CountingAsyncParser.max_active = 0
+    fetched_a = FetchedDocument(
+        uri="/tmp/a.txt",
+        source_uri="/tmp/a.txt",
+        scheme="file",
+        mimetype="text/plain",
+        content=b"a",
+        local_path=None,
+    )
+    fetched_b = FetchedDocument(
+        uri="/tmp/b.txt",
+        source_uri="/tmp/b.txt",
+        scheme="file",
+        mimetype="text/plain",
+        content=b"b",
+        local_path=None,
+    )
+    helper_a = object.__new__(DocumentQueryHelper)
+    helper_a.config = {"parser_concurrency": 1}
+    helper_a.progress_callback = lambda _msg: None
+    helper_b = object.__new__(DocumentQueryHelper)
+    helper_b.config = {"parser_concurrency": 1}
+    helper_b.progress_callback = lambda _msg: None
+
+    async def parse_both():
+        return await asyncio.gather(
+            helper_a._parse_document(
+                document=fetched_a,
+                parsers=[CountingAsyncParser()],
+                timeout=1,
+                thread_offload=False,
+            ),
+            helper_b._parse_document(
+                document=fetched_b,
+                parsers=[CountingAsyncParser()],
+                timeout=1,
+                thread_offload=False,
+            ),
+        )
+
+    assert sorted(run_async(parse_both())) == ["/tmp/a.txt", "/tmp/b.txt"]
+    assert CountingAsyncParser.max_active == 1
 
 
 def test_document_query_prompt_uses_progressive_skill_disclosure():

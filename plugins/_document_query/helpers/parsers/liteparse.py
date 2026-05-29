@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import json
 import os
+import subprocess
+import sys
 from pathlib import Path
 
 from plugins._document_query.helpers.fetch import FetchedDocument
@@ -11,6 +14,8 @@ from .base import BaseParser
 
 class LiteParseParser(BaseParser):
     """Fast parser powered by run-llama/liteparse when available."""
+
+    DEFAULT_NUM_WORKERS = 1
 
     mimetypes = [
         "application/pdf",
@@ -30,6 +35,11 @@ class LiteParseParser(BaseParser):
         return bool(config.get("liteparse_enabled", True))
 
     def _parse_sync(self, document: FetchedDocument, config: dict) -> str:
+        if config.get("liteparse_subprocess", True):
+            return self._parse_subprocess(document, config)
+        return self._parse_in_process(document, config)
+
+    def _parse_in_process(self, document: FetchedDocument, config: dict) -> str:
         try:
             from liteparse import LiteParse
         except Exception as e:
@@ -40,6 +50,56 @@ class LiteParseParser(BaseParser):
             result = parser.parse(file_path)
 
         text = getattr(result, "text", "") or ""
+        if not text.strip():
+            raise ValueError("LiteParse returned no text")
+        return text
+
+    def _parse_subprocess(self, document: FetchedDocument, config: dict) -> str:
+        with document.local_file() as file_path:
+            payload = {
+                "file_path": file_path,
+                "kwargs": self._liteparse_kwargs(config),
+            }
+            env = os.environ.copy()
+            project_root = str(Path(__file__).resolve().parents[4])
+            python_path = env.get("PYTHONPATH", "")
+            env["PYTHONPATH"] = (
+                f"{project_root}{os.pathsep}{python_path}"
+                if python_path
+                else project_root
+            )
+            timeout = float(config.get("per_document_timeout", 60))
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    "-m",
+                    "plugins._document_query.helpers.parsers.liteparse_worker",
+                ],
+                input=json.dumps(payload),
+                text=True,
+                capture_output=True,
+                cwd=project_root,
+                env=env,
+                timeout=timeout,
+                check=False,
+            )
+
+        if result.returncode != 0:
+            detail = (result.stderr or result.stdout or "").strip()
+            raise RuntimeError(
+                "LiteParse subprocess failed"
+                f" with exit code {result.returncode}: {detail[-2000:]}"
+            )
+
+        try:
+            response = json.loads(result.stdout)
+        except json.JSONDecodeError as e:
+            raise RuntimeError(
+                "LiteParse subprocess returned invalid output: "
+                f"{result.stdout[-2000:]}"
+            ) from e
+
+        text = response.get("text", "") or ""
         if not text.strip():
             raise ValueError("LiteParse returned no text")
         return text
@@ -67,9 +127,10 @@ class LiteParseParser(BaseParser):
             if value not in (None, ""):
                 kwargs[liteparse_key] = value
 
-        num_workers = config.get("liteparse_num_workers")
-        if num_workers not in (None, ""):
-            kwargs["num_workers"] = int(num_workers)
+        kwargs["num_workers"] = _positive_int(
+            config.get("liteparse_num_workers"),
+            self.DEFAULT_NUM_WORKERS,
+        )
 
         tessdata_path = config.get("liteparse_tessdata_path") or _detect_tessdata_path()
         if tessdata_path:
@@ -91,3 +152,11 @@ def _detect_tessdata_path() -> str:
         if candidate and (Path(candidate) / "eng.traineddata").is_file():
             return candidate
     return ""
+
+
+def _positive_int(value, default: int) -> int:
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return default
+    return parsed if parsed > 0 else default

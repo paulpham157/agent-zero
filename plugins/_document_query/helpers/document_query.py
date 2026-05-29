@@ -7,8 +7,9 @@ a thread pool and bounded by configurable timeouts.
 
 import asyncio
 import json
+import threading
 from datetime import datetime
-from typing import Callable, List, Optional, Sequence, Tuple
+from typing import Any, Callable, List, Optional, Sequence, Tuple
 from urllib.parse import urlparse
 
 from langchain.schema import SystemMessage, HumanMessage
@@ -25,6 +26,33 @@ from plugins._document_query.helpers.parsers import BaseParser, get_parsers_for_
 
 
 DEFAULT_SEARCH_THRESHOLD = 0.5
+DEFAULT_PARSER_CONCURRENCY = 1
+SMALL_DOCUMENT_FALLBACK_MAX_CHARS = 12000
+_PARSER_SEMAPHORES: dict[tuple[int, int], asyncio.Semaphore] = {}
+_PARSER_SEMAPHORES_LOCK = threading.Lock()
+
+
+def _positive_int(value: Any, default: int) -> int:
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return default
+    return parsed if parsed > 0 else default
+
+
+def _parser_semaphore(config: dict) -> asyncio.Semaphore:
+    concurrency = _positive_int(
+        config.get("parser_concurrency"),
+        DEFAULT_PARSER_CONCURRENCY,
+    )
+    loop = asyncio.get_running_loop()
+    key = (id(loop), concurrency)
+    with _PARSER_SEMAPHORES_LOCK:
+        semaphore = _PARSER_SEMAPHORES.get(key)
+        if semaphore is None:
+            semaphore = asyncio.Semaphore(concurrency)
+            _PARSER_SEMAPHORES[key] = semaphore
+        return semaphore
 
 
 def _load_config(agent: Agent) -> dict:
@@ -207,7 +235,7 @@ class DocumentQueryHelper:
 
         gather_timeout = self.config.get("gather_timeout", 120)
         try:
-            await asyncio.wait_for(
+            document_contents = await asyncio.wait_for(
                 asyncio.gather(
                     *[self.document_get_content(uri, True) for uri in document_uris]
                 ),
@@ -220,6 +248,14 @@ class DocumentQueryHelper:
         search_threshold = self.config.get("search_threshold", DEFAULT_SEARCH_THRESHOLD)
         search_limit = self.config.get("search_limit", 100)
         selected_chunks = {}
+        normalized_uris = [self.store.normalize_uri(uri) for uri in document_uris]
+        intro_chunk_count = _positive_int(
+            self.config.get("context_intro_chunks"),
+            2,
+        )
+        for uri in normalized_uris:
+            for chunk in await self._get_document_intro_chunks(uri, intro_chunk_count):
+                selected_chunks[chunk.metadata["id"]] = chunk
 
         for question in questions:
             self.progress_callback(f"Optimizing query: {question}")
@@ -233,7 +269,6 @@ class DocumentQueryHelper:
 
             await self.agent.handle_intervention()
             self.progress_callback(f"Searching documents with query: {optimized_query}")
-            normalized_uris = [self.store.normalize_uri(uri) for uri in document_uris]
             doc_filter = " or ".join(
                 [f"document_uri == '{uri}'" for uri in normalized_uris]
             )
@@ -246,18 +281,48 @@ class DocumentQueryHelper:
                 selected_chunks[chunk.metadata["id"]] = chunk
 
         if not selected_chunks:
+            fallback_content = self._small_document_fallback_content(
+                document_uris,
+                document_contents,
+            )
+            if fallback_content:
+                self.progress_callback(
+                    "No matching chunks found; using extracted document content"
+                )
+                ai_response = await self._answer_questions_from_content(
+                    fallback_content,
+                    questions,
+                    "extracted document content",
+                )
+                self.progress_callback(f"Q&A process completed")
+                return True, ai_response
+
             self.progress_callback("No relevant content found in the documents")
             content = f"!!! No content found for documents: {json.dumps(document_uris)} matching queries: {json.dumps(questions)}"
             return False, content
 
-        self.progress_callback(
-            f"Processing {len(questions)} questions in context of {len(selected_chunks)} chunks"
-        )
-        await self.agent.handle_intervention()
-        questions_str = "\n".join([f" *  {question}" for question in questions])
         content = "\n\n----\n\n".join(
             [chunk.page_content for chunk in selected_chunks.values()]
         )
+        ai_response = await self._answer_questions_from_content(
+            content,
+            questions,
+            f"{len(selected_chunks)} chunks",
+        )
+        self.progress_callback(f"Q&A process completed")
+        return True, ai_response
+
+    async def _answer_questions_from_content(
+        self,
+        content: str,
+        questions: Sequence[str],
+        context_label: str,
+    ) -> str:
+        self.progress_callback(
+            f"Processing {len(questions)} questions in context of {context_label}"
+        )
+        await self.agent.handle_intervention()
+        questions_str = "\n".join([f" *  {question}" for question in questions])
         qa_system_message = self.agent.parse_prompt("fw.document_query.system_prompt.md")
         qa_user_message = f"# Document:\n{content}\n\n# Queries:\n{questions_str}"
         ai_response, _reasoning = await self.agent.call_chat_model(
@@ -267,8 +332,41 @@ class DocumentQueryHelper:
             ],
             explicit_caching=False,
         )
-        self.progress_callback(f"Q&A process completed")
-        return True, str(ai_response)
+        return str(ai_response)
+
+    @staticmethod
+    def _small_document_fallback_content(
+        document_uris: Sequence[str],
+        document_contents: Sequence[str],
+        max_chars: int = SMALL_DOCUMENT_FALLBACK_MAX_CHARS,
+    ) -> str:
+        blocks = []
+        for document_uri, document_content in zip(document_uris, document_contents):
+            text = (document_content or "").strip()
+            if text:
+                blocks.append(f"# Source: {document_uri}\n\n{text}")
+
+        if not blocks:
+            return ""
+
+        content = "\n\n----\n\n".join(blocks)
+        if len(content) > max_chars:
+            return ""
+        return content
+
+    async def _get_document_intro_chunks(
+        self,
+        document_uri: str,
+        limit: int,
+    ) -> list[Document]:
+        if limit <= 0:
+            return []
+        if not hasattr(self.store, "_get_document_chunks"):
+            return []
+        chunks = await self.store._get_document_chunks(document_uri)
+        return sorted(chunks, key=lambda chunk: chunk.metadata.get("chunk_index", 0))[
+            :limit
+        ]
 
     async def document_get_content(
         self, document_uri: str, add_to_db: bool = False
@@ -328,15 +426,17 @@ class DocumentQueryHelper:
         thread_offload: bool,
     ) -> str:
         errors_seen = []
+        semaphore = _parser_semaphore(self.config)
         for parser in parsers:
             try:
-                self.progress_callback("Parsing document content")
-                content = await parser.parse(
-                    document=document,
-                    config=self.config,
-                    timeout=timeout,
-                    thread_offload=thread_offload,
-                )
+                async with semaphore:
+                    self.progress_callback("Parsing document content")
+                    content = await parser.parse(
+                        document=document,
+                        config=self.config,
+                        timeout=timeout,
+                        thread_offload=thread_offload,
+                    )
                 if content:
                     return content
                 errors_seen.append(f"{parser.__class__.__name__}: no content")
