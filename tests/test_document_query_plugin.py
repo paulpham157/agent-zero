@@ -107,8 +107,8 @@ def test_liteparse_is_installed_by_docker_and_plugin_hook_requirements():
         ROOT / "plugins" / "_document_query" / "requirements.txt"
     ).read_text(encoding="utf-8")
 
-    assert "liteparse>=2.0.0,<3.0.0" in root_requirements
-    assert plugin_requirements.strip().splitlines() == ["liteparse>=2.0.0,<3.0.0"]
+    assert "liteparse==2.0.3" in root_requirements
+    assert plugin_requirements.strip().splitlines() == ["liteparse==2.0.3"]
 
 
 def test_default_config_bounds_liteparse_runtime_concurrency():
