@@ -267,6 +267,19 @@ def test_explicit_codex_cli_auth_path_is_rejected(tmp_path, monkeypatch):
         codex.resolve_auth_write_path()
 
 
+def test_explicit_codex_cli_auth_hard_link_is_rejected(tmp_path, monkeypatch):
+    shared_auth = tmp_path / ".codex" / "auth.json"
+    shared_auth.parent.mkdir()
+    shared_auth.write_text(json.dumps({"tokens": {"refresh_token": "shared"}}), encoding="utf-8")
+    alias = tmp_path / "agent-zero-auth.json"
+    alias.hardlink_to(shared_auth)
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setattr(codex, "codex_config", lambda: {"auth_file_path": str(alias)})
+
+    with pytest.raises(RuntimeError, match="Agent Zero-owned auth file"):
+        codex.resolve_auth_write_path()
+
+
 def test_write_auth_file_uses_atomic_replace_and_private_permissions(tmp_path, monkeypatch):
     auth_path = tmp_path / "auth.json"
     replacements: list[tuple[Path, Path]] = []

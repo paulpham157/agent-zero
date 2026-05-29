@@ -1093,11 +1093,14 @@ def _write_auth_file_in_place(path: Path, data: dict[str, Any]) -> None:
 
 def _validate_private_auth_path(path: Path) -> Path:
     resolved_path = path.expanduser().resolve(strict=False)
-    if _path_key(resolved_path) in {_path_key(candidate) for candidate in _known_codex_auth_paths()}:
-        raise RuntimeError(
-            "Agent Zero OAuth credentials must use an Agent Zero-owned auth file. "
-            "Choose a private auth_file_path or leave it empty for the default private store."
-        )
+    for candidate in _known_codex_auth_paths():
+        if _path_key(resolved_path) == _path_key(candidate) or _same_existing_file(
+            resolved_path, candidate
+        ):
+            raise RuntimeError(
+                "Agent Zero OAuth credentials must use an Agent Zero-owned auth file. "
+                "Choose a private auth_file_path or leave it empty for the default private store."
+            )
     return resolved_path
 
 
@@ -1115,6 +1118,13 @@ def _known_codex_auth_paths() -> list[Path]:
 
 def _path_key(path: Path) -> str:
     return os.path.normcase(str(path.expanduser().resolve(strict=False)))
+
+
+def _same_existing_file(path: Path, candidate: Path) -> bool:
+    try:
+        return path.samefile(candidate)
+    except OSError:
+        return False
 
 
 def _auth_lock_path(path: Path) -> Path:
