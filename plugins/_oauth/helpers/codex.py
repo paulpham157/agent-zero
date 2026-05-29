@@ -1085,6 +1085,10 @@ def _write_auth_file_in_place(path: Path, data: dict[str, Any]) -> None:
         handle.write(json.dumps(data, indent=2) + "\n")
         handle.flush()
         os.fsync(handle.fileno())
+    try:
+        path.chmod(0o600)
+    except OSError:
+        pass
 
 
 def _validate_private_auth_path(path: Path) -> Path:

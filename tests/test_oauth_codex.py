@@ -304,6 +304,7 @@ def test_write_auth_file_falls_back_for_file_bind_mount(tmp_path, monkeypatch):
     assert json.loads(auth_path.read_text(encoding="utf-8")) == {
         "tokens": {"refresh_token": "refresh-1"}
     }
+    assert stat.S_IMODE(auth_path.stat().st_mode) == 0o600
     assert list(tmp_path.glob(".auth.json.*.tmp")) == []
 
 
@@ -324,6 +325,7 @@ def test_write_auth_file_falls_back_when_parent_rejects_temporary_files(tmp_path
     assert json.loads(auth_path.read_text(encoding="utf-8")) == {
         "tokens": {"refresh_token": "refresh-1"}
     }
+    assert stat.S_IMODE(auth_path.stat().st_mode) == 0o600
     assert not auth_path.with_name(".auth.json.lock").exists()
 
 
