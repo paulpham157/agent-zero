@@ -14,6 +14,7 @@ import yaml
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from plugins._oauth.helpers import codex
+from plugins._oauth.helpers import routes
 from plugins._oauth.extensions.python._functions.models.get_api_key.end._20_codex_account_dummy_key import (
     CodexAccountDummyKey,
 )
@@ -242,6 +243,21 @@ def test_normalize_usage_payload_accepts_zero_percent_headers():
     assert usage["primary"]["label"] == "5h"
 
 
+def test_token_error_message_prefers_description():
+    class FakeResponse:
+        status_code = 400
+        text = '{"error":"invalid_grant","error_description":"refresh token was already used"}'
+
+        @staticmethod
+        def json():
+            return {
+                "error": "invalid_grant",
+                "error_description": "refresh token was already used",
+            }
+
+    assert codex._token_error_message(FakeResponse()) == "refresh token was already used"
+
+
 def test_default_auth_file_ignores_codex_cli_credentials(tmp_path, monkeypatch):
     shared_auth = tmp_path / ".codex" / "auth.json"
     private_auth = tmp_path / "usr" / "plugins" / "_oauth" / "codex" / "auth.json"
@@ -274,6 +290,17 @@ def test_explicit_codex_cli_auth_hard_link_is_rejected(tmp_path, monkeypatch):
     alias = tmp_path / "agent-zero-auth.json"
     alias.hardlink_to(shared_auth)
     monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setattr(codex, "codex_config", lambda: {"auth_file_path": str(alias)})
+
+    with pytest.raises(RuntimeError, match="Agent Zero-owned auth file"):
+        codex.resolve_auth_write_path()
+
+
+def test_explicit_private_auth_hard_link_is_rejected(tmp_path, monkeypatch):
+    private_auth = tmp_path / "private-auth.json"
+    private_auth.write_text(json.dumps({"tokens": {"refresh_token": "private"}}), encoding="utf-8")
+    alias = tmp_path / "agent-zero-auth.json"
+    alias.hardlink_to(private_auth)
     monkeypatch.setattr(codex, "codex_config", lambda: {"auth_file_path": str(alias)})
 
     with pytest.raises(RuntimeError, match="Agent Zero-owned auth file"):
@@ -390,6 +417,20 @@ def test_lock_file_retries_windows_contention(tmp_path, monkeypatch):
         fake_msvcrt.LK_UNLCK,
     ]
     assert sleeps == [codex.WINDOWS_LOCK_RETRY_SECONDS, codex.WINDOWS_LOCK_RETRY_SECONDS]
+
+
+@pytest.mark.parametrize(
+    ("host", "expected"),
+    [
+        ("localhost:5000", True),
+        ("127.0.0.1:5000", True),
+        ("[::1]:5000", True),
+        ("::1", True),
+        ("example.com:5000", False),
+    ],
+)
+def test_proxy_local_host_detection_supports_loopback_ipv6(host, expected):
+    assert routes._host_is_local(host) is expected
 
 
 def test_load_auth_serializes_refresh_across_threads(tmp_path, monkeypatch):

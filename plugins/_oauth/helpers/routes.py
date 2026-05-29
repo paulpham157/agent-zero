@@ -295,7 +295,12 @@ def _supplied_proxy_token() -> str:
 
 
 def _host_is_local(host: str) -> bool:
-    hostname = (host or "").split(":", 1)[0].strip("[]").lower()
+    hostname = (host or "").strip().lower()
+    if hostname.startswith("["):
+        closing_bracket = hostname.find("]")
+        hostname = hostname[1:closing_bracket] if closing_bracket >= 0 else hostname.strip("[]")
+    elif hostname.count(":") == 1:
+        hostname = hostname.split(":", 1)[0]
     if hostname in {"localhost", "127.0.0.1", "::1"}:
         return True
     try:

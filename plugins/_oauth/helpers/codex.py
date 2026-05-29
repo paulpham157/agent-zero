@@ -36,7 +36,7 @@ AUTH_FILENAME = "auth.json"
 ACCESS_EXPIRY_MARGIN = timedelta(minutes=5)
 REFRESH_INTERVAL = timedelta(minutes=55)
 FALLBACK_CODEX_VERSION = "0.124.0"
-OAUTH_ERROR_KEYS = {"error", "error_description"}
+OAUTH_ERROR_KEYS = ("error_description", "error")
 DEVICE_CODE_TIMEOUT_SECONDS = 15 * 60
 WINDOWS_LOCK_RETRY_SECONDS = 0.05
 USAGE_ENDPOINT_PATHS = (
@@ -1097,11 +1097,20 @@ def _validate_private_auth_path(path: Path) -> Path:
         if _path_key(resolved_path) == _path_key(candidate) or _same_existing_file(
             resolved_path, candidate
         ):
-            raise RuntimeError(
-                "Agent Zero OAuth credentials must use an Agent Zero-owned auth file. "
-                "Choose a private auth_file_path or leave it empty for the default private store."
-            )
+            raise _private_auth_path_error()
+    try:
+        if resolved_path.stat().st_nlink > 1:
+            raise _private_auth_path_error()
+    except FileNotFoundError:
+        pass
     return resolved_path
+
+
+def _private_auth_path_error() -> RuntimeError:
+    return RuntimeError(
+        "Agent Zero OAuth credentials must use an Agent Zero-owned auth file. "
+        "Choose a private auth_file_path or leave it empty for the default private store."
+    )
 
 
 def _known_codex_auth_paths() -> list[Path]:
