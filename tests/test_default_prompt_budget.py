@@ -67,13 +67,17 @@ async def test_default_agent0_prompt_budget_and_guardrails():
     assert "host-computer-use" in system_text
 
 
-def test_a0_small_profile_removed_and_prompt_text_generic():
-    assert not (PROJECT_ROOT / "agents" / "a0_small").exists()
-    assert not (PROJECT_ROOT / "knowledge" / "main" / "a0_small_tool_call_examples.md").exists()
+def test_removed_small_profile_and_prompt_text_generic():
+    removed_profile = "a0" + "_" + "small"
+
+    assert not (PROJECT_ROOT / "agents" / removed_profile).exists()
+    assert not (
+        PROJECT_ROOT / "knowledge" / "main" / f"{removed_profile}_tool_call_examples.md"
+    ).exists()
     assert not (PROJECT_ROOT / "knowledge" / "main" / "tool_call_reference_examples.md").exists()
 
     for path in _iter_prompt_files():
-        assert "a0_small" not in path.read_text(encoding="utf-8")
+        assert removed_profile not in path.read_text(encoding="utf-8")
 
 
 def test_prompt_token_estimate_omits_embedded_image_data_urls():

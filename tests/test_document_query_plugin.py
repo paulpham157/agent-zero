@@ -92,6 +92,16 @@ def test_liteparse_is_installed_by_docker_and_plugin_hook_requirements():
     assert plugin_requirements.strip().splitlines() == ["liteparse>=2.0.0,<3.0.0"]
 
 
+def test_query_optimize_prompt_filename_is_spelled_correctly():
+    prompt_dir = ROOT / "plugins" / "_document_query" / "prompts"
+    helper_source = (
+        ROOT / "plugins" / "_document_query" / "helpers" / "document_query.py"
+    ).read_text(encoding="utf-8")
+
+    assert (prompt_dir / "fw.document_query.optimize_query.md").exists()
+    assert "fw.document_query.optimize_query.md" in helper_source
+
+
 def test_parser_progress_is_user_facing_and_generic():
     fetched = FetchedDocument(
         uri="/tmp/example.txt",

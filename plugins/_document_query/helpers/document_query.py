@@ -224,7 +224,7 @@ class DocumentQueryHelper:
         for question in questions:
             self.progress_callback(f"Optimizing query: {question}")
             await self.agent.handle_intervention()
-            system_content = self.agent.parse_prompt("fw.document_query.optmimize_query.md")
+            system_content = self.agent.parse_prompt("fw.document_query.optimize_query.md")
             optimized_query = (
                 await self.agent.call_utility_model(
                     system=system_content, message=f'Search Query: "{question}"',
