@@ -19,6 +19,15 @@ from plugins._oauth.extensions.python._functions.models.get_api_key.end._20_code
 )
 
 
+@pytest.fixture(autouse=True)
+def use_temporary_auth_locks(tmp_path, monkeypatch):
+    def lock_path(path: Path) -> Path:
+        digest = codex.hashlib.sha256(codex._path_key(path).encode("utf-8")).hexdigest()
+        return tmp_path / "locks" / f"{digest}.lock"
+
+    monkeypatch.setattr(codex, "_auth_lock_path", lock_path)
+
+
 def test_generate_pkce_produces_urlsafe_verifier_and_challenge():
     pair = codex.generate_pkce()
 
@@ -298,6 +307,76 @@ def test_write_auth_file_falls_back_for_file_bind_mount(tmp_path, monkeypatch):
     assert list(tmp_path.glob(".auth.json.*.tmp")) == []
 
 
+def test_write_auth_file_falls_back_when_parent_rejects_temporary_files(tmp_path, monkeypatch):
+    auth_path = tmp_path / "auth.json"
+    auth_path.write_text(json.dumps({"tokens": {"refresh_token": "refresh-0"}}), encoding="utf-8")
+    open_file = codex.os.open
+
+    def reject_temporary_file(path, flags, mode=0o777):
+        if str(path).endswith(".tmp"):
+            raise OSError(codex.errno.EACCES, "Permission denied", path)
+        return open_file(path, flags, mode)
+
+    monkeypatch.setattr(codex.os, "open", reject_temporary_file)
+
+    codex.write_auth_file(auth_path, {"tokens": {"refresh_token": "refresh-1"}})
+
+    assert json.loads(auth_path.read_text(encoding="utf-8")) == {
+        "tokens": {"refresh_token": "refresh-1"}
+    }
+    assert not auth_path.with_name(".auth.json.lock").exists()
+
+
+def test_resolve_auth_write_path_preserves_custom_symlink_target(tmp_path, monkeypatch):
+    target = tmp_path / "mounted" / "auth.json"
+    target.parent.mkdir()
+    target.write_text(json.dumps({"tokens": {"refresh_token": "refresh-0"}}), encoding="utf-8")
+    symlink = tmp_path / "auth.json"
+    symlink.symlink_to(target)
+    monkeypatch.setattr(codex, "codex_config", lambda: {"auth_file_path": str(symlink)})
+
+    resolved_path = codex.resolve_auth_write_path()
+    codex.write_auth_file(resolved_path, {"tokens": {"refresh_token": "refresh-1"}})
+
+    assert resolved_path == target
+    assert symlink.is_symlink()
+    assert json.loads(target.read_text(encoding="utf-8")) == {
+        "tokens": {"refresh_token": "refresh-1"}
+    }
+
+
+def test_lock_file_retries_windows_contention(tmp_path, monkeypatch):
+    class FakeMsvcrt:
+        LK_NBLCK = 1
+        LK_UNLCK = 2
+
+        def __init__(self):
+            self.calls: list[int] = []
+
+        def locking(self, _descriptor: int, mode: int, _length: int) -> None:
+            self.calls.append(mode)
+            if mode == self.LK_NBLCK and self.calls.count(mode) < 3:
+                raise OSError(codex.errno.EACCES, "Permission denied")
+
+    fake_msvcrt = FakeMsvcrt()
+    sleeps: list[float] = []
+    monkeypatch.setattr(codex, "fcntl", None)
+    monkeypatch.setattr(codex, "msvcrt", fake_msvcrt)
+    monkeypatch.setattr(codex.time, "sleep", sleeps.append)
+
+    with (tmp_path / "auth.lock").open("a+b") as handle:
+        codex._lock_file(handle)
+        codex._unlock_file(handle)
+
+    assert fake_msvcrt.calls == [
+        fake_msvcrt.LK_NBLCK,
+        fake_msvcrt.LK_NBLCK,
+        fake_msvcrt.LK_NBLCK,
+        fake_msvcrt.LK_UNLCK,
+    ]
+    assert sleeps == [codex.WINDOWS_LOCK_RETRY_SECONDS, codex.WINDOWS_LOCK_RETRY_SECONDS]
+
+
 def test_load_auth_serializes_refresh_across_threads(tmp_path, monkeypatch):
     auth_path = tmp_path / "auth.json"
     _write_refreshable_auth(auth_path)
@@ -474,6 +553,7 @@ def _rotated_tokens() -> dict[str, str]:
 
 def _load_auth_in_process(auth_path: str, refresh_started, release_refresh, calls, results) -> None:
     codex.resolve_auth_write_path = lambda: Path(auth_path)
+    codex._auth_lock_path = lambda _path: Path(auth_path).parent / ".auth.lock"
 
     def refresh_tokens(refresh_token: str) -> dict[str, str]:
         calls.put(refresh_token)

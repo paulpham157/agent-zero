@@ -38,6 +38,7 @@ REFRESH_INTERVAL = timedelta(minutes=55)
 FALLBACK_CODEX_VERSION = "0.124.0"
 OAUTH_ERROR_KEYS = {"error", "error_description"}
 DEVICE_CODE_TIMEOUT_SECONDS = 15 * 60
+WINDOWS_LOCK_RETRY_SECONDS = 0.05
 USAGE_ENDPOINT_PATHS = (
     "/backend-api/codex/usage",
     "/backend-api/wham/usage",
@@ -975,9 +976,12 @@ def resolve_auth_file_candidates() -> list[Path]:
 
 def resolve_auth_write_path() -> Path:
     explicit = codex_config()["auth_file_path"]
-    if explicit:
-        return _validate_private_auth_path(Path(explicit).expanduser())
-    return Path(files.get_abs_path("usr", "plugins", "_oauth", "codex", AUTH_FILENAME))
+    path = (
+        Path(explicit).expanduser()
+        if explicit
+        else Path(files.get_abs_path("usr", "plugins", "_oauth", "codex", AUTH_FILENAME))
+    )
+    return _validate_private_auth_path(path)
 
 
 def read_auth_file() -> tuple[Path, dict[str, Any]]:
@@ -993,7 +997,7 @@ def write_auth_file(path: Path, data: dict[str, Any]) -> None:
 
 @contextmanager
 def _auth_file_lock(path: Path) -> Iterator[None]:
-    lock_path = path.with_name(f".{path.name}.lock")
+    lock_path = _auth_lock_path(path)
     lock_path.parent.mkdir(parents=True, exist_ok=True)
     with _AUTH_THREAD_LOCK:
         with lock_path.open("a+b") as handle:
@@ -1014,8 +1018,15 @@ def _lock_file(handle: BinaryIO) -> None:
             handle.write(b"\0")
             handle.flush()
         handle.seek(0)
-        msvcrt.locking(handle.fileno(), msvcrt.LK_LOCK, 1)
-        return
+        while True:
+            try:
+                msvcrt.locking(handle.fileno(), msvcrt.LK_NBLCK, 1)
+                return
+            except OSError as exc:
+                if exc.errno not in {errno.EACCES, errno.EDEADLK}:
+                    raise
+                time.sleep(WINDOWS_LOCK_RETRY_SECONDS)
+                handle.seek(0)
     raise RuntimeError("This platform does not support locking the Agent Zero OAuth auth file.")
 
 
@@ -1043,7 +1054,13 @@ def _write_auth_file_unlocked(path: Path, data: dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary_path = path.with_name(f".{path.name}.{os.getpid()}.{secrets.token_hex(8)}.tmp")
     try:
-        descriptor = os.open(temporary_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        try:
+            descriptor = os.open(temporary_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        except OSError as exc:
+            if exc.errno not in {errno.EACCES, errno.EROFS}:
+                raise
+            _write_auth_file_in_place(path, data)
+            return
         with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
             handle.write(json.dumps(data, indent=2) + "\n")
             handle.flush()
@@ -1071,12 +1088,13 @@ def _write_auth_file_in_place(path: Path, data: dict[str, Any]) -> None:
 
 
 def _validate_private_auth_path(path: Path) -> Path:
-    if _path_key(path) in {_path_key(candidate) for candidate in _known_codex_auth_paths()}:
+    resolved_path = path.expanduser().resolve(strict=False)
+    if _path_key(resolved_path) in {_path_key(candidate) for candidate in _known_codex_auth_paths()}:
         raise RuntimeError(
             "Agent Zero OAuth credentials must use an Agent Zero-owned auth file. "
             "Choose a private auth_file_path or leave it empty for the default private store."
         )
-    return path
+    return resolved_path
 
 
 def _known_codex_auth_paths() -> list[Path]:
@@ -1093,6 +1111,11 @@ def _known_codex_auth_paths() -> list[Path]:
 
 def _path_key(path: Path) -> str:
     return os.path.normcase(str(path.expanduser().resolve(strict=False)))
+
+
+def _auth_lock_path(path: Path) -> Path:
+    digest = hashlib.sha256(_path_key(path).encode("utf-8")).hexdigest()
+    return Path(files.get_abs_path("usr", "plugins", "_oauth", "codex", "locks", f"{digest}.lock"))
 
 
 def parse_jwt_claims(token: str) -> dict[str, Any]:
