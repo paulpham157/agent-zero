@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+import errno
 import hashlib
 import json
 import os
@@ -1047,13 +1048,26 @@ def _write_auth_file_unlocked(path: Path, data: dict[str, Any]) -> None:
             handle.write(json.dumps(data, indent=2) + "\n")
             handle.flush()
             os.fsync(handle.fileno())
-        os.replace(temporary_path, path)
+        try:
+            os.replace(temporary_path, path)
+        except OSError as exc:
+            if exc.errno != errno.EBUSY:
+                raise
+            # Linux rejects replacement when a supported custom auth path is a file bind mount.
+            _write_auth_file_in_place(path, data)
         try:
             path.chmod(0o600)
         except OSError:
             pass
     finally:
         temporary_path.unlink(missing_ok=True)
+
+
+def _write_auth_file_in_place(path: Path, data: dict[str, Any]) -> None:
+    with path.open("w", encoding="utf-8") as handle:
+        handle.write(json.dumps(data, indent=2) + "\n")
+        handle.flush()
+        os.fsync(handle.fileno())
 
 
 def _validate_private_auth_path(path: Path) -> Path:

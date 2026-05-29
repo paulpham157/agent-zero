@@ -281,6 +281,23 @@ def test_write_auth_file_uses_atomic_replace_and_private_permissions(tmp_path, m
     assert list(tmp_path.glob(".auth.json.*.tmp")) == []
 
 
+def test_write_auth_file_falls_back_for_file_bind_mount(tmp_path, monkeypatch):
+    auth_path = tmp_path / "auth.json"
+    auth_path.write_text(json.dumps({"tokens": {"refresh_token": "refresh-0"}}), encoding="utf-8")
+
+    def reject_replace(source, destination):
+        raise OSError(codex.errno.EBUSY, "Device or resource busy", destination)
+
+    monkeypatch.setattr(codex.os, "replace", reject_replace)
+
+    codex.write_auth_file(auth_path, {"tokens": {"refresh_token": "refresh-1"}})
+
+    assert json.loads(auth_path.read_text(encoding="utf-8")) == {
+        "tokens": {"refresh_token": "refresh-1"}
+    }
+    assert list(tmp_path.glob(".auth.json.*.tmp")) == []
+
+
 def test_load_auth_serializes_refresh_across_threads(tmp_path, monkeypatch):
     auth_path = tmp_path / "auth.json"
     _write_refreshable_auth(auth_path)
