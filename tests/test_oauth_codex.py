@@ -258,6 +258,60 @@ def test_token_error_message_prefers_description():
     assert codex._token_error_message(FakeResponse()) == "refresh token was already used"
 
 
+def test_refresh_tokens_sends_agent_zero_user_agent(monkeypatch):
+    requests: list[dict] = []
+
+    class FakeResponse:
+        ok = True
+
+        @staticmethod
+        def json():
+            return {
+                "access_token": "access-1",
+                "refresh_token": "refresh-1",
+            }
+
+    def post(url, *, headers, json, timeout):
+        requests.append(
+            {
+                "url": url,
+                "headers": headers,
+                "json": json,
+                "timeout": timeout,
+            }
+        )
+        return FakeResponse()
+
+    monkeypatch.setattr(
+        codex,
+        "codex_config",
+        lambda: {"token_url": "https://auth.example/oauth/token", "client_id": "client"},
+    )
+    monkeypatch.setattr(codex, "resolve_agent_zero_user_agent", lambda: "agent-zero/v1.18")
+    monkeypatch.setattr(codex.requests, "post", post)
+
+    assert codex.refresh_tokens("refresh-0") == {
+        "id_token": "",
+        "access_token": "access-1",
+        "refresh_token": "refresh-1",
+    }
+    assert requests == [
+        {
+            "url": "https://auth.example/oauth/token",
+            "headers": {
+                "Content-Type": "application/json",
+                "User-Agent": "agent-zero/v1.18",
+            },
+            "json": {
+                "client_id": "client",
+                "grant_type": "refresh_token",
+                "refresh_token": "refresh-0",
+            },
+            "timeout": 30,
+        }
+    ]
+
+
 def test_default_auth_file_ignores_codex_cli_credentials(tmp_path, monkeypatch):
     shared_auth = tmp_path / ".codex" / "auth.json"
     private_auth = tmp_path / "usr" / "plugins" / "_oauth" / "codex" / "auth.json"

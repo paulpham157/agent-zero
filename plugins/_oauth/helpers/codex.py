@@ -500,7 +500,10 @@ def refresh_tokens(refresh_token: str) -> dict[str, str]:
     cfg = codex_config()
     response = requests.post(
         cfg["token_url"],
-        headers={"Content-Type": "application/json"},
+        headers={
+            "Content-Type": "application/json",
+            "User-Agent": resolve_agent_zero_user_agent(),
+        },
         json={
             "client_id": cfg["client_id"],
             "grant_type": "refresh_token",
@@ -520,6 +523,16 @@ def refresh_tokens(refresh_token: str) -> dict[str, str]:
         "access_token": _string(payload.get("access_token")),
         "refresh_token": _string(payload.get("refresh_token")) or refresh_token,
     }
+
+
+def resolve_agent_zero_user_agent() -> str:
+    try:
+        from helpers import git
+
+        version = git.get_version()
+    except Exception:
+        version = "unknown"
+    return f"agent-zero/{version or 'unknown'}"
 
 
 def should_refresh(access_token: str, last_refresh: str) -> bool:
