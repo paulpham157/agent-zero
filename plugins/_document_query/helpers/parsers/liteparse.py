@@ -6,16 +6,29 @@ import json
 import os
 import subprocess
 import sys
+from dataclasses import dataclass
 from pathlib import Path
 
 from plugins._document_query.helpers.fetch import FetchedDocument
 from .base import BaseParser
 
 
+DEFAULT_OCR_AUTO_DISABLE_PAGES = 30
+DEFAULT_OCR_AUTO_MIN_CHARS_PER_PAGE = 80
+DEFAULT_OCR_AUTO_SAMPLE_PAGES = 5
+
+
+@dataclass(frozen=True)
+class _PdfTextProfile:
+    page_count: int
+    sampled_pages: int
+    text_chars: int
+
+
 class LiteParseParser(BaseParser):
     """Fast parser powered by run-llama/liteparse when available."""
 
-    DEFAULT_NUM_WORKERS = 1
+    DEFAULT_NUM_WORKERS = 2
 
     mimetypes = [
         "application/pdf",
@@ -35,9 +48,8 @@ class LiteParseParser(BaseParser):
         return bool(config.get("liteparse_enabled", True))
 
     def _parse_sync(self, document: FetchedDocument, config: dict) -> str:
-        if config.get("liteparse_subprocess", True):
-            return self._parse_subprocess(document, config)
-        return self._parse_in_process(document, config)
+        # Keep LiteParse native/OCR failures isolated from the Web UI process.
+        return self._parse_subprocess(document, config)
 
     def _parse_in_process(self, document: FetchedDocument, config: dict) -> str:
         try:
@@ -58,7 +70,7 @@ class LiteParseParser(BaseParser):
         with document.local_file() as file_path:
             payload = {
                 "file_path": file_path,
-                "kwargs": self._liteparse_kwargs(config),
+                "kwargs": self._liteparse_kwargs(config, document, file_path),
             }
             env = os.environ.copy()
             project_root = str(Path(__file__).resolve().parents[4])
@@ -104,9 +116,18 @@ class LiteParseParser(BaseParser):
             raise ValueError("LiteParse returned no text")
         return text
 
-    def _liteparse_kwargs(self, config: dict) -> dict:
+    def _liteparse_kwargs(
+        self,
+        config: dict,
+        document: FetchedDocument | None = None,
+        file_path: str | None = None,
+    ) -> dict:
+        ocr_enabled = bool(config.get("liteparse_ocr_enabled", True))
+        if ocr_enabled and self._should_disable_ocr(config, document, file_path):
+            ocr_enabled = False
+
         kwargs = {
-            "ocr_enabled": bool(config.get("liteparse_ocr_enabled", True)),
+            "ocr_enabled": ocr_enabled,
             "ocr_language": config.get("liteparse_ocr_language", "eng"),
             "max_pages": int(config.get("liteparse_max_pages", 1000)),
             "dpi": float(config.get("liteparse_dpi", 150)),
@@ -137,6 +158,149 @@ class LiteParseParser(BaseParser):
             kwargs["tessdata_path"] = tessdata_path
 
         return kwargs
+
+    def _should_disable_ocr(
+        self,
+        config: dict,
+        document: FetchedDocument | None,
+        file_path: str | None,
+    ) -> bool:
+        if not bool(config.get("liteparse_ocr_auto_disable", True)):
+            return False
+        if not document or document.mimetype != "application/pdf" or not file_path:
+            return False
+
+        profile = _pdf_text_profile(file_path, config)
+        if not profile or profile.sampled_pages <= 0:
+            return False
+
+        effective_pages = _effective_page_budget(config, profile.page_count)
+        auto_disable_pages = _positive_int(
+            config.get("liteparse_ocr_auto_disable_pages"),
+            DEFAULT_OCR_AUTO_DISABLE_PAGES,
+        )
+        if effective_pages < auto_disable_pages:
+            return False
+
+        min_chars_per_page = _positive_int(
+            config.get("liteparse_ocr_auto_min_chars_per_page"),
+            DEFAULT_OCR_AUTO_MIN_CHARS_PER_PAGE,
+        )
+        return (profile.text_chars / profile.sampled_pages) >= min_chars_per_page
+
+
+def _pdf_text_profile(file_path: str, config: dict) -> _PdfTextProfile | None:
+    try:
+        import fitz
+    except Exception:
+        return None
+
+    try:
+        with fitz.open(file_path) as doc:
+            page_count = doc.page_count
+            if page_count <= 0:
+                return _PdfTextProfile(0, 0, 0)
+            sample_indexes = _sample_page_indexes(
+                page_count=page_count,
+                sample_pages=_positive_int(
+                    config.get("liteparse_ocr_auto_sample_pages"),
+                    DEFAULT_OCR_AUTO_SAMPLE_PAGES,
+                ),
+                target_pages=config.get("liteparse_target_pages"),
+            )
+            text_chars = 0
+            for page_index in sample_indexes:
+                text = doc[page_index].get_text("text") or ""
+                text_chars += len("".join(text.split()))
+            return _PdfTextProfile(
+                page_count=page_count,
+                sampled_pages=len(sample_indexes),
+                text_chars=text_chars,
+            )
+    except Exception:
+        return None
+
+
+def _effective_page_budget(config: dict, page_count: int) -> int:
+    target_pages = config.get("liteparse_target_pages")
+    if target_pages not in (None, ""):
+        parsed_target_count = _target_page_count(str(target_pages), page_count)
+        if parsed_target_count:
+            return parsed_target_count
+
+    max_pages = _positive_int(config.get("liteparse_max_pages"), 1000)
+    return min(max_pages, page_count)
+
+
+def _target_page_count(value: str, page_count: int) -> int:
+    pages = _target_page_numbers(value, page_count)
+    if pages is None:
+        return 0
+    return len(pages)
+
+
+def _target_page_numbers(value: str, page_count: int) -> set[int] | None:
+    pages: set[int] = set()
+    for raw_part in value.split(","):
+        part = raw_part.strip()
+        if not part:
+            continue
+        if "-" in part:
+            start_raw, end_raw = part.split("-", 1)
+            try:
+                start = int(start_raw.strip())
+                end = int(end_raw.strip())
+            except ValueError:
+                return None
+            if start <= 0 or end <= 0:
+                return None
+            if start > end:
+                start, end = end, start
+            pages.update(range(start, min(end, page_count) + 1))
+        else:
+            try:
+                page = int(part)
+            except ValueError:
+                return None
+            if page <= 0:
+                return None
+            if page <= page_count:
+                pages.add(page)
+    return pages
+
+
+def _sample_page_indexes(
+    page_count: int,
+    sample_pages: int,
+    target_pages: str | None = None,
+) -> list[int]:
+    if page_count <= 0 or sample_pages <= 0:
+        return []
+
+    candidate_indexes: list[int]
+    if target_pages not in (None, ""):
+        target_page_numbers = _target_page_numbers(str(target_pages), page_count)
+        if target_page_numbers:
+            candidate_indexes = sorted(page - 1 for page in target_page_numbers)
+        else:
+            candidate_indexes = list(range(page_count))
+    else:
+        candidate_indexes = list(range(page_count))
+
+    if len(candidate_indexes) <= sample_pages:
+        return candidate_indexes
+
+    anchors = [0, 1, 2, len(candidate_indexes) // 2, len(candidate_indexes) - 1]
+    indexes = []
+    seen = set()
+    for anchor in anchors:
+        index = candidate_indexes[min(max(anchor, 0), len(candidate_indexes) - 1)]
+        if index not in seen:
+            seen.add(index)
+            indexes.append(index)
+        if len(indexes) >= sample_pages:
+            break
+    return indexes
 
 
 def _detect_tessdata_path() -> str:

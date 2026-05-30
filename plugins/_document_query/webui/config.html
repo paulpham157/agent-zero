@@ -28,8 +28,7 @@
             liteparse_dpi: 150,
             liteparse_preserve_very_small_text: false,
             liteparse_output_format: 'text',
-            liteparse_num_workers: 1,
-            liteparse_subprocess: true,
+            liteparse_num_workers: 2,
             pdf_ocr_fallback: true,
             thread_offload: true,
         },
@@ -51,7 +50,7 @@
             this.ensureNumber('gather_timeout', 120, 1);
             this.ensureInt('liteparse_max_pages', 1000, 1);
             this.ensureNumber('liteparse_dpi', 150, 72);
-            this.ensureInt('liteparse_num_workers', 1, 1);
+            this.ensureInt('liteparse_num_workers', 2, 1);
             this.syncChunkOverlap();
         },
         ensureInt(key, fallback, min = null, max = null) {
@@ -293,7 +292,7 @@
                             </div>
                             <div class="field-control">
                                 <input type="number" min="1" step="1"
-                                    @change="ensureInt('liteparse_num_workers', 1, 1)"
+                                    @change="ensureInt('liteparse_num_workers', 2, 1)"
                                     x-model.number="config.liteparse_num_workers" />
                             </div>
                         </div>
@@ -430,20 +429,6 @@
                             </div>
                         </div>
 
-                        <div class="field">
-                            <div class="field-label">
-                                <div class="field-title">Run LiteParse in subprocess</div>
-                                <div class="field-description">
-                                    Isolate LiteParse native runtime failures from the Web UI process.
-                                </div>
-                            </div>
-                            <div class="field-control">
-                                <label class="toggle">
-                                    <input type="checkbox" x-model="config.liteparse_subprocess" />
-                                    <span class="toggler"></span>
-                                </label>
-                            </div>
-                        </div>
                     </div>
                 </template>
 

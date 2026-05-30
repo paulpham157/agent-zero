@@ -10,6 +10,7 @@ from plugins._document_query.helpers.fetch import FetchedDocument, fetch_public_
 from plugins._document_query.helpers.document_query import DocumentQueryHelper
 from plugins._document_query.helpers.parsers.base import BaseParser
 from plugins._document_query.helpers.parsers import get_parsers_for_mimetype
+from plugins._document_query.helpers.parsers import liteparse as liteparse_module
 from plugins._document_query.helpers.parsers.liteparse import LiteParseParser
 from plugins._document_query.helpers.parsers.text import TextParser
 
@@ -119,8 +120,9 @@ def test_default_config_bounds_liteparse_runtime_concurrency():
 
     assert "parser_concurrency: 1" in default_config
     assert "context_intro_chunks: 2" in default_config
-    assert "liteparse_num_workers: 1" in default_config
-    assert "liteparse_subprocess: true" in default_config
+    assert "liteparse_num_workers: 2" in default_config
+    assert "liteparse_ocr_auto_disable_pages: 30" in default_config
+    assert "liteparse_subprocess" not in default_config
 
 
 def test_config_panel_exposes_document_query_settings():
@@ -153,11 +155,11 @@ def test_config_panel_exposes_document_query_settings():
         "liteparse_preserve_very_small_text",
         "liteparse_output_format",
         "liteparse_num_workers",
-        "liteparse_subprocess",
         "pdf_ocr_fallback",
         "thread_offload",
     ]:
         assert f"config.{setting}" in config_html
+    assert "liteparse_subprocess" not in config_html
 
 
 def test_document_query_thumbnail_matches_plugin_hub_limits():
@@ -173,9 +175,169 @@ def test_document_query_thumbnail_matches_plugin_hub_limits():
 def test_liteparse_parser_caps_workers_by_default():
     parser = LiteParseParser()
 
-    assert parser._liteparse_kwargs({})["num_workers"] == 1
+    assert parser._liteparse_kwargs({})["num_workers"] == 2
     assert parser._liteparse_kwargs({"liteparse_num_workers": "3"})["num_workers"] == 3
-    assert parser._liteparse_kwargs({"liteparse_num_workers": ""})["num_workers"] == 1
+    assert parser._liteparse_kwargs({"liteparse_num_workers": ""})["num_workers"] == 2
+
+
+def test_liteparse_parser_always_uses_subprocess(monkeypatch):
+    fetched = FetchedDocument(
+        uri="/tmp/report.pdf",
+        source_uri="/tmp/report.pdf",
+        scheme="file",
+        mimetype="application/pdf",
+        content=b"",
+        local_path="/tmp/report.pdf",
+    )
+    parser = LiteParseParser()
+
+    monkeypatch.setattr(parser, "_parse_subprocess", lambda _document, _config: "ok")
+
+    def fail_in_process(_document, _config):
+        raise AssertionError("LiteParse must stay isolated from the Web UI process")
+
+    monkeypatch.setattr(parser, "_parse_in_process", fail_in_process)
+
+    assert parser._parse_sync(fetched, {"liteparse_subprocess": False}) == "ok"
+
+
+def test_liteparse_auto_disables_ocr_for_large_text_pdf(monkeypatch):
+    parser = LiteParseParser()
+    fetched = FetchedDocument(
+        uri="/tmp/report.pdf",
+        source_uri="/tmp/report.pdf",
+        scheme="file",
+        mimetype="application/pdf",
+        content=b"",
+        local_path="/tmp/report.pdf",
+    )
+    monkeypatch.setattr(
+        liteparse_module,
+        "_pdf_text_profile",
+        lambda _file_path, _config: liteparse_module._PdfTextProfile(
+            page_count=277,
+            sampled_pages=5,
+            text_chars=2500,
+        ),
+    )
+
+    kwargs = parser._liteparse_kwargs({}, fetched, "/tmp/report.pdf")
+
+    assert kwargs["ocr_enabled"] is False
+
+
+def test_liteparse_keeps_ocr_for_small_pdf(monkeypatch):
+    parser = LiteParseParser()
+    fetched = FetchedDocument(
+        uri="/tmp/bill.pdf",
+        source_uri="/tmp/bill.pdf",
+        scheme="file",
+        mimetype="application/pdf",
+        content=b"",
+        local_path="/tmp/bill.pdf",
+    )
+    monkeypatch.setattr(
+        liteparse_module,
+        "_pdf_text_profile",
+        lambda _file_path, _config: liteparse_module._PdfTextProfile(
+            page_count=10,
+            sampled_pages=5,
+            text_chars=2500,
+        ),
+    )
+
+    kwargs = parser._liteparse_kwargs({}, fetched, "/tmp/bill.pdf")
+
+    assert kwargs["ocr_enabled"] is True
+
+
+def test_liteparse_keeps_ocr_for_large_text_sparse_pdf(monkeypatch):
+    parser = LiteParseParser()
+    fetched = FetchedDocument(
+        uri="/tmp/scan.pdf",
+        source_uri="/tmp/scan.pdf",
+        scheme="file",
+        mimetype="application/pdf",
+        content=b"",
+        local_path="/tmp/scan.pdf",
+    )
+    monkeypatch.setattr(
+        liteparse_module,
+        "_pdf_text_profile",
+        lambda _file_path, _config: liteparse_module._PdfTextProfile(
+            page_count=277,
+            sampled_pages=5,
+            text_chars=20,
+        ),
+    )
+
+    kwargs = parser._liteparse_kwargs({}, fetched, "/tmp/scan.pdf")
+
+    assert kwargs["ocr_enabled"] is True
+
+
+def test_liteparse_respects_explicit_ocr_disabled(monkeypatch):
+    parser = LiteParseParser()
+    fetched = FetchedDocument(
+        uri="/tmp/bill.pdf",
+        source_uri="/tmp/bill.pdf",
+        scheme="file",
+        mimetype="application/pdf",
+        content=b"",
+        local_path="/tmp/bill.pdf",
+    )
+    monkeypatch.setattr(
+        liteparse_module,
+        "_pdf_text_profile",
+        lambda _file_path, _config: liteparse_module._PdfTextProfile(
+            page_count=10,
+            sampled_pages=5,
+            text_chars=0,
+        ),
+    )
+
+    kwargs = parser._liteparse_kwargs(
+        {"liteparse_ocr_enabled": False},
+        fetched,
+        "/tmp/bill.pdf",
+    )
+
+    assert kwargs["ocr_enabled"] is False
+
+
+def test_liteparse_target_pages_can_keep_ocr_enabled_for_large_pdf(monkeypatch):
+    parser = LiteParseParser()
+    fetched = FetchedDocument(
+        uri="/tmp/report.pdf",
+        source_uri="/tmp/report.pdf",
+        scheme="file",
+        mimetype="application/pdf",
+        content=b"",
+        local_path="/tmp/report.pdf",
+    )
+    monkeypatch.setattr(
+        liteparse_module,
+        "_pdf_text_profile",
+        lambda _file_path, _config: liteparse_module._PdfTextProfile(
+            page_count=277,
+            sampled_pages=5,
+            text_chars=2500,
+        ),
+    )
+
+    small_range = parser._liteparse_kwargs(
+        {"liteparse_target_pages": "1-10"},
+        fetched,
+        "/tmp/report.pdf",
+    )
+    large_range = parser._liteparse_kwargs(
+        {"liteparse_target_pages": "1-40"},
+        fetched,
+        "/tmp/report.pdf",
+    )
+
+    assert small_range["ocr_enabled"] is True
+    assert large_range["ocr_enabled"] is False
 
 
 def test_query_optimize_prompt_filename_is_spelled_correctly():

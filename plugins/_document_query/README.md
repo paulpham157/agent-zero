@@ -8,6 +8,7 @@ timeouts and thread-safe parsers.
 - **Strategy-pattern parsers** - MIME-type routing to dedicated parser classes
 - **Centralized fetching** - local and HTTP(S) resources are fetched once, size-checked, then passed to parsers
 - **LiteParse first path** - fast local parsing for PDFs and supported document/image formats, with legacy fallbacks
+- **Adaptive OCR** - large text-rich PDFs skip OCR automatically to avoid pathological parse times
 - **Bounded parser execution** - sync parsers are offloaded to asyncio.to_thread and globally capped across chats
 - **Configurable timeouts** - per-document and gather-level timeouts
 - **Expanded format support** - PDF, HTML, text, YAML, XML, TOML, JS, TS, images, and catch-all Unstructured
@@ -29,13 +30,16 @@ See default_config.yaml for all options. Key settings:
 | chunk_overlap | 100 | Text splitter overlap |
 | search_threshold | 0.5 | Similarity search threshold |
 | liteparse_enabled | true | Prefer LiteParse before legacy parser fallbacks |
-| liteparse_num_workers | 1 | Max LiteParse OCR workers per parser job |
-| liteparse_subprocess | true | Run LiteParse in a child process so native crashes fall back safely |
+| liteparse_num_workers | 2 | Max LiteParse OCR workers per parser job |
+| liteparse_ocr_auto_disable_pages | 30 | Disable OCR for text-rich PDFs at or above this effective page count |
 | thread_offload | true | Offload sync parsers to thread pool |
 
 LiteParse is installed into the Agent Zero framework runtime from hooks.py during
 plugin install/startup. If installation fails, the plugin logs the error and
 continues with the legacy parser fallbacks.
+
+LiteParse always runs in a child process so native parser and OCR failures stay
+isolated from the Web UI process.
 
 ## Parsers
 
