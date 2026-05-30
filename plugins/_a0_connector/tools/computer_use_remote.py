@@ -505,6 +505,11 @@ class ComputerUseRemote(Tool):
             if backend_family:
                 backend_text = f"{backend_text}/{backend_family}"
             parts.append(f"backend={backend_text}")
+        contract_version = data.get("contract_version")
+        if not contract_version and isinstance(data.get("capabilities"), dict):
+            contract_version = data["capabilities"].get("contract_version")
+        if contract_version:
+            parts.append(f"contract=v{contract_version}")
         if features:
             parts.append(f"features={', '.join(features)}")
         return ", ".join(parts)

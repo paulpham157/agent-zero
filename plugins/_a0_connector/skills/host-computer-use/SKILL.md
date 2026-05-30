@@ -75,14 +75,15 @@ If any tool result contains `COMPUTER_USE_REARM_REQUIRED` or `status=rearm requi
 ## Core Loop
 
 1. Call `start_session` first.
-2. Read the returned `backend_id`, `backend_family`, and `features`; load a backend-specific Computer Use skill when the task needs backend-only affordances.
-3. If the backend advertises `native-window-list`, call `list_windows` before using coordinates.
-4. If the backend advertises `window-state` and `element-index-targeting`, call `get_window_state` for the target `pid`/`window_id`, then use `element_action` with `dispatch: "background"` by default.
-5. If `element_action` reports `background_unavailable`, use `dispatch: "auto"` or `dispatch: "foreground"` only when foreground control is acceptable for the user/task.
-6. Decide final success from the latest screenshot or a definitive structural result, not from memory.
-7. Interactive actions already attach a fresh screenshot after they run; inspect it before claiming the requested outcome succeeded.
-8. Use `status` for state without starting a session.
-9. Use `capture` only when you need another screenshot without taking an action.
+2. Read the returned `backend_id`, `backend_family`, `features`, `contract_version`, and `capabilities`; load a backend-specific Computer Use skill when the task needs backend-only affordances.
+3. Prefer the structured `capabilities` object over guessing from OS names. Use `capabilities.identity.pid`, `capabilities.identity.window_id`, `capabilities.identity.element_index`, and `capabilities.dispatch.background` as the portable contract for the native background loop.
+4. If the backend advertises native window listing through capabilities or `native-window-list`, call `list_windows` before using coordinates.
+5. If the backend advertises window state and element-index targeting through capabilities or features, call `get_window_state` for the target `pid`/`window_id`, then use `element_action` with `dispatch: "background"` by default.
+6. If `element_action` reports `background_unavailable`, use `dispatch: "auto"` or `dispatch: "foreground"` only when foreground control is acceptable for the user/task.
+7. Decide final success from the latest screenshot or a definitive structural result, not from memory.
+8. Interactive actions already attach a fresh screenshot after they run; inspect it before claiming the requested outcome succeeded.
+9. Use `status` for state without starting a session.
+10. Use `capture` only when you need another screenshot without taking an action.
 
 ## Backend Skills
 
