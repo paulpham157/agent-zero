@@ -34,6 +34,7 @@ REARM_REQUIRED_DEFAULT_MESSAGE = (
 )
 _AUTO_CAPTURE_ACTIONS = {
     "start_session",
+    "element_action",
     "ax_action",
     "uia_action",
     "move",
@@ -58,6 +59,9 @@ _SUPPORTED_ACTIONS = {
     "start_session",
     "status",
     "capture",
+    "list_windows",
+    "get_window_state",
+    "element_action",
     "ax_snapshot",
     "ax_action",
     "uia_snapshot",
@@ -80,7 +84,8 @@ class ComputerUseRemote(Tool):
             return Response(
                 message=(
                     "action is required and must be one of: "
-                    "start_session, status, capture, ax_snapshot, ax_action, "
+                    "start_session, status, capture, list_windows, get_window_state, "
+                    "element_action, ax_snapshot, ax_action, "
                     "uia_snapshot, uia_action, "
                     "move, click, scroll, key, type, stop_session"
                 ),
@@ -226,6 +231,11 @@ class ComputerUseRemote(Tool):
 
         data = result.get("result")
         result_data = dict(data) if isinstance(data, dict) else {}
+        if action == "element_action":
+            actual_dispatch = str(result_data.get("actual_dispatch") or "").strip().lower()
+            if actual_dispatch in {"background", "none"}:
+                return ""
+
         session_id = str(result_data.get("session_id") or self.args.get("session_id") or "").strip()
         if not session_id:
             return ""
@@ -324,6 +334,34 @@ class ComputerUseRemote(Tool):
             payload["text"] = self.args.get("text", "")
             if self._coerce_bool(self.args.get("submit")):
                 payload["submit"] = True
+        elif action == "list_windows":
+            for key in ("include_hidden", "include_offscreen", "max_windows"):
+                if key in self.args:
+                    payload[key] = self.args.get(key)
+        elif action == "get_window_state":
+            for key in ("pid", "window_id", "mode", "max_depth", "max_nodes"):
+                if key in self.args:
+                    payload[key] = self.args.get(key)
+        elif action == "element_action":
+            for key in (
+                "pid",
+                "window_id",
+                "element_index",
+                "path",
+                "operation",
+                "name",
+                "dispatch",
+                "value",
+                "text",
+                "submit",
+            ):
+                if key in self.args:
+                    payload[key] = self.args.get(key)
+            target = self.args.get("target")
+            if isinstance(target, dict):
+                payload["target"] = dict(target)
+            if "selector" in self.args:
+                payload["selector"] = self.args.get("selector")
         elif action == "ax_snapshot":
             if "max_depth" in self.args:
                 payload["max_depth"] = self._coerce_int(self.args.get("max_depth"), name="max_depth")
@@ -386,6 +424,12 @@ class ComputerUseRemote(Tool):
         if action == "capture":
             summary = self._record_capture(data)
             return f"Current screen attached: {summary} {CAPTURE_VERIFICATION_NOTE}"
+        if action == "list_windows":
+            return self._format_window_list(data)
+        if action == "get_window_state":
+            return self._format_window_state(data)
+        if action == "element_action":
+            return self._format_element_action(data)
         if action == "ax_snapshot":
             return self._format_ax_snapshot(data)
         if action == "ax_action":
@@ -552,6 +596,94 @@ class ComputerUseRemote(Tool):
             f"active_contexts={active_text}.{rearm_guidance}"
         )
 
+    def _format_window_list(self, data: dict[str, Any]) -> str:
+        windows = data.get("windows") if isinstance(data.get("windows"), list) else []
+        count = data.get("count", len(windows))
+        if not windows:
+            return (
+                "No native windows were returned by the computer-use backend. "
+                "Use capture or backend-specific snapshots as a fallback."
+            )
+        lines = [
+            (
+                f"Computer-use native window list: {count} window(s). "
+                "Prefer get_window_state(pid/window_id) before element_action."
+            )
+        ]
+        for item in windows[:40]:
+            if not isinstance(item, dict):
+                continue
+            title = str(item.get("title") or item.get("name") or "").strip()
+            app_name = str(item.get("app_name") or item.get("app") or "").strip()
+            pid = item.get("pid")
+            window_id = str(item.get("window_id") or "").strip()
+            role = str(item.get("role") or "window").strip()
+            parts = [f"- window_id={window_id or '?'}"]
+            if pid is not None:
+                parts.append(f"pid={pid}")
+            if app_name:
+                parts.append(f"app={app_name!r}")
+            if title:
+                parts.append(f"title={title!r}")
+            parts.append(f"role={role}")
+            frame = item.get("frame")
+            if isinstance(frame, dict):
+                parts.append(
+                    f"frame=({frame.get('x', '?')},{frame.get('y', '?')} "
+                    f"{frame.get('width', '?')}x{frame.get('height', '?')})"
+                )
+            flags: list[str] = []
+            for flag in ("is_on_screen", "on_current_space", "focused", "visible"):
+                if flag in item:
+                    flags.append(f"{flag}={item.get(flag)}")
+            if flags:
+                parts.append(" ".join(flags))
+            lines.append(" ".join(parts))
+        if len(windows) > 40:
+            lines.append("... window list truncated; request a narrower app/window target.")
+        return "\n".join(lines)
+
+    def _format_window_state(self, data: dict[str, Any]) -> str:
+        tree = data.get("tree") if isinstance(data.get("tree"), dict) else {}
+        window = data.get("window") if isinstance(data.get("window"), dict) else {}
+        app = data.get("app") if isinstance(data.get("app"), dict) else {}
+        title = str(window.get("title") or app.get("name") or "target window").strip()
+        window_id = str(window.get("window_id") or data.get("window_id") or "").strip()
+        node_count = data.get("node_count", "?")
+        truncated = " truncated" if data.get("truncated") else ""
+        mode = str(data.get("mode") or "auto").strip()
+        return (
+            f"Window state for {title!r}"
+            f"{f' window_id={window_id}' if window_id else ''}: "
+            f"{node_count} element(s){truncated}, mode={mode}. "
+            "Use element_action with element_index; dispatch defaults to background."
+            f"{self._structural_tree_outline(tree)}"
+        )
+
+    def _format_element_action(self, data: dict[str, Any]) -> str:
+        target = data.get("target") if isinstance(data.get("target"), dict) else {}
+        operation = str(data.get("operation") or "?")
+        requested_dispatch = str(data.get("requested_dispatch") or data.get("dispatch") or "background")
+        actual_dispatch = str(data.get("actual_dispatch") or data.get("dispatch") or requested_dispatch)
+        fallback = bool(data.get("foreground_fallback_used") or data.get("fallback_used"))
+        index = target.get("element_index", data.get("element_index", "?"))
+        label = (
+            self._uia_target_label(target)
+            if target.get("selector") or target.get("automation_id")
+            else self._ax_target_label(target)
+        )
+        if data.get("background_unavailable"):
+            reason = str(data.get("reason") or "background dispatch was unavailable")
+            return (
+                f"Background element action unavailable for element_index={index}: {reason}. "
+                "Use dispatch='auto' or dispatch='foreground' only if foreground control is acceptable."
+            )
+        dispatch_text = (
+            f"requested_dispatch={requested_dispatch}, actual_dispatch={actual_dispatch}"
+            f"{', foreground_fallback_used=true' if fallback else ''}"
+        )
+        return f"Performed {operation} on element_index={index} {label}; {dispatch_text}."
+
     def _format_ax_snapshot(self, data: dict[str, Any]) -> str:
         app = data.get("app") if isinstance(data.get("app"), dict) else {}
         tree = data.get("tree") if isinstance(data.get("tree"), dict) else {}
@@ -611,7 +743,11 @@ class ComputerUseRemote(Tool):
         indent = "  " * max(0, depth)
         role = str(node.get("role") or "element")
         path = node.get("path", [])
-        parts = [f"{indent}- path={path} role={role}"]
+        element_index = node.get("element_index")
+        prefix = f"{indent}-"
+        if element_index is not None:
+            prefix = f"{prefix} element_index={element_index}"
+        parts = [f"{prefix} path={path} role={role}"]
         for key in ("title", "name", "description", "automation_id", "class_name", "selector"):
             value = node.get(key)
             if isinstance(value, str) and value.strip():
