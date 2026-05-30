@@ -71,7 +71,8 @@ Commands:
   drag X1 Y1 X2 Y2            Drag from X1,Y1 to X2,Y2 in Desktop coordinates.
   right-click X Y             Move and right-click at X,Y in Desktop coordinates.
   paste-text TEXT             Put TEXT on the Desktop clipboard and paste it with an app-native shortcut.
-  sequence FILE|-             Run a newline-delimited command sequence.
+  sequence FILE|-             Run a newline-delimited command sequence in this process.
+  batch FILE|-                Alias for sequence.
   key KEY...                  Send one or more xdotool key names.
   type TEXT                   Type text into the focused window.
   click X Y                   Move and click at X,Y in Desktop coordinates.
@@ -228,7 +229,7 @@ run_sequence_line() {
     \#*) return 0 ;;
   esac
   # shellcheck disable=SC2086
-  "$0" $line
+  dispatch_command $line
 }
 
 run_sequence() {
@@ -279,7 +280,11 @@ launch_app() {
   esac
 }
 
-case "$command_name" in
+dispatch_command() {
+  local command_name="${1:-help}"
+  shift || true
+
+  case "$command_name" in
   help|-h|--help)
     usage
     ;;
@@ -387,7 +392,7 @@ case "$command_name" in
     fi
     paste_text "$@"
     ;;
-  sequence)
+  sequence|batch)
     source_file="${1:?sequence requires FILE or -}"
     run_sequence "$source_file"
     ;;
@@ -448,4 +453,7 @@ case "$command_name" in
     usage >&2
     exit 2
     ;;
-esac
+  esac
+}
+
+dispatch_command "$command_name" "$@"

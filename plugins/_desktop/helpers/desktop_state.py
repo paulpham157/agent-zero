@@ -721,9 +721,10 @@ def compact_prompt_context(state: dict[str, Any] | None = None) -> str:
         lines.append(f"- screenshot_context={context_id}")
     context_arg = f" --context-id {context_id}" if context_id else ""
     lines.append(
-        "- next=plugins/_desktop/skills/linux-desktop/scripts/desktopctl.sh observe --json --screenshot"
+        "- next=plugins/_desktop/skills/linux-desktop/scripts/desktopctl.sh state --json"
+        f"{context_arg} for structured checks; use observe --json --screenshot"
         f"{context_arg} "
-        "before any coordinate action; prefer focus/key/paste/save/app-native helpers first."
+        "before coordinate or visual-OCR actions; prefer sequence/focus/key/paste/save/app-native helpers first."
     )
     lines.append(
         "- verify=for terminal/CLI-agent output, use the screenshot path from a fresh final "

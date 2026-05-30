@@ -272,7 +272,9 @@ def test_desktop_plugin_owns_routes_runtime_surface_and_state_paths():
     assert "canvas.width = normalizedWidth" in desktop_store
     assert "canvas.height = normalizedHeight" in desktop_store
     assert "canvas?.clientWidth || canvas?.width" in desktop_store
+    assert "overflow: auto !important;" in desktop_store
     assert "Installing Agent Zero Desktop runtime dependencies" in desktop_session
+    assert "normalize_desktop_display_size" in desktop_session
     assert "__a0XpraOffsetWarnPatched" in desktop_store
     assert "window does not fit in canvas, offsets" in desktop_store
     assert "decode error packet" in desktop_store
@@ -529,6 +531,9 @@ def test_office_and_desktop_skills_are_rehomed_and_renamed():
     assert "Open in Desktop action" in desktop_skill
     assert "$BASE_DIR/usr/plugins/_desktop/profiles/$SESSION" in desktopctl
     assert "$BASE_DIR/usr/plugins/_desktop/sessions/$SESSION.json" in desktopctl
+    assert "sequence|batch)" in desktopctl
+    assert "dispatch_command $line" in desktopctl
+    assert '"$0" $line' not in desktopctl
 
 
 def test_skill_catalog_and_connector_boundaries_are_static_guarded():

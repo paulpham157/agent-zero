@@ -1818,7 +1818,7 @@ const model = {
       html, body, #screen {
         width: 100% !important;
         height: 100% !important;
-        overflow: hidden !important;
+        overflow: auto !important;
       }
       #float_menu,
       .windowhead,
