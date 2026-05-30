@@ -258,6 +258,7 @@ const model = {
   _desktopFrameHost: null,
   _desktopFrameLoadHandler: null,
   _desktopKeepaliveHost: null,
+  _desktopDisplaySizes: {},
   _desktopIntentionalShutdown: false,
 
   async init(element = null) {
@@ -1499,7 +1500,7 @@ const model = {
       this.stopXpraDesktopPrime();
       this._desktopPrimeAttempts = 0;
     }
-    if (this.applyXpraDesktopFrameMode(options.frame || null)) return;
+    if (this.applyXpraDesktopFrameMode(options.frame || null, options)) return;
     if (this._desktopPrimeAttempts >= XPRA_DESKTOP_PRIME_ATTEMPTS) return;
     this._desktopPrimeAttempts += 1;
     if (this._desktopPrimeTimer) globalThis.clearTimeout(this._desktopPrimeTimer);
@@ -1540,8 +1541,12 @@ const model = {
       const windows = Object.values(client.id_to_window || {});
       if (!client.connected || !windows.length) return false;
 
-      const width = Math.round(container.clientWidth || remoteWindow.innerWidth || 0);
-      const height = Math.round(container.clientHeight || remoteWindow.innerHeight || 0);
+      const token = options.token || this.session?.desktop?.token || "";
+      const displaySize = options.displaySize || this.desktopDisplaySizeForToken(token);
+      const viewportWidth = Math.round(container.clientWidth || remoteWindow.innerWidth || 0);
+      const viewportHeight = Math.round(container.clientHeight || remoteWindow.innerHeight || 0);
+      const width = Math.round(displaySize?.width || viewportWidth || 0);
+      const height = Math.round(displaySize?.height || viewportHeight || 0);
       if (width > 0 && height > 0) {
         client.desktop_width = width;
         client.desktop_height = height;
@@ -1574,6 +1579,26 @@ const model = {
     }
   },
 
+  desktopDisplaySizeForToken(token = "") {
+    const key = String(token || "").trim();
+    const size = key ? this._desktopDisplaySizes?.[key] : null;
+    const width = Math.round(Number(size?.width || 0));
+    const height = Math.round(Number(size?.height || 0));
+    return width > 0 && height > 0 ? { width, height } : null;
+  },
+
+  rememberDesktopDisplaySize(token = "", width = 0, height = 0) {
+    const key = String(token || "").trim();
+    const normalizedWidth = Math.round(Number(width || 0));
+    const normalizedHeight = Math.round(Number(height || 0));
+    if (!key || normalizedWidth <= 0 || normalizedHeight <= 0) return null;
+    this._desktopDisplaySizes = {
+      ...(this._desktopDisplaySizes || {}),
+      [key]: { width: normalizedWidth, height: normalizedHeight },
+    };
+    return this._desktopDisplaySizes[key];
+  },
+
   installXpraDesktopAgentBridge(frame, remoteWindow, remoteDocument, client, container) {
     if (!frame || !remoteWindow || !remoteDocument || !client) return null;
     const store = this;
@@ -1584,8 +1609,10 @@ const model = {
     const metrics = () => {
       const desktopWidth = Math.max(1, finite(client.desktop_width || container?.clientWidth || remoteWindow.innerWidth, 1));
       const desktopHeight = Math.max(1, finite(client.desktop_height || container?.clientHeight || remoteWindow.innerHeight, 1));
-      const clientWidth = Math.max(1, finite(container?.clientWidth || remoteWindow.innerWidth, desktopWidth));
-      const clientHeight = Math.max(1, finite(container?.clientHeight || remoteWindow.innerHeight, desktopHeight));
+      const primaryWindow = Object.values(client.id_to_window || {})[0];
+      const canvas = primaryWindow?.canvas;
+      const clientWidth = Math.max(1, finite(canvas?.clientWidth || canvas?.width || container?.clientWidth || remoteWindow.innerWidth, desktopWidth));
+      const clientHeight = Math.max(1, finite(canvas?.clientHeight || canvas?.height || container?.clientHeight || remoteWindow.innerHeight, desktopHeight));
       return {
         desktopWidth,
         desktopHeight,
@@ -1683,8 +1710,10 @@ const model = {
   },
 
   fitXpraDesktopWindowElement(xpraWindow, width, height) {
-    const cssWidth = `${Math.max(1, Number(width || 0))}px`;
-    const cssHeight = `${Math.max(1, Number(height || 0))}px`;
+    const normalizedWidth = Math.max(1, Math.round(Number(width || 0)));
+    const normalizedHeight = Math.max(1, Math.round(Number(height || 0)));
+    const cssWidth = `${normalizedWidth}px`;
+    const cssHeight = `${normalizedHeight}px`;
     const windowElement = xpraWindow?.div;
     const canvas = xpraWindow?.canvas;
     windowElement?.style?.setProperty("left", "0px", "important");
@@ -1698,6 +1727,12 @@ const model = {
     canvas?.style?.setProperty("height", cssHeight, "important");
     canvas?.style?.setProperty("display", "block", "important");
     canvas?.style?.setProperty("margin", "0", "important");
+    if (canvas) {
+      if (canvas.width !== normalizedWidth) canvas.width = normalizedWidth;
+      if (canvas.height !== normalizedHeight) canvas.height = normalizedHeight;
+      canvas.setAttribute("width", String(normalizedWidth));
+      canvas.setAttribute("height", String(normalizedHeight));
+    }
   },
 
   installXpraDesktopWheelBridge(remoteWindow, xpraWindow) {
@@ -2139,6 +2174,11 @@ const model = {
         const response = await fetch(`/desktop/resize?${params.toString()}`, { credentials: "same-origin" });
         if (response.ok) {
           const result = await response.json().catch(() => ({}));
+          const displaySize = this.rememberDesktopDisplaySize(
+            token,
+            result?.width || width,
+            result?.height || height,
+          );
           this._desktopResizeKey = key;
           const activeFrame = this.desktopFrame(frame);
           const activeTarget = activeFrame?.parentElement || activeFrame;
@@ -2153,7 +2193,7 @@ const model = {
             }
           }
           if (result?.reload) this.reloadDesktopFrame(activeFrame || frame);
-          this.primeXpraDesktopFrame({ reset: true, frame: activeFrame || frame });
+          this.primeXpraDesktopFrame({ reset: true, frame: activeFrame || frame, token, displaySize });
         }
       } catch (error) {
         console.warn("Desktop resize skipped", error);

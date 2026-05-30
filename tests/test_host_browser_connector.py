@@ -12,8 +12,8 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from helpers import ephemeral_images
 from plugins._a0_connector.helpers import ws_runtime
+from plugins._browser.helpers import connector_runtime as connector_runtime_module
 from plugins._browser.helpers.connector_runtime import (
     ConnectorBrowserRuntime,
     _agent_uses_local_chat_model,
@@ -330,7 +330,15 @@ def test_connector_runtime_adds_docker_recovery_to_host_errors():
     assert "/browser container" in message
 
 
-def test_host_browser_artifacts_become_context_scoped_ephemeral_refs(tmp_path):
+def test_host_browser_artifacts_become_chat_scoped_files(monkeypatch, tmp_path):
+    def fake_get_abs_path(*parts):
+        return str(tmp_path.joinpath(*parts))
+
+    def fake_normalize_a0_path(path):
+        return "/a0/" + str(Path(path).relative_to(tmp_path)).replace("\\", "/")
+
+    monkeypatch.setattr(connector_runtime_module.chat_media.files, "get_abs_path", fake_get_abs_path)
+    monkeypatch.setattr(connector_runtime_module.chat_media.files, "normalize_a0_path", fake_normalize_a0_path)
     runtime = ConnectorBrowserRuntime("ctx-host", _agent("ctx-host"))
 
     result = runtime._materialize_artifact(
@@ -352,19 +360,15 @@ def test_host_browser_artifacts_become_context_scoped_ephemeral_refs(tmp_path):
 
     inner = result[0]["result"]
     assert "artifact" not in inner
-    assert "path" not in inner
-    assert "a0_path" not in inner
+    assert Path(inner["path"]).read_bytes() == b"fake"
+    assert inner["a0_path"].startswith("/a0/usr/chats/ctx-host/screenshots/browser/shot-")
     assert inner["context_id"] == "ctx-host"
-    assert inner["ephemeral"] is True
-    assert inner["ephemeral_ref"].startswith(ephemeral_images.REF_PREFIX)
-    assert inner["vision_load"]["tool_args"]["paths"] == [inner["ephemeral_ref"]]
-    assert ephemeral_images.consume_image(inner["ephemeral_ref"], context_id="ctx-host").data_url == "data:image/jpeg;base64,ZmFrZQ=="
-    assert not list(tmp_path.rglob("shot.jpg"))
+    assert inner["ephemeral"] is False
+    assert inner["chat_scoped"] is True
+    assert inner["vision_load"]["tool_args"]["paths"] == [inner["a0_path"]]
 
 
 def test_host_browser_artifact_materialization_rejects_oversized_payload(monkeypatch, tmp_path):
-    import plugins._browser.helpers.connector_runtime as connector_runtime_module
-
     monkeypatch.setattr(connector_runtime_module, "MAX_ARTIFACT_SIZE_BYTES", 2)
     runtime = ConnectorBrowserRuntime("ctx-host", _agent("ctx-host"))
 

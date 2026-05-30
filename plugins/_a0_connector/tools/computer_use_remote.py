@@ -6,7 +6,7 @@ from pathlib import Path
 import uuid
 from typing import Any
 
-from helpers import history, media_artifacts
+from helpers import chat_media, history, media_artifacts
 from helpers.print_style import PrintStyle
 from helpers.tool import Response, Tool
 from helpers.ws import NAMESPACE
@@ -744,7 +744,15 @@ class ComputerUseRemote(Tool):
         except FileNotFoundError as exc:
             path_error = exc
         else:
-            return display_path, image_path.stem
+            saved = chat_media.save_image_file(
+                context_id=self.agent.context.id,
+                path=image_path,
+                category="screenshots",
+                source="computer-use",
+                preferred_name=Path(display_path).name or image_path.name,
+                max_bytes=MAX_CAPTURE_ARTIFACT_SIZE_BYTES,
+            )
+            return saved.a0_path, Path(saved.path).stem
 
         artifact = data.get("artifact")
         if isinstance(artifact, dict) and str(artifact.get("encoding", "")).strip().lower() == "base64":
@@ -764,7 +772,16 @@ class ComputerUseRemote(Tool):
                     default=f"computer-use-{uuid.uuid4().hex}.png",
                     default_extension=".png",
                 )
-                return f"data:{mime};base64,{encoded}", Path(filename).stem
+                saved = chat_media.save_image_base64(
+                    context_id=self.agent.context.id,
+                    data=encoded,
+                    mime_type=mime,
+                    category="screenshots",
+                    source="computer-use",
+                    preferred_name=filename,
+                    max_bytes=MAX_CAPTURE_ARTIFACT_SIZE_BYTES,
+                )
+                return saved.a0_path, Path(saved.path).stem
 
         if path_error is not None:
             raise path_error

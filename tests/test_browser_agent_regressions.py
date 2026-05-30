@@ -2477,7 +2477,7 @@ async def test_browser_runtime_remounts_initial_changed_viewport():
 
 
 @pytest.mark.anyio
-async def test_browser_runtime_screenshot_file_defaults_to_ephemeral_ref(monkeypatch, tmp_path):
+async def test_browser_runtime_screenshot_file_defaults_to_chat_scoped_artifact(monkeypatch, tmp_path):
     screenshot_calls = []
 
     def fake_get_abs_path(*parts):
@@ -2512,15 +2512,15 @@ async def test_browser_runtime_screenshot_file_defaults_to_ephemeral_ref(monkeyp
 
     result = await core.screenshot_file(5, quality=500)
 
-    assert "path" not in result
-    assert "a0_path" not in result
+    assert Path(result["path"]).read_bytes() == b"image-bytes"
+    assert result["a0_path"].startswith("/a0/usr/chats/ctx_id/screenshots/browser/browser-5-")
     assert result["context_id"] == "ctx/id"
     assert result["mime"] == "image/jpeg"
-    assert result["ephemeral"] is True
-    assert result["ephemeral_ref"].startswith(ephemeral_images.REF_PREFIX)
+    assert result["ephemeral"] is False
+    assert result["chat_scoped"] is True
     assert result["vision_load"] == {
         "tool_name": "vision_load",
-        "tool_args": {"paths": [result["ephemeral_ref"]]},
+        "tool_args": {"paths": [result["a0_path"]]},
     }
     assert "image" not in result
     assert not list((tmp_path / "tmp" / "browser" / "screenshots").rglob("*.jpg"))
@@ -2528,7 +2528,6 @@ async def test_browser_runtime_screenshot_file_defaults_to_ephemeral_ref(monkeyp
     assert screenshot_calls[-1]["quality"] == 95
     assert screenshot_calls[-1]["full_page"] is False
     assert "path" not in screenshot_calls[-1]
-    assert ephemeral_images.consume_image(result["ephemeral_ref"], context_id="ctx/id").data_url == "data:image/jpeg;base64,aW1hZ2UtYnl0ZXM="
 
     png_path = tmp_path / "custom.png"
     png_result = await core.screenshot_file(5, quality=1, full_page=True, path=str(png_path))
@@ -2543,9 +2542,27 @@ async def test_browser_runtime_screenshot_file_defaults_to_ephemeral_ref(monkeyp
 
 
 @pytest.mark.anyio
-async def test_vision_load_consumes_ephemeral_browser_refs(monkeypatch):
+async def test_vision_load_materializes_ephemeral_browser_refs(monkeypatch, tmp_path):
+    monkeypatch.setitem(sys.modules, "helpers.tool", SimpleNamespace(Response=_TestResponse, Tool=_TestTool))
+    history_stub = ModuleType("helpers.history")
+
+    class _RawMessage(dict):
+        def __init__(self, raw_content, preview):
+            super().__init__(raw_content=raw_content, preview=preview)
+
+    history_stub.RawMessage = _RawMessage
+    monkeypatch.setitem(sys.modules, "helpers.history", history_stub)
+    monkeypatch.delitem(sys.modules, "tools.vision_load", raising=False)
     import tools.vision_load as vision_load_module
 
+    def fake_get_abs_path(*parts):
+        return str(tmp_path.joinpath(*parts))
+
+    def fake_normalize_a0_path(path):
+        return "/a0/" + str(Path(path).relative_to(tmp_path)).replace("\\", "/")
+
+    monkeypatch.setattr(vision_load_module.chat_media.files, "get_abs_path", fake_get_abs_path)
+    monkeypatch.setattr(vision_load_module.chat_media.files, "normalize_a0_path", fake_normalize_a0_path)
     monkeypatch.setattr(
         vision_load_module.plugins,
         "get_plugin_config",
@@ -2561,7 +2578,7 @@ async def test_vision_load_consumes_ephemeral_browser_refs(monkeypatch):
         hist_add_tool_result=lambda *args, **kwargs: tool_results.append((args, kwargs)),
         hist_add_message=lambda *args, **kwargs: messages.append((args, kwargs)),
     )
-    ref = ephemeral_images.put_image(
+    ref = vision_load_module.ephemeral_images.put_image(
         context_id="ctx-vision",
         mime="image/jpeg",
         data=SMALL_JPEG_10X10,
@@ -2580,10 +2597,13 @@ async def test_vision_load_consumes_ephemeral_browser_refs(monkeypatch):
     response = await tool.execute(paths=[ref])
     await tool.after_execution(response)
 
-    assert ephemeral_images.get_image(ref, context_id="ctx-vision") is None
+    assert vision_load_module.ephemeral_images.get_image(ref, context_id="ctx-vision") is None
     assert tool.loaded_paths == ["browser-shot.jpg"]
     raw_message = messages[0][1]["content"]
-    assert raw_message.raw_content[0]["image_url"]["url"] == f"data:image/jpeg;base64,{SMALL_JPEG_10X10}"
+    stored_ref = raw_message["raw_content"][0]["image_url"]["url"]
+    assert stored_ref.startswith("/a0/usr/chats/ctx-vision/screenshots/browser/browser-shot-")
+    stored_path = tmp_path / stored_ref.removeprefix("/a0/")
+    assert stored_path.read_bytes() == __import__("base64").b64decode(SMALL_JPEG_10X10)
     assert updates[-1]["result"] == "1 images loaded, 0 skipped"
 
 

@@ -264,6 +264,14 @@ def test_desktop_plugin_owns_routes_runtime_surface_and_state_paths():
     assert "DESKTOP_RUNTIME_INSTALL_MESSAGE" in desktop_store
     assert "openDesktopWhenRuntimeReady" in desktop_store
     assert "isDesktopRuntimeInstalling" in desktop_store
+    assert "_desktopDisplaySizes: {}" in desktop_store
+    assert "desktopDisplaySizeForToken(token" in desktop_store
+    assert "rememberDesktopDisplaySize(token" in desktop_store
+    assert "options.displaySize || this.desktopDisplaySizeForToken(token)" in desktop_store
+    assert "result?.width || width" in desktop_store
+    assert "canvas.width = normalizedWidth" in desktop_store
+    assert "canvas.height = normalizedHeight" in desktop_store
+    assert "canvas?.clientWidth || canvas?.width" in desktop_store
     assert "Installing Agent Zero Desktop runtime dependencies" in desktop_session
     assert "__a0XpraOffsetWarnPatched" in desktop_store
     assert "window does not fit in canvas, offsets" in desktop_store

@@ -15,7 +15,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from helpers import ephemeral_images, files
+from helpers import chat_media, files
 from helpers.defer import DeferredTask
 from helpers.errors import RepairableException
 from helpers.print_style import PrintStyle
@@ -1558,23 +1558,27 @@ class _BrowserRuntimeCore:
                 quality=max(20, min(95, int(quality))),
                 full_page=bool(full_page),
             )
-            ref = ephemeral_images.put_image_bytes(
+            saved = chat_media.save_image_bytes(
                 context_id=self.context_id,
-                mime="image/jpeg",
                 payload=image,
-                name=f"browser-{resolved_id}.jpg",
+                mime_type="image/jpeg",
+                category="screenshots",
+                source="browser",
+                preferred_name=f"browser-{resolved_id}.jpg",
             )
             return {
                 "browser_id": resolved_id,
                 "context_id": self.context_id,
+                "path": saved.path,
+                "a0_path": saved.a0_path,
                 "mime": "image/jpeg",
-                "ephemeral": True,
-                "ephemeral_ref": ref,
+                "ephemeral": False,
+                "chat_scoped": True,
                 "state": await self._state(resolved_id),
                 "vision_load": {
                     "tool_name": "vision_load",
                     "tool_args": {
-                        "paths": [ref],
+                        "paths": [saved.a0_path],
                     },
                 },
             }

@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 
-from helpers import ephemeral_images, media_artifacts
+from helpers import chat_media, media_artifacts
 
 try:
     from helpers.ws import NAMESPACE
@@ -451,12 +451,16 @@ class ConnectorBrowserRuntime:
             default=f"host-browser-{uuid.uuid4().hex}.jpg",
             default_extension=".jpg",
         )
+        mime = str(artifact.get("mime") or result.get("mime") or "image/jpeg")
         try:
-            ref = ephemeral_images.put_image(
+            saved = chat_media.save_image_base64(
                 context_id=self.context_id,
-                mime=str(artifact.get("mime") or result.get("mime") or "image/jpeg"),
                 data=data,
-                name=filename,
+                mime_type=mime,
+                category="screenshots",
+                source="browser",
+                preferred_name=filename,
+                max_bytes=MAX_ARTIFACT_SIZE_BYTES,
             )
         except Exception as exc:
             raise RuntimeError("Host browser artifact could not be decoded.") from exc
@@ -466,11 +470,14 @@ class ConnectorBrowserRuntime:
         materialized.pop("a0_path", None)
         materialized.pop("host_path", None)
         materialized.setdefault("context_id", self.context_id)
-        materialized["ephemeral"] = True
-        materialized["ephemeral_ref"] = ref
+        materialized["path"] = saved.path
+        materialized["a0_path"] = saved.a0_path
+        materialized["mime"] = saved.mime
+        materialized["ephemeral"] = False
+        materialized["chat_scoped"] = True
         materialized["vision_load"] = {
             "tool_name": "vision_load",
-            "tool_args": {"paths": [ref]},
+            "tool_args": {"paths": [saved.a0_path]},
         }
         return materialized
 

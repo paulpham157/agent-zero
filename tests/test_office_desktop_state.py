@@ -191,7 +191,8 @@ def test_desktop_state_screenshot_capture_uses_xwd_and_pillow_when_available(tmp
 
 
 def test_desktop_state_shell_screenshot_path_is_context_scoped(tmp_path, monkeypatch):
-    monkeypatch.setattr(desktop_state, "SCREENSHOT_DIR", tmp_path)
+    monkeypatch.setattr(desktop_state, "BASE_DIR", tmp_path)
+    monkeypatch.setattr(desktop_state, "SCREENSHOT_DIR", tmp_path / "tmp" / "desktop" / "screenshots")
     capabilities = {"xwd": "/usr/bin/xwd"}
     env = {"DISPLAY": ":120"}
 
@@ -222,7 +223,7 @@ def test_desktop_state_shell_screenshot_path_is_context_scoped(tmp_path, monkeyp
     monkeypatch.setattr(desktop_state, "run", fake_run)
     monkeypatch.setitem(sys.modules, "PIL", pil_module)
     monkeypatch.setitem(sys.modules, "PIL.Image", image_module)
-    stale_path = tmp_path / "ctx_id" / "stale.png"
+    stale_path = tmp_path / "tmp" / "desktop" / "screenshots" / "ctx_id" / "stale.png"
     stale_path.parent.mkdir(parents=True)
     stale_path.write_bytes(b"stale")
 
@@ -236,12 +237,14 @@ def test_desktop_state_shell_screenshot_path_is_context_scoped(tmp_path, monkeyp
 
     path = Path(screenshot["path"])
     assert screenshot["ok"] is True
-    assert screenshot["ephemeral"] is True
+    assert screenshot["ephemeral"] is False
+    assert screenshot["chat_scoped"] is True
     assert screenshot["context_id"] == "ctx_id"
-    assert path.parent == tmp_path / "ctx_id"
+    assert screenshot["a0_path"].startswith("/a0/usr/chats/ctx_id/screenshots/desktop/desktop-")
+    assert path.parent == tmp_path / "usr" / "chats" / "ctx_id" / "screenshots" / "desktop"
     assert path.name.startswith("desktop-")
     assert desktop_state.latest_screenshot(context_id="ctx/id")["path"] == str(path)
-    assert not stale_path.exists()
+    assert stale_path.exists()
 
 
 def test_desktop_state_default_screenshot_returns_ephemeral_ref(tmp_path, monkeypatch):

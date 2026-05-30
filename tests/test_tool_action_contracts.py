@@ -699,3 +699,35 @@ def test_computer_use_remote_start_session_reports_backend_features_and_windows_
     assert "backend=windows/windows" in message
     assert "features=uia-tree-snapshot, uia-structural-targeting" in message
     assert "host-computer-use-windows" in message
+
+
+def test_computer_use_remote_capture_artifact_is_chat_scoped(monkeypatch, tmp_path: Path):
+    module = _load_computer_use_remote_tool(monkeypatch)
+
+    def fake_get_abs_path(*parts):
+        return str(tmp_path.joinpath(*parts))
+
+    def fake_normalize_a0_path(path):
+        return "/a0/" + str(Path(path).relative_to(tmp_path)).replace("\\", "/")
+
+    monkeypatch.setattr(module.chat_media.files, "get_abs_path", fake_get_abs_path)
+    monkeypatch.setattr(module.chat_media.files, "normalize_a0_path", fake_normalize_a0_path)
+
+    tool = object.__new__(module.ComputerUseRemote)
+    tool.agent = types.SimpleNamespace(context=types.SimpleNamespace(id="ctx-computer"))
+
+    display_ref, capture_id = tool._resolve_capture_ref(
+        {
+            "artifact": {
+                "filename": "capture.png",
+                "mime": "image/png",
+                "encoding": "base64",
+                "data": "ZmFrZQ==",
+            },
+        }
+    )
+
+    assert display_ref.startswith("/a0/usr/chats/ctx-computer/screenshots/computer-use/capture-")
+    stored_path = tmp_path / display_ref.removeprefix("/a0/")
+    assert stored_path.read_bytes() == b"fake"
+    assert capture_id == stored_path.stem

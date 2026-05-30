@@ -37,6 +37,19 @@ def context_screenshot_dir(context_id: str = "") -> Path:
     return SCREENSHOT_DIR / _safe_context_id(context_id)
 
 
+def chat_screenshot_dir(context_id: str = "") -> Path:
+    return BASE_DIR / "usr" / "chats" / _safe_context_id(context_id) / "screenshots" / "desktop"
+
+
+def normalize_a0_path(path: str | Path) -> str:
+    candidate = Path(path)
+    try:
+        relative = candidate.resolve(strict=False).relative_to(BASE_DIR.resolve(strict=False))
+    except ValueError:
+        return str(candidate)
+    return "/a0/" + str(relative).replace(os.sep, "/")
+
+
 def _safe_context_id(context_id: str = "") -> str:
     raw = str(context_id or os.environ.get("A0_DESKTOP_CONTEXT_ID") or "default")
     return _SAFE_CONTEXT_RE.sub("_", raw).strip("._") or "default"
@@ -118,9 +131,11 @@ def capture_screenshot(
         return {"ok": False, "path": "", "format": "", "captured_at": "", "error": message}
 
     explicit_path = path is not None and str(path).strip() != ""
-    ephemeral_ref = not explicit_path and str(transport or "").strip().lower() != "path"
-    screenshot_dir = context_screenshot_dir(context_id)
-    if not explicit_path:
+    transport_mode = str(transport or "").strip().lower()
+    chat_scoped = bool(not explicit_path and transport_mode == "path" and str(context_id or "").strip())
+    ephemeral_ref = not explicit_path and transport_mode != "path"
+    screenshot_dir = chat_screenshot_dir(context_id) if chat_scoped else context_screenshot_dir(context_id)
+    if not explicit_path and not chat_scoped:
         prune_context_screenshots(context_id=context_id)
         screenshot_dir.mkdir(parents=True, exist_ok=True)
     timestamp = time.strftime("%Y%m%d-%H%M%S")
@@ -138,15 +153,17 @@ def capture_screenshot(
         return {"ok": False, "path": "", "format": "", "captured_at": "", "error": detail}
 
     if target.suffix.lower() == ".xwd":
-        if not explicit_path:
+        if not explicit_path and not chat_scoped:
             prune_context_screenshots(context_id=context_id, keep_path=raw_path)
         return {
             "ok": True,
             "path": str(raw_path),
+            "a0_path": normalize_a0_path(raw_path),
             "format": "xwd",
             "captured_at": iso_now(),
             "recent": True,
-            "ephemeral": not explicit_path,
+            "ephemeral": not explicit_path and not chat_scoped,
+            "chat_scoped": chat_scoped,
             "context_id": safe_context,
             "error": "",
         }
@@ -167,17 +184,19 @@ def capture_screenshot(
                 width=width,
                 height=height,
             )
-        if not explicit_path:
+        if not explicit_path and not chat_scoped:
             prune_context_screenshots(context_id=context_id, keep_path=target)
         return {
             "ok": True,
             "path": str(target),
+            "a0_path": normalize_a0_path(target),
             "format": target.suffix.lower().lstrip(".") or "png",
             "width": width,
             "height": height,
             "captured_at": iso_now(),
             "recent": True,
-            "ephemeral": not explicit_path,
+            "ephemeral": not explicit_path and not chat_scoped,
+            "chat_scoped": chat_scoped,
             "context_id": safe_context,
             "error": "",
         }
@@ -193,17 +212,19 @@ def capture_screenshot(
                     width=converted["width"],
                     height=converted["height"],
                 )
-            if not explicit_path:
+            if not explicit_path and not chat_scoped:
                 prune_context_screenshots(context_id=context_id, keep_path=target)
             return {
                 "ok": True,
                 "path": str(target),
+                "a0_path": normalize_a0_path(target),
                 "format": target.suffix.lower().lstrip(".") or "png",
                 "width": converted["width"],
                 "height": converted["height"],
                 "captured_at": iso_now(),
                 "recent": True,
-                "ephemeral": not explicit_path,
+                "ephemeral": not explicit_path and not chat_scoped,
+                "chat_scoped": chat_scoped,
                 "context_id": safe_context,
                 "error": "",
             }
@@ -226,10 +247,12 @@ def capture_screenshot(
         return {
             "ok": True,
             "path": str(raw_path),
+            "a0_path": normalize_a0_path(raw_path),
             "format": "xwd",
             "captured_at": iso_now(),
             "recent": True,
-            "ephemeral": not explicit_path,
+            "ephemeral": not explicit_path and not chat_scoped,
+            "chat_scoped": chat_scoped,
             "context_id": safe_context,
             "error": message,
         }
@@ -575,8 +598,36 @@ def parse_xprop(output: str) -> dict[str, str]:
 
 
 def latest_screenshot(*, context_id: str = "") -> dict[str, Any]:
+    chat_dir = chat_screenshot_dir(context_id)
+    chat_latest = _latest_screenshot_from_dir(
+        chat_dir,
+        context_id=context_id,
+        ephemeral=False,
+        chat_scoped=True,
+        prune_older=False,
+    )
+    if chat_latest.get("ok"):
+        return chat_latest
+
     prune_context_screenshots(context_id=context_id, max_age_seconds=RECENT_SCREENSHOT_SECONDS)
     screenshot_dir = context_screenshot_dir(context_id)
+    return _latest_screenshot_from_dir(
+        screenshot_dir,
+        context_id=context_id,
+        ephemeral=True,
+        chat_scoped=False,
+        prune_older=True,
+    )
+
+
+def _latest_screenshot_from_dir(
+    screenshot_dir: Path,
+    *,
+    context_id: str = "",
+    ephemeral: bool,
+    chat_scoped: bool,
+    prune_older: bool,
+) -> dict[str, Any]:
     if not screenshot_dir.exists():
         return {"ok": False, "path": "", "format": "", "captured_at": "", "recent": False}
     candidates = [
@@ -587,17 +638,20 @@ def latest_screenshot(*, context_id: str = "") -> dict[str, Any]:
     if not candidates:
         return {"ok": False, "path": "", "format": "", "captured_at": "", "recent": False}
     latest = max(candidates, key=lambda item: item.stat().st_mtime)
-    for candidate in candidates:
-        if candidate != latest:
-            candidate.unlink(missing_ok=True)
+    if prune_older:
+        for candidate in candidates:
+            if candidate != latest:
+                candidate.unlink(missing_ok=True)
     age = max(0.0, time.time() - latest.stat().st_mtime)
     return {
         "ok": True,
         "path": str(latest),
+        "a0_path": normalize_a0_path(latest),
         "format": latest.suffix.lower().lstrip("."),
         "captured_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(latest.stat().st_mtime)),
         "recent": age <= RECENT_SCREENSHOT_SECONDS,
-        "ephemeral": True,
+        "ephemeral": ephemeral,
+        "chat_scoped": chat_scoped,
         "context_id": _safe_context_id(context_id),
     }
 
@@ -660,7 +714,8 @@ def compact_prompt_context(state: dict[str, Any] | None = None) -> str:
     screenshot = state.get("screenshot") or {}
     if screenshot.get("recent") and screenshot.get("path"):
         ephemeral = " ephemeral" if screenshot.get("ephemeral") else ""
-        lines.append(f"- recent_screenshot={screenshot['path']}{ephemeral}")
+        screenshot_ref = screenshot.get("a0_path") or screenshot["path"]
+        lines.append(f"- recent_screenshot={screenshot_ref}{ephemeral}")
     context_id = str(state.get("context_id") or "").strip()
     if context_id:
         lines.append(f"- screenshot_context={context_id}")
