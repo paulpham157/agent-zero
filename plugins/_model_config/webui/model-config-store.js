@@ -311,7 +311,7 @@ export const store = createStore("modelConfig", {
     context.save = async () => {
       context.error = null;
       try {
-        await this.persistApiKeysForConfig(config);
+        await this.persistApiKeysForConfig(context.settings);
       } catch (e) {
         context.error = e?.message || 'Failed to save API keys.';
         return;

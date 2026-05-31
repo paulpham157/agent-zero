@@ -7,12 +7,20 @@
 </head>
 
 <body>
-  <div x-data
+  <div x-data="{ lastConfig: null }"
+       x-effect="
+         if (config && config !== lastConfig) {
+           lastConfig = config;
+           $store.modelConfig.initConfigFields(config);
+           if (typeof context !== 'undefined') {
+             context.settingsSnapshotJson = context._toComparableJson(config);
+           }
+         }
+       "
        x-init="
          await $store.modelConfig.ensureLoaded();
          $store.modelConfig.resetApiKeyDrafts();
          await $store.modelConfig.refreshApiKeyStatus();
-         $store.modelConfig.initConfigFields(config);
          $store.modelConfig.installSettingsHooks(context, config);
        ">
     <template x-if="config && $store.modelConfig._loaded">
@@ -21,7 +29,7 @@
         <!-- Model Sections (Main, Utility, Embedding) -->
         <template x-for="section in $store.modelConfig.MODEL_SECTIONS" :key="section.key">
           <div class="model-section"
-               x-data="{ model: config[section.key], modelType: section.key.replace('_model', ''), providers: $store.modelConfig.getProviders(section.key), searchType: $store.modelConfig.getSearchType(section.key), apiKeyMode: 'store' }">
+               x-data="{ get model() { return config[section.key]; }, modelType: section.key.replace('_model', ''), providers: $store.modelConfig.getProviders(section.key), searchType: $store.modelConfig.getSearchType(section.key), apiKeyMode: 'store' }">
             <div class="section-title" x-text="section.title"></div>
             <div class="section-description" x-text="section.desc"></div>
             <x-component path="/plugins/_model_config/webui/model-field.html"></x-component>
