@@ -50,7 +50,7 @@ class IncludeWorkdirExtras(Extension):
             max_lines = set["workdir_max_lines"]
             gitignore_raw = set["workdir_gitignore"]
 
-            folder = set["workdir_path"]
+            folder = self.agent.context.get_data("workdir_path") or set["workdir_path"]
             scan_path = files.get_abs_path_development(folder)
 
             files.create_dir(scan_path)

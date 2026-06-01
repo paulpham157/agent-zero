@@ -1,0 +1,9 @@
+name: _acp
+title: Agent Client Protocol
+description: Exposes Agent Zero as an ACP stdio agent for editor clients.
+version: "1.19"
+settings_sections:
+  - external
+per_project_config: false
+per_agent_config: false
+always_enabled: true
