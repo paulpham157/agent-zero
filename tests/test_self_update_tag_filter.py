@@ -876,38 +876,75 @@ def test_self_update_manager_usr_backup_skips_transient_desktop_ssh_agent_dir(tm
     )
 
 
-def test_self_update_manager_cleans_transient_desktop_ssh_agent_dir():
+def test_self_update_manager_cleans_transient_desktop_agent_state():
     manager = load_self_update_manager()
     with tempfile.TemporaryDirectory(prefix="a0su-", dir="/tmp") as temp_root:
         repo_dir = Path(temp_root) / "repo"
-        agent_dir = repo_dir / manager.TRANSIENT_DESKTOP_SSH_AGENT_RELATIVE_DIR
+        current_profile = (
+            repo_dir
+            / "usr"
+            / "plugins"
+            / "_desktop"
+            / "profiles"
+            / "agent-zero-desktop"
+        )
+        legacy_profile = (
+            repo_dir
+            / "tmp"
+            / "_office"
+            / "desktop"
+            / "profiles"
+            / "agent-zero-desktop"
+        )
+        agent_dir = current_profile / ".ssh" / "agent"
+        gnupg_dir = legacy_profile / ".gnupg"
         nested_dir = agent_dir / "nested"
         agent_dir.mkdir(parents=True)
+        gnupg_dir.mkdir(parents=True)
         nested_dir.mkdir()
         (agent_dir / "socket").write_text("ephemeral\n", encoding="utf-8")
         (nested_dir / "token").write_text("ephemeral\n", encoding="utf-8")
         (agent_dir / "broken-link").symlink_to("/missing/ssh-agent-socket")
-        socket_path = agent_dir / "runtime.sock"
+        (gnupg_dir / "pubring.kbx").write_text("keyring\n", encoding="utf-8")
+        (gnupg_dir / "private-keys-v1.d").mkdir()
+        (gnupg_dir / "private-keys-v1.d" / "key.key").write_text(
+            "private\n",
+            encoding="utf-8",
+        )
+        (gnupg_dir / "S.gpg-agent.regular").write_text(
+            "regular files do not break backup reads\n",
+            encoding="utf-8",
+        )
+        ssh_socket_path = agent_dir / "runtime.sock"
+        gpg_socket_path = gnupg_dir / "S.gpg-agent"
         messages = []
 
         class ListLogger:
             def log(self, message=""):
                 messages.append(message)
 
-        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as runtime_socket:
-            runtime_socket.bind(str(socket_path))
+        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as ssh_socket:
+            ssh_socket.bind(str(ssh_socket_path))
+            with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as gpg_socket:
+                gpg_socket.bind(str(gpg_socket_path))
 
-        manager.clean_transient_desktop_ssh_agent_dir(repo_dir, ListLogger())
+        manager.clean_transient_desktop_agent_state(repo_dir, ListLogger())
 
         assert agent_dir.exists()
         assert list(agent_dir.iterdir()) == []
+        assert (gnupg_dir / "pubring.kbx").read_text(encoding="utf-8") == "keyring\n"
+        assert (gnupg_dir / "private-keys-v1.d" / "key.key").read_text(
+            encoding="utf-8"
+        ) == "private\n"
+        assert (gnupg_dir / "S.gpg-agent.regular").read_text(encoding="utf-8")
+        assert not gpg_socket_path.exists()
         assert any(
-            f"Removed 4 transient desktop SSH agent entries from {agent_dir}" in message
+            "Removed 5 transient desktop agent entries." in message
             for message in messages
         )
 
 
-def test_self_update_manager_cleans_transient_desktop_ssh_agent_dir_skips_missing(
+def test_self_update_manager_cleans_transient_desktop_agent_state_skips_missing(
     tmp_path,
 ):
     manager = load_self_update_manager()
@@ -918,10 +955,10 @@ def test_self_update_manager_cleans_transient_desktop_ssh_agent_dir_skips_missin
         def log(self, message=""):
             messages.append(message)
 
-    manager.clean_transient_desktop_ssh_agent_dir(repo_dir, ListLogger())
+    manager.clean_transient_desktop_agent_state(repo_dir, ListLogger())
 
     assert any(
-        "Transient desktop SSH agent directory not found, skipping:" in message
+        "No desktop profile runtime state found, skipping transient agent cleanup." in message
         for message in messages
     )
 
@@ -951,7 +988,7 @@ def test_self_update_manager_desktop_ssh_cleanup_failure_does_not_block_startup(
     monkeypatch.setattr(manager, "clean_uv_cache", lambda logger: None)
     monkeypatch.setattr(
         manager,
-        "clean_transient_desktop_ssh_agent_dir",
+        "clean_transient_desktop_agent_state",
         lambda repo_dir, logger: (_ for _ in ()).throw(RuntimeError("cleanup boom")),
     )
     monkeypatch.setattr(manager, "get_repo_version_info", lambda repo_dir: current_info)
@@ -965,7 +1002,7 @@ def test_self_update_manager_desktop_ssh_cleanup_failure_does_not_block_startup(
 
     assert manager.docker_run_ui() == 0
     assert launched == [manager.REPO_DIR]
-    assert "Transient desktop SSH agent cleanup skipped after error: cleanup boom" in (
+    assert "Transient desktop agent cleanup skipped after error: cleanup boom" in (
         tmp_path / "a0-self-update.log"
     ).read_text(encoding="utf-8")
 

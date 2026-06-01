@@ -46,8 +46,10 @@ DEFAULT_BACKUP_CONFLICT_POLICY = "rename"
 BACKUP_CONFLICT_POLICIES = {"rename", "overwrite", "fail"}
 MIN_SELECTOR_VERSION = (1, 0)
 LATEST_SELECTOR_TAG = "latest"
-TRANSIENT_DESKTOP_SSH_AGENT_RELATIVE_DIR = Path(
-    "usr/plugins/_desktop/profiles/agent-zero-desktop/.ssh/agent"
+DESKTOP_PROFILE_STATE_RELATIVE_DIRS = (
+    Path("usr/plugins/_desktop/profiles"),
+    Path("usr/_desktop/profiles"),
+    Path("tmp/_office/desktop/profiles"),
 )
 
 
@@ -451,59 +453,136 @@ def should_include_usr_backup_entry(source_file: Path, logger: AttemptLogger) ->
     return True
 
 
-def clean_transient_desktop_ssh_agent_dir(
+def clean_transient_desktop_agent_state(
     repo_dir: Path,
     logger: AttemptLogger,
 ) -> None:
-    agent_dir = repo_dir / TRANSIENT_DESKTOP_SSH_AGENT_RELATIVE_DIR
-    try:
-        agent_stat = agent_dir.lstat()
-    except FileNotFoundError:
-        logger.log(
-            f"Transient desktop SSH agent directory not found, skipping: {agent_dir}"
-        )
-        return
-    except OSError as exc:
-        logger.log(
-            f"Transient desktop SSH agent directory could not be inspected: {agent_dir}: {exc}"
-        )
-        return
+    profile_roots = 0
+    removed = 0
+    for relative_root in DESKTOP_PROFILE_STATE_RELATIVE_DIRS:
+        profile_root = repo_dir / relative_root
+        if not _is_cleanup_directory(
+            profile_root,
+            logger,
+            "Desktop profile state",
+            missing_ok=True,
+        ):
+            continue
+        profile_roots += 1
+        try:
+            profiles = list(profile_root.iterdir())
+        except OSError as exc:
+            logger.log(f"Desktop profile state could not be listed: {profile_root}: {exc}")
+            continue
+        for profile_dir in profiles:
+            if not _is_cleanup_directory(profile_dir, logger, "Desktop profile"):
+                continue
+            removed += _clean_directory_entries(
+                profile_dir / ".ssh" / "agent",
+                logger,
+                label="desktop SSH agent",
+            )
+            removed += _clean_gnupg_agent_entries(profile_dir / ".gnupg", logger)
 
-    if stat.S_ISLNK(agent_stat.st_mode) or not stat.S_ISDIR(agent_stat.st_mode):
-        logger.log(
-            f"Transient desktop SSH agent path is not a directory, skipping: {agent_dir}"
-        )
-        return
+    if removed:
+        logger.log(f"Removed {removed} transient desktop agent entries.")
+    elif profile_roots:
+        logger.log("Transient desktop agent state already clean.")
+    else:
+        logger.log("No desktop profile runtime state found, skipping transient agent cleanup.")
+
+
+def _clean_gnupg_agent_entries(gnupg_dir: Path, logger: AttemptLogger) -> int:
+    if not _is_cleanup_directory(gnupg_dir, logger, "desktop GnuPG state", missing_ok=True):
+        return 0
+    try:
+        entries = list(gnupg_dir.iterdir())
+    except OSError as exc:
+        logger.log(f"Desktop GnuPG state could not be listed: {gnupg_dir}: {exc}")
+        return 0
 
     removed = 0
-    try:
-        entries = list(agent_dir.iterdir())
-    except OSError as exc:
-        logger.log(
-            f"Transient desktop SSH agent directory could not be listed: {agent_dir}: {exc}"
-        )
-        return
-
     for entry in entries:
+        if not entry.name.startswith("S.gpg-agent"):
+            continue
         try:
-            if entry.is_symlink():
-                entry.unlink(missing_ok=True)
-            elif entry.is_dir():
-                shutil.rmtree(entry)
-            else:
-                entry.unlink(missing_ok=True)
-            removed += 1
+            entry_stat = entry.lstat()
         except FileNotFoundError:
             continue
         except OSError as exc:
-            logger.log(
-                f"Skipping transient desktop SSH agent entry after error: {entry}: {exc}"
-            )
+            logger.log(f"Skipping transient desktop GnuPG agent entry after stat error: {entry}: {exc}")
+            continue
+        if stat.S_ISREG(entry_stat.st_mode):
+            continue
+        if _remove_cleanup_entry(entry, entry_stat, logger, label="desktop GnuPG agent"):
+            removed += 1
+    return removed
 
-    if removed:
-        logger.log(f"Removed {removed} transient desktop SSH agent entries from {agent_dir}")
-    else:
-        logger.log(f"Transient desktop SSH agent directory already empty: {agent_dir}")
+
+def _clean_directory_entries(directory: Path, logger: AttemptLogger, *, label: str) -> int:
+    if not _is_cleanup_directory(directory, logger, label, missing_ok=True):
+        return 0
+    try:
+        entries = list(directory.iterdir())
+    except OSError as exc:
+        logger.log(f"Transient {label} directory could not be listed: {directory}: {exc}")
+        return 0
+
+    removed = 0
+    for entry in entries:
+        try:
+            entry_stat = entry.lstat()
+        except FileNotFoundError:
+            continue
+        except OSError as exc:
+            logger.log(f"Skipping transient {label} entry after stat error: {entry}: {exc}")
+            continue
+        if _remove_cleanup_entry(entry, entry_stat, logger, label=label):
+            removed += 1
+    return removed
+
+
+def _is_cleanup_directory(
+    directory: Path,
+    logger: AttemptLogger,
+    label: str,
+    *,
+    missing_ok: bool = False,
+) -> bool:
+    try:
+        directory_stat = directory.lstat()
+    except FileNotFoundError:
+        if not missing_ok:
+            logger.log(f"{label} directory not found, skipping: {directory}")
+        return False
+    except OSError as exc:
+        logger.log(f"{label} directory could not be inspected: {directory}: {exc}")
+        return False
+
+    if stat.S_ISLNK(directory_stat.st_mode) or not stat.S_ISDIR(directory_stat.st_mode):
+        logger.log(f"{label} path is not a directory, skipping: {directory}")
+        return False
+    return True
+
+
+def _remove_cleanup_entry(
+    entry: Path,
+    entry_stat: os.stat_result,
+    logger: AttemptLogger,
+    *,
+    label: str,
+) -> bool:
+    try:
+        if stat.S_ISDIR(entry_stat.st_mode):
+            shutil.rmtree(entry)
+        else:
+            entry.unlink(missing_ok=True)
+        return True
+    except FileNotFoundError:
+        return False
+    except OSError as exc:
+        logger.log(f"Skipping transient {label} entry after error: {entry}: {exc}")
+        return False
 
 
 def run_command(
@@ -1325,9 +1404,9 @@ def docker_run_ui() -> int:
         logger.log_block("Trigger file content", raw_text)
         clean_uv_cache(logger)
         try:
-            clean_transient_desktop_ssh_agent_dir(REPO_DIR, logger)
+            clean_transient_desktop_agent_state(REPO_DIR, logger)
         except Exception as exc:
-            logger.log(f"Transient desktop SSH agent cleanup skipped after error: {exc}")
+            logger.log(f"Transient desktop agent cleanup skipped after error: {exc}")
 
         try:
             current = get_repo_version_info(REPO_DIR)
