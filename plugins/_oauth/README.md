@@ -33,15 +33,9 @@ Tokens in `auth.json` are password-equivalent credentials. Keep this plugin on t
 - Supports manual callback paste for remote hosts where the browser cannot reach the local callback directly.
 - Stores credentials under `usr/plugins/_oauth/xai_grok/auth.json`.
 
-### Claude Code and Antigravity Product OAuth
-
-Claude Code subscription OAuth and Antigravity product OAuth are intentionally metadata-only. They are product-specific login flows rather than third-party provider contracts for Agent Zero to route model traffic through.
-
 ## Usage Plan Metadata
 
-The status API exposes `usage_plan_catalog` for subscription and billing context. It covers the implemented Codex, GitHub Copilot, Google Gemini API, and xAI providers, plus nearby Claude Code and Google Gemini / Antigravity plan families.
-
-Google Gemini API OAuth is implemented through a user-provided Google Cloud OAuth client. Google Gemini / Antigravity subscription metadata remains separate because Antigravity and Gemini Code Assist product OAuth are not third-party model-provider contracts.
+The status API exposes `usage_plan_catalog` for subscription and billing context. It covers only connectable providers: Codex, GitHub Copilot, Google Gemini API, and xAI Grok.
 
 ## Remote xAI Callback
 

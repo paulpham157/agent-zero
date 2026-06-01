@@ -5,9 +5,7 @@ from typing import Any
 
 CODEX_PROVIDER_ID = "codex_oauth"
 GITHUB_COPILOT_PROVIDER_ID = "github_copilot_oauth"
-CLAUDE_CODE_PROVIDER_ID = "claude_code_oauth"
 GEMINI_API_PROVIDER_ID = "gemini_api_oauth"
-GEMINI_CODE_ASSIST_PROVIDER_ID = "gemini_code_assist_oauth"
 XAI_GROK_PROVIDER_ID = "xai_grok_oauth"
 
 
@@ -57,27 +55,6 @@ USAGE_PLAN_CATALOG: dict[str, dict[str, Any]] = {
             {"label": "GitHub Copilot plans", "url": "https://docs.github.com/en/copilot/get-started/plans"},
         ],
     },
-    CLAUDE_CODE_PROVIDER_ID: {
-        "provider_id": CLAUDE_CODE_PROVIDER_ID,
-        "display_name": "Claude Code",
-        "implemented": False,
-        "plans": [
-            {"id": "pro", "label": "Pro", "billing": "Subscription", "usage": "Shared Claude and Claude Code usage limits."},
-            {"id": "max_5x", "label": "Max 5x", "billing": "Subscription", "usage": "Higher included usage than Pro."},
-            {"id": "max_20x", "label": "Max 20x", "billing": "Subscription", "usage": "Highest individual Claude Code subscription allocation."},
-            {"id": "team", "label": "Team", "billing": "Seat-based subscription", "usage": "Claude Code included with every Team seat; premium seats add more usage."},
-            {"id": "enterprise_premium", "label": "Enterprise Premium", "billing": "Seat-based subscription", "usage": "Enterprise seat type with Claude Code access."},
-            {"id": "enterprise_usage_based", "label": "Enterprise usage-based", "billing": "API-rate consumption", "usage": "Usage billed by consumption instead of per-seat caps."},
-        ],
-        "notes": [
-            "Claude subscription usage and Anthropic API-key billing are distinct systems.",
-            "An ANTHROPIC_API_KEY can make Claude Code use API billing instead of subscription allocation.",
-        ],
-        "sources": [
-            {"label": "Claude Code with Pro or Max", "url": "https://support.claude.com/en/articles/11145838-use-claude-code-with-your-pro-or-max-plan"},
-            {"label": "Claude Code with Team or Enterprise", "url": "https://support.claude.com/en/articles/11845131-use-claude-code-with-your-team-or-enterprise-plan"},
-        ],
-    },
     GEMINI_API_PROVIDER_ID: {
         "provider_id": GEMINI_API_PROVIDER_ID,
         "display_name": "Google Gemini API",
@@ -96,51 +73,6 @@ USAGE_PLAN_CATALOG: dict[str, dict[str, Any]] = {
             {"label": "Gemini API OAuth", "url": "https://ai.google.dev/gemini-api/docs/oauth"},
             {"label": "Gemini OpenAI compatibility", "url": "https://ai.google.dev/gemini-api/docs/openai"},
             {"label": "Gemini API billing", "url": "https://ai.google.dev/gemini-api/docs/billing"},
-        ],
-    },
-    GEMINI_CODE_ASSIST_PROVIDER_ID: {
-        "provider_id": GEMINI_CODE_ASSIST_PROVIDER_ID,
-        "display_name": "Google Gemini / Antigravity",
-        "implemented": False,
-        "implementation_status": "metadata_only",
-        "plans": [
-            {"id": "individual", "label": "Antigravity Individual", "billing": "$0/month", "usage": "Baseline Antigravity quota, unlimited tab completions, and CLI access."},
-            {"id": "google_ai_pro", "label": "Google AI Pro", "billing": "Subscription", "usage": "More generous Antigravity rate limits and AI credit overages."},
-            {"id": "google_ai_ultra", "label": "Google AI Ultra", "billing": "Subscription", "usage": "Highest Antigravity quota, highest weekly limits, and third-party model access."},
-            {"id": "organization", "label": "Organization plan", "billing": "Google Cloud", "usage": "Gemini Enterprise Agent Platform access, Cloud project integration, and consumption pricing."},
-            {"id": "code_assist_standard", "label": "Gemini Code Assist Standard", "billing": "Google Cloud subscription", "usage": "Organization plan for code assistance, agent mode, and Gemini CLI quotas."},
-            {"id": "code_assist_enterprise", "label": "Gemini Code Assist Enterprise", "billing": "Google Cloud subscription", "usage": "Enterprise plan with customization and broader Google Cloud integrations."},
-            {"id": "gemini_api_oauth", "label": "Gemini API OAuth", "billing": "Google Cloud project", "usage": "Official third-party OAuth path with a user-provided Google Cloud OAuth client."},
-        ],
-        "provider_modes": [
-            {
-                "id": "gemini_api_oauth",
-                "label": "Gemini API OAuth",
-                "allowed": True,
-                "status": "implemented",
-                "note": "Implemented as the separate Google Gemini API OAuth provider. It requires a user-configured Google Cloud OAuth client and does not spend Antigravity or Google AI subscription quota.",
-            },
-            {
-                "id": "antigravity_subscription_oauth",
-                "label": "Antigravity subscription OAuth",
-                "allowed": False,
-                "status": "not_implemented",
-                "note": "Google Antigravity terms prohibit using third-party tools to access the Antigravity service through its OAuth flow.",
-            },
-        ],
-        "notes": [
-            "Official Gemini API OAuth requires a Google Cloud OAuth client and is separate from Google AI Pro, Google AI Ultra, Antigravity, Gemini Code Assist, and Gemini CLI quotas.",
-            "Antigravity and Gemini Code Assist subscription OAuth are metadata-only here because Google does not authorize third-party tools to access the service through those product OAuth flows.",
-            "Gemini CLI quotas are provided by Gemini Code Assist editions and shared with Code Assist agent mode; the CLI can also use a Gemini API key for pay-as-you-go usage.",
-        ],
-        "sources": [
-            {"label": "Google Antigravity terms", "url": "https://antigravity.google/terms"},
-            {"label": "Google Antigravity plans", "url": "https://antigravity.google/docs/plans?id=GoogleAntigravity"},
-            {"label": "Google Antigravity pricing", "url": "https://antigravity.google/pricing?app=antigravity"},
-            {"label": "Gemini Code Assist overview", "url": "https://developers.google.com/gemini-code-assist/docs/overview"},
-            {"label": "Gemini Code Assist quotas", "url": "https://developers.google.com/gemini-code-assist/resources/quotas"},
-            {"label": "Gemini CLI", "url": "https://developers.google.com/gemini-code-assist/docs/gemini-cli"},
-            {"label": "Gemini API OAuth", "url": "https://ai.google.dev/gemini-api/docs/oauth"},
         ],
     },
     XAI_GROK_PROVIDER_ID: {

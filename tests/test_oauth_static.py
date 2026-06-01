@@ -91,12 +91,12 @@ def test_usage_plan_catalog_is_visible_without_provider_cards():
     plans_py = (PROJECT_ROOT / "plugins/_oauth/helpers/usage_plans.py").read_text(encoding="utf-8")
 
     assert "oauth-plan-catalog" in config_html
-    assert "Metadata only" in store_js
-    assert "Google Gemini / Antigravity" in plans_py
     assert "Google Gemini API" in plans_py
     assert "GEMINI_API_PROVIDER_ID" in plans_py
-    assert "antigravity_subscription_oauth" in plans_py
-    assert '"allowed": False' in plans_py
+    assert "Google Gemini / Antigravity" not in plans_py
+    assert "Claude Code" not in plans_py
+    assert "antigravity_subscription_oauth" not in plans_py
+    assert "claude_code_oauth" not in plans_py
 
 
 def test_oauth_model_wrappers_do_not_add_box_borders_or_lateral_padding():

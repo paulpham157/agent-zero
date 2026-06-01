@@ -75,11 +75,7 @@ from plugins._oauth.helpers.providers.base import (
     write_private_json,
 )
 from plugins._oauth.helpers.providers.registry import get_provider, provider_registry
-from plugins._oauth.helpers.usage_plans import (
-    CLAUDE_CODE_PROVIDER_ID,
-    GEMINI_CODE_ASSIST_PROVIDER_ID,
-    usage_plan_catalog,
-)
+from plugins._oauth.helpers.usage_plans import usage_plan_catalog
 
 
 class FakeRequest:
@@ -341,8 +337,12 @@ def test_status_api_returns_provider_registry_shape(monkeypatch):
         GITHUB_COPILOT_PROVIDER_ID,
         GEMINI_API_PROVIDER_ID,
         XAI_GROK_PROVIDER_ID,
-        CLAUDE_CODE_PROVIDER_ID,
-        GEMINI_CODE_ASSIST_PROVIDER_ID,
+    }
+    assert set(response["usage_plan_catalog"]) == {
+        CODEX_PROVIDER_ID,
+        GITHUB_COPILOT_PROVIDER_ID,
+        GEMINI_API_PROVIDER_ID,
+        XAI_GROK_PROVIDER_ID,
     }
     assert response["codex"] == response["provider_map"][CODEX_PROVIDER_ID]
 
@@ -698,8 +698,15 @@ def test_provider_metadata_marks_new_oauth_providers_as_oauth_api_key_mode():
     assert metadata["chat"][XAI_GROK_PROVIDER_ID]["api_key_mode"] == "oauth"
 
 
-def test_usage_plan_catalog_covers_current_and_nearby_subscription_providers():
+def test_usage_plan_catalog_covers_connectable_subscription_providers_only():
     catalog = usage_plan_catalog()
+
+    assert set(catalog) == {
+        CODEX_PROVIDER_ID,
+        GITHUB_COPILOT_PROVIDER_ID,
+        GEMINI_API_PROVIDER_ID,
+        XAI_GROK_PROVIDER_ID,
+    }
 
     assert {plan["id"] for plan in catalog[CODEX_PROVIDER_ID]["plans"]} >= {
         "free",
@@ -725,30 +732,6 @@ def test_usage_plan_catalog_covers_current_and_nearby_subscription_providers():
         "vertex_ai",
     }
     assert catalog[GEMINI_API_PROVIDER_ID]["implemented"] is True
-    assert {plan["id"] for plan in catalog[CLAUDE_CODE_PROVIDER_ID]["plans"]} >= {
-        "pro",
-        "max_5x",
-        "max_20x",
-        "team",
-        "enterprise_premium",
-        "enterprise_usage_based",
-    }
-    assert {plan["id"] for plan in catalog[GEMINI_CODE_ASSIST_PROVIDER_ID]["plans"]} >= {
-        "individual",
-        "google_ai_pro",
-        "google_ai_ultra",
-        "organization",
-        "code_assist_standard",
-        "code_assist_enterprise",
-        "gemini_api_oauth",
-    }
-    assert catalog[GEMINI_CODE_ASSIST_PROVIDER_ID]["implementation_status"] == "metadata_only"
-    google_modes = {
-        mode["id"]: mode
-        for mode in catalog[GEMINI_CODE_ASSIST_PROVIDER_ID]["provider_modes"]
-    }
-    assert google_modes["gemini_api_oauth"]["allowed"] is True
-    assert google_modes["antigravity_subscription_oauth"]["allowed"] is False
     assert {plan["id"] for plan in catalog[XAI_GROK_PROVIDER_ID]["plans"]} >= {
         "free",
         "supergrok_lite",
@@ -758,8 +741,6 @@ def test_usage_plan_catalog_covers_current_and_nearby_subscription_providers():
         "enterprise",
         "api_credits",
     }
-    assert catalog[CLAUDE_CODE_PROVIDER_ID]["implemented"] is False
-    assert catalog[GEMINI_CODE_ASSIST_PROVIDER_ID]["implemented"] is False
 
 
 def test_disconnect_api_returns_provider_result_contract(monkeypatch):
