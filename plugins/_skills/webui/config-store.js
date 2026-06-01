@@ -94,7 +94,6 @@ window.createSkillsConfigModel = (context, config) => ({
   mutatingChat: false,
   catalog: [],
   search: "",
-  mode: "pinned",
   maxActiveSkills: MAX_ACTIVE_SKILLS_FALLBACK,
   selectedSkills: [],
   hiddenSkills: [],
@@ -103,7 +102,6 @@ window.createSkillsConfigModel = (context, config) => ({
   initDefaults() {
     ensureConfig(config);
     this.maxActiveSkills = config.max_active_skills;
-    this.mode = this.isChatMode ? "visible" : "pinned";
     this.selectedSkills = [...this.activeEntries];
     this.hiddenSkills = [...this.hiddenEntries];
   },
@@ -189,22 +187,31 @@ window.createSkillsConfigModel = (context, config) => ({
     return entryKey(entry);
   },
 
-  setMode(mode) {
-    if (!["visible", "pinned"].includes(mode)) return;
-    this.mode = mode;
+  pinnedSubtitle() {
+    return this.isChatMode
+      ? "These skills are currently pinned into the prompt for this chat."
+      : "These skills are pinned by default in this scope.";
   },
 
-  panelTitle() {
-    return this.mode === "visible" ? "Available skills" : "Pinned skills";
+  allSkillsSubtitle() {
+    return this.isChatMode
+      ? "Check a skill to pin it for this chat. Use the eye control to hide or show it in this chat."
+      : "Check a skill to pin it by default. Use the eye control to hide or show it in this scope.";
   },
 
-  panelSubtitle() {
-    if (this.mode === "visible") {
-      return this.isChatMode
-        ? "Checked skills are visible to the model in this chat. Uncheck a skill to hide its title, description, search result, and load access."
-        : "Checked skills are visible to the model by default. Uncheck a skill to hide it from the prompt catalog and skills_tool.";
+  hiddenStateLabel() {
+    return this.isChatMode ? "Hidden in this chat" : "Hidden by default";
+  },
+
+  visibilityButtonTitle(skill) {
+    if (this.isHidden(skill)) {
+      return this.isChatMode ? "Show in this chat" : "Show by default";
     }
-    return "Check a skill to pin its full instructions into prompt extras. Uncheck it to remove the pin.";
+    return this.isChatMode ? "Hide in this chat" : "Hide by default";
+  },
+
+  visibilityButtonIcon(skill) {
+    return this.isHidden(skill) ? "visibility_off" : "visibility";
   },
 
   isHidden(skill) {
@@ -212,17 +219,15 @@ window.createSkillsConfigModel = (context, config) => ({
   },
 
   isSelected(skill) {
-    if (this.mode === "visible") {
-      return !this.isHidden(skill);
-    }
     return this.selectedSkills.some((entry) => entriesMatch(entry, skill));
   },
 
-  isCheckboxDisabled(skill) {
-    if (this.mode === "visible") {
-      return this.mutatingChat || (this.isChatMode && !this.chatContextAvailable);
-    }
+  isPinDisabled(skill) {
     return this.mutatingChat || (!this.isSelected(skill) && this.selectedCount >= this.maxActiveSkills);
+  },
+
+  isVisibilityDisabled() {
+    return this.mutatingChat || (this.isChatMode && !this.chatContextAvailable);
   },
 
   isEntryMissing(entry) {
@@ -282,14 +287,6 @@ window.createSkillsConfigModel = (context, config) => ({
     }
   },
 
-  async toggleSkill(skill, selected) {
-    if (this.mode === "visible") {
-      await this.toggleSkillVisibility(skill, selected);
-      return;
-    }
-    await this.togglePinnedSkill(skill, selected);
-  },
-
   async toggleSkillVisibility(skill, selected) {
     const previous = [...this.hiddenSkills];
     const nextEntries = this.hiddenSkills.filter((entry) => !entriesMatch(entry, skill));
@@ -309,6 +306,10 @@ window.createSkillsConfigModel = (context, config) => ({
         this._setHiddenSkills(previous, { writeConfig: false });
       }
     }
+  },
+
+  async toggleVisibility(skill) {
+    await this.toggleSkillVisibility(skill, this.isHidden(skill));
   },
 
   async togglePinnedSkill(skill, selected) {
@@ -337,21 +338,10 @@ window.createSkillsConfigModel = (context, config) => ({
   },
 
   async removeEntry(entry) {
-    await this.toggleSkill(entry, false);
+    await this.togglePinnedSkill(entry, false);
   },
 
   async clearSelections() {
-    if (this.mode === "visible") {
-      const previous = [...this.hiddenSkills];
-      this._setHiddenSkills([], { writeConfig: !this.isChatMode });
-      if (this.isChatMode && this.chatContextAvailable) {
-        for (const entry of previous) {
-          await this.submitChatAction("show", entry);
-        }
-      }
-      return;
-    }
-
     const previous = [...this.selectedSkills];
     this._setSelectedSkills([], { writeConfig: !this.isChatMode });
     if (this.isChatMode && this.chatContextAvailable) {
