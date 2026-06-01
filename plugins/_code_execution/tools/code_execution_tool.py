@@ -480,10 +480,8 @@ class CodeExecution(Tool):
         if project_name:
             path = projects.get_project_folder(project_name)
         else:
-            path = self.agent.context.get_data("workdir_path")
-            if not path:
-                set = settings.get_settings()
-                path = set.get("workdir_path")
+            set = settings.get_settings()
+            path = set.get("workdir_path")
 
         if not path:
             return None
