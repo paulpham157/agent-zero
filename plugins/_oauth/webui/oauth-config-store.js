@@ -284,14 +284,6 @@ export const store = createStore("oauthConfig", {
     return path ? `${window.location.origin}${path}` : "";
   },
 
-  connected() {
-    return this.providerConnected(CODEX_PROVIDER);
-  },
-
-  statusLabel() {
-    return this.providerStatusLabel(CODEX_PROVIDER);
-  },
-
   usage(providerId = CODEX_PROVIDER) {
     return this.providerStatus(providerId)?.usage || null;
   },
@@ -364,14 +356,6 @@ export const store = createStore("oauthConfig", {
     return `${Math.round(hours / 24)}d`;
   },
 
-  endpointUrl() {
-    return this.providerEndpointUrl(CODEX_PROVIDER);
-  },
-
-  callbackUrl() {
-    return this.providerCallbackUrl(CODEX_PROVIDER);
-  },
-
   installSettingsHooks(context) {
     if (!context || context.__oauthConfigHooksInstalled) return;
 
@@ -429,10 +413,6 @@ export const store = createStore("oauthConfig", {
     return this.modelSlot(key).provider === providerId;
   },
 
-  slotUsesCodex(key) {
-    return this.slotUsesProvider(key, CODEX_PROVIDER);
-  },
-
   providerName(provider) {
     if (!provider) return "Not configured";
     const found = (modelConfigStore.chatProviders || []).find((item) => item.value === provider);
@@ -468,10 +448,6 @@ export const store = createStore("oauthConfig", {
     } else if (this.providerConnected(providerId)) {
       void this.loadModels({ providerId, openDropdown: key, silent: true });
     }
-  },
-
-  useCodexForSlot(key) {
-    this.useProviderForSlot(key, CODEX_PROVIDER);
   },
 
   copyMainToUtility() {
@@ -634,10 +610,6 @@ export const store = createStore("oauthConfig", {
       this.connecting = false;
       void toastFrontendError(messageOf(error), "OAuth Connections");
     }
-  },
-
-  connectCodex() {
-    return this.connectProvider(CODEX_PROVIDER);
   },
 
   startPolling(providerId = CODEX_PROVIDER) {
@@ -857,10 +829,6 @@ export const store = createStore("oauthConfig", {
       if (this.disconnectingProvider === providerId) this.disconnectingProvider = "";
       this.disconnecting = Boolean(this.disconnectingProvider);
     }
-  },
-
-  disconnectCodex() {
-    return this.disconnectProvider(CODEX_PROVIDER);
   },
 
   cancelConnect(providerId = "") {

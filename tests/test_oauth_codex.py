@@ -15,8 +15,8 @@ import yaml
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from plugins._oauth.helpers import codex
 from plugins._oauth.helpers import routes
-from plugins._oauth.extensions.python._functions.models.get_api_key.end._20_codex_account_dummy_key import (
-    CodexAccountDummyKey,
+from plugins._oauth.extensions.python._functions.models.get_api_key.end._20_oauth_account_dummy_key import (
+    OAuthAccountDummyKey,
 )
 
 
@@ -689,7 +689,7 @@ def test_provider_config_uses_container_local_agent_zero_origin():
 def test_codex_provider_reports_dummy_api_key_when_missing():
     data = {"args": ("codex_oauth",), "kwargs": {}, "result": "None"}
 
-    CodexAccountDummyKey(agent=None).execute(data=data)
+    OAuthAccountDummyKey(agent=None).execute(data=data)
 
     assert data["result"] == "oauth"
 
@@ -697,6 +697,6 @@ def test_codex_provider_reports_dummy_api_key_when_missing():
 def test_codex_provider_preserves_configured_api_key():
     data = {"args": ("codex_oauth",), "kwargs": {}, "result": "configured"}
 
-    CodexAccountDummyKey(agent=None).execute(data=data)
+    OAuthAccountDummyKey(agent=None).execute(data=data)
 
     assert data["result"] == "configured"

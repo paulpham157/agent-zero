@@ -55,8 +55,8 @@ from plugins._oauth.api import poll_device_login as poll_device_login_api
 from plugins._oauth.api import start_device_login as start_device_login_api
 from plugins._oauth.api import start_login as start_login_api
 from plugins._oauth.api.models import Models
-from plugins._oauth.extensions.python._functions.models.get_api_key.end._20_codex_account_dummy_key import (
-    CodexAccountDummyKey,
+from plugins._oauth.extensions.python._functions.models.get_api_key.end._20_oauth_account_dummy_key import (
+    OAuthAccountDummyKey,
 )
 from plugins._oauth.helpers import state
 from plugins._oauth.helpers.providers import base as provider_base
@@ -635,7 +635,7 @@ def test_poll_device_login_unknown_provider_returns_structured_error():
 def test_oauth_providers_report_dummy_api_key_when_missing(provider_id, initial):
     data = {"args": (provider_id,), "kwargs": {}, "result": initial}
 
-    CodexAccountDummyKey(agent=None).execute(data=data)
+    OAuthAccountDummyKey(agent=None).execute(data=data)
 
     assert data["result"] == DUMMY_API_KEY
 
@@ -647,7 +647,7 @@ def test_oauth_providers_report_dummy_api_key_when_missing(provider_id, initial)
 def test_oauth_providers_report_dummy_api_key_when_result_missing(provider_id):
     data = {"args": (provider_id,), "kwargs": {}}
 
-    CodexAccountDummyKey(agent=None).execute(data=data)
+    OAuthAccountDummyKey(agent=None).execute(data=data)
 
     assert data["result"] == DUMMY_API_KEY
 
@@ -659,7 +659,7 @@ def test_oauth_providers_report_dummy_api_key_when_result_missing(provider_id):
 def test_oauth_providers_preserve_configured_api_key(provider_id):
     data = {"args": (provider_id,), "kwargs": {}, "result": "configured"}
 
-    CodexAccountDummyKey(agent=None).execute(data=data)
+    OAuthAccountDummyKey(agent=None).execute(data=data)
 
     assert data["result"] == "configured"
 
@@ -689,13 +689,25 @@ def test_model_provider_config_contains_all_oauth_providers():
     assert "50001" not in json.dumps(provider_config)
 
 
-def test_provider_metadata_marks_new_oauth_providers_as_oauth_api_key_mode():
+def test_oauth_provider_config_marks_oauth_providers_as_oauth_api_key_mode():
+    provider_path = Path(__file__).resolve().parents[1] / "plugins/_oauth/conf/model_providers.yaml"
+    provider_config = yaml.safe_load(provider_path.read_text(encoding="utf-8"))
+    chat = provider_config["chat"]
+
+    assert chat[CODEX_PROVIDER_ID]["api_key_mode"] == "oauth"
+    assert chat[GITHUB_COPILOT_PROVIDER_ID]["api_key_mode"] == "oauth"
+    assert chat[GEMINI_API_PROVIDER_ID]["api_key_mode"] == "oauth"
+    assert chat[XAI_GROK_PROVIDER_ID]["api_key_mode"] == "oauth"
+
+
+def test_model_config_provider_metadata_stays_oauth_provider_agnostic():
     metadata_path = Path(__file__).resolve().parents[1] / "plugins/_model_config/provider_metadata.yaml"
     metadata = yaml.safe_load(metadata_path.read_text(encoding="utf-8"))
 
-    assert metadata["chat"][GITHUB_COPILOT_PROVIDER_ID]["api_key_mode"] == "oauth"
-    assert metadata["chat"][GEMINI_API_PROVIDER_ID]["api_key_mode"] == "oauth"
-    assert metadata["chat"][XAI_GROK_PROVIDER_ID]["api_key_mode"] == "oauth"
+    assert CODEX_PROVIDER_ID not in metadata["chat"]
+    assert GITHUB_COPILOT_PROVIDER_ID not in metadata["chat"]
+    assert GEMINI_API_PROVIDER_ID not in metadata["chat"]
+    assert XAI_GROK_PROVIDER_ID not in metadata["chat"]
 
 
 def test_usage_plan_catalog_covers_connectable_subscription_providers_only():

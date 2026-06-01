@@ -1,18 +1,10 @@
 chat:
-  codex_oauth:
-    api_key_mode: oauth
-  github_copilot_oauth:
-    api_key_mode: oauth
-  gemini_api_oauth:
-    api_key_mode: oauth
   lm_studio:
     api_key_mode: none
   ollama:
     api_key_mode: none
   other:
     api_key_mode: optional
-  xai_grok_oauth:
-    api_key_mode: oauth
 
 embedding:
   huggingface:

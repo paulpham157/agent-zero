@@ -4,7 +4,7 @@ from helpers.extension import Extension
 from plugins._oauth.helpers.providers import DUMMY_API_KEY, oauth_provider_ids
 
 
-class CodexAccountDummyKey(Extension):
+class OAuthAccountDummyKey(Extension):
     def execute(self, data: dict | None = None, **kwargs):
         del kwargs
         if not isinstance(data, dict):
