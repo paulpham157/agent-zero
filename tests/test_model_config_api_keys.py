@@ -118,6 +118,14 @@ def test_model_config_frontend_tracks_inline_api_key_edits():
     assert "$store.modelConfig.resetApiKeyDrafts();" in modal_content
 
 
+def test_model_config_snapshot_sync_only_adjusts_clean_loaded_configs():
+    config_path = PROJECT_ROOT / "plugins" / "_model_config" / "webui" / "config.html"
+    config_content = config_path.read_text(encoding="utf-8")
+
+    assert "const snapshotBeforeInit" in config_content
+    assert "context.settingsSnapshotJson === snapshotBeforeInit" in config_content
+
+
 def test_model_switcher_frontend_renders_custom_overrides():
     switcher_path = PROJECT_ROOT / "plugins" / "_model_config" / "webui" / "switcher-mixin.js"
     refresh_extension_path = (

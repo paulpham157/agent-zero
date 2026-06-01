@@ -11,8 +11,11 @@
        x-effect="
          if (config && config !== lastConfig) {
            lastConfig = config;
+           const snapshotBeforeInit = typeof context !== 'undefined'
+             ? context._toComparableJson(config)
+             : null;
            $store.modelConfig.initConfigFields(config);
-           if (typeof context !== 'undefined') {
+           if (typeof context !== 'undefined' && context.settingsSnapshotJson === snapshotBeforeInit) {
              context.settingsSnapshotJson = context._toComparableJson(config);
            }
          }
