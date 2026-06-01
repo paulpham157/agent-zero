@@ -18,11 +18,6 @@ from plugins._oauth.helpers.providers.base import (
     read_json_file,
     write_private_json,
 )
-from plugins._oauth.helpers.usage_plans import (
-    usage_plan_notes_for,
-    usage_plan_sources_for,
-    usage_plans_for,
-)
 from plugins._oauth.helpers.state import (
     DeviceAttempt,
     get_device_attempt,
@@ -213,9 +208,6 @@ class GitHubCopilotOAuthProvider:
             proxy_base_path="/oauth/github-copilot",
             supports_enterprise_domain=True,
             note=ENTERPRISE_NOTE,
-            usage_plans=usage_plans_for(GITHUB_COPILOT_PROVIDER_ID),
-            usage_plan_notes=usage_plan_notes_for(GITHUB_COPILOT_PROVIDER_ID),
-            usage_plan_sources=usage_plan_sources_for(GITHUB_COPILOT_PROVIDER_ID),
         )
 
     def status(self) -> dict[str, Any]:

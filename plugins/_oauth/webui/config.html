@@ -181,7 +181,7 @@
 
           <div class="oauth-plan-grid">
             <template x-for="entry in $store.oauthConfig.usagePlanEntries()" :key="entry.provider_id">
-              <article class="oauth-plan-card" :class="entry.implemented ? 'is-implemented' : 'is-metadata-only'">
+              <article class="oauth-plan-card">
                 <div class="oauth-plan-head">
                   <strong x-text="entry.display_name"></strong>
                   <span x-text="$store.oauthConfig.usagePlanStatus(entry)"></span>
@@ -693,10 +693,6 @@
       border: 1px solid var(--color-border);
       border-radius: 8px;
       background: color-mix(in srgb, var(--color-panel) 82%, transparent);
-    }
-
-    .oauth-plan-card.is-metadata-only {
-      border-style: dashed;
     }
 
     .oauth-plan-head {

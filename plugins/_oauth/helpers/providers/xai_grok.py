@@ -5,7 +5,7 @@ import time
 import importlib
 from pathlib import Path
 from typing import Any
-from urllib.parse import parse_qs, urlencode, urlparse
+from urllib.parse import urlencode, urlparse
 
 from plugins._oauth.helpers.providers.base import (
     DUMMY_API_KEY,
@@ -19,12 +19,16 @@ from plugins._oauth.helpers.providers.base import (
     read_json_file,
     write_private_json,
 )
-from plugins._oauth.helpers.usage_plans import (
-    usage_plan_notes_for,
-    usage_plan_sources_for,
-    usage_plans_for,
+from plugins._oauth.helpers.providers.common import (
+    as_int as _as_int,
+    as_optional_string as _as_optional_string,
+    error_message as _error_message,
+    expires_ms as _expires_ms,
+    json_payload as _json_payload,
+    latest_attempt,
+    models_from_payload as _models_from_payload,
+    parse_manual_callback,
 )
-from plugins._oauth.helpers import state as state_store
 from plugins._oauth.helpers.state import get_attempt, pop_attempt, put_attempt
 
 
@@ -47,34 +51,6 @@ OAUTH_TIER_WARNING = (
     "If OAuth token exchange is denied, the separate API-key `xai` provider may work."
 )
 REFRESH_MARGIN_MS = 60_000
-
-
-def parse_manual_callback(raw: Any) -> dict[str, str | None] | None:
-    text = "" if raw is None else str(raw).strip()
-    if not text:
-        return None
-
-    if text.startswith("http://") or text.startswith("https://"):
-        query = urlparse(text).query
-    elif text.startswith("?"):
-        query = text[1:]
-    elif "=" in text or "&" in text:
-        query = text
-    else:
-        return {
-            "code": text,
-            "state": None,
-            "error": None,
-            "error_description": None,
-        }
-
-    parsed = parse_qs(query, keep_blank_values=True)
-    return {
-        "code": _first_query_value(parsed, "code"),
-        "state": _first_query_value(parsed, "state"),
-        "error": _first_query_value(parsed, "error"),
-        "error_description": _first_query_value(parsed, "error_description"),
-    }
 
 
 class XaiGrokOAuthProvider:
@@ -133,9 +109,6 @@ class XaiGrokOAuthProvider:
             callback_path="/oauth/xai-grok/callback",
             supports_manual_callback=True,
             warning=OAUTH_TIER_WARNING,
-            usage_plans=usage_plans_for(XAI_GROK_PROVIDER_ID),
-            usage_plan_notes=usage_plan_notes_for(XAI_GROK_PROVIDER_ID),
-            usage_plan_sources=usage_plan_sources_for(XAI_GROK_PROVIDER_ID),
         )
 
     def status(self) -> dict[str, Any]:
@@ -312,7 +285,7 @@ class XaiGrokOAuthProvider:
         if state:
             attempt = get_attempt(state)
             if attempt is None:
-                if _latest_xai_attempt() is not None:
+                if latest_attempt(XAI_GROK_PROVIDER_ID) is not None:
                     return LoginPollResult(
                         ok=False,
                         provider_id=XAI_GROK_PROVIDER_ID,
@@ -331,7 +304,7 @@ class XaiGrokOAuthProvider:
                     error="OAuth state mismatch. Return to Agent Zero and start a new xAI Grok connection.",
                 )
         elif allow_missing_state:
-            attempt = _latest_xai_attempt()
+            attempt = latest_attempt(XAI_GROK_PROVIDER_ID)
             if attempt is None:
                 return LoginPollResult(
                     ok=False,
@@ -572,92 +545,3 @@ def _validate_xai_endpoint(value: str, *, code: str = "discovery_invalid_endpoin
             code=code,
             status=502,
         )
-
-
-def _latest_xai_attempt():
-    state_store.cleanup_expired()
-    with state_store._lock:
-        attempts = [
-            attempt
-            for attempt in state_store._attempts.values()
-            if attempt.provider_id == XAI_GROK_PROVIDER_ID and not attempt.expired()
-        ]
-    if not attempts:
-        return None
-    return max(attempts, key=lambda attempt: attempt.created_at)
-
-
-def _models_from_payload(payload: Any) -> list[str]:
-    values: list[Any]
-    if isinstance(payload, dict) and isinstance(payload.get("data"), list):
-        values = payload["data"]
-    elif isinstance(payload, dict) and isinstance(payload.get("models"), list):
-        values = payload["models"]
-    elif isinstance(payload, list):
-        values = payload
-    else:
-        return []
-
-    models: list[str] = []
-    seen: set[str] = set()
-    for value in values:
-        model_id = ""
-        if isinstance(value, str):
-            model_id = value
-        elif isinstance(value, dict):
-            model_id = str(value.get("id") or value.get("name") or "")
-        model_id = model_id.strip()
-        if model_id and model_id not in seen:
-            seen.add(model_id)
-            models.append(model_id)
-    return models
-
-
-def _json_payload(response: Any) -> dict[str, Any]:
-    try:
-        payload = response.json()
-    except Exception:
-        payload = {}
-    if not isinstance(payload, dict):
-        return {}
-    return payload
-
-
-def _error_message(payload: dict[str, Any], fallback: str) -> str:
-    return str(payload.get("error_description") or payload.get("error") or fallback)
-
-
-def _first_query_value(parsed: dict[str, list[str]], key: str) -> str | None:
-    values = parsed.get(key) or []
-    if not values:
-        return None
-    return values[0]
-
-
-def _as_optional_string(value: Any) -> str | None:
-    if isinstance(value, list):
-        value = value[0] if value else None
-    text = "" if value is None else str(value).strip()
-    return text or None
-
-
-def _expires_ms(payload: dict[str, Any]) -> int:
-    if payload.get("expires_at") is not None:
-        try:
-            value = float(payload["expires_at"])
-            if value < 1_000_000_000_000:
-                value *= 1000
-            return int(value)
-        except (TypeError, ValueError):
-            pass
-    try:
-        return int((time.time() + float(payload.get("expires_in") or 0)) * 1000)
-    except (TypeError, ValueError):
-        return 0
-
-
-def _as_int(value: Any, default: int) -> int:
-    try:
-        return int(value)
-    except (TypeError, ValueError):
-        return default

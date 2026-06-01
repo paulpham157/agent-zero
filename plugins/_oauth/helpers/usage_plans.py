@@ -102,25 +102,3 @@ USAGE_PLAN_CATALOG: dict[str, dict[str, Any]] = {
 
 def usage_plan_catalog() -> dict[str, dict[str, Any]]:
     return deepcopy(USAGE_PLAN_CATALOG)
-
-
-def usage_plan_entry(provider_id: str) -> dict[str, Any]:
-    return deepcopy(USAGE_PLAN_CATALOG.get(provider_id, {}))
-
-
-def usage_plans_for(provider_id: str) -> list[dict[str, Any]]:
-    entry = usage_plan_entry(provider_id)
-    plans = entry.get("plans", [])
-    return plans if isinstance(plans, list) else []
-
-
-def usage_plan_notes_for(provider_id: str) -> list[str]:
-    entry = usage_plan_entry(provider_id)
-    notes = entry.get("notes", [])
-    return notes if isinstance(notes, list) else []
-
-
-def usage_plan_sources_for(provider_id: str) -> list[dict[str, str]]:
-    entry = usage_plan_entry(provider_id)
-    sources = entry.get("sources", [])
-    return sources if isinstance(sources, list) else []

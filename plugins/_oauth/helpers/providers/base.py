@@ -61,9 +61,6 @@ class OAuthProviderMetadata:
     supports_quota_project: bool = False
     note: str = ""
     warning: str = ""
-    usage_plans: list[dict[str, Any]] = field(default_factory=list)
-    usage_plan_notes: list[str] = field(default_factory=list)
-    usage_plan_sources: list[dict[str, str]] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)

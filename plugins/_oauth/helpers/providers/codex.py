@@ -12,11 +12,6 @@ from plugins._oauth.helpers.providers.base import (
     LoginStartResult,
     OAuthProviderMetadata,
 )
-from plugins._oauth.helpers.usage_plans import (
-    usage_plan_notes_for,
-    usage_plan_sources_for,
-    usage_plans_for,
-)
 from plugins._oauth.helpers.state import (
     get_device_attempt,
     pop_device_attempt,
@@ -52,9 +47,6 @@ class CodexOAuthProvider:
             default_models=models,
             proxy_base_path=cfg["proxy_base_path"],
             callback_path=cfg["callback_path"],
-            usage_plans=usage_plans_for(CODEX_PROVIDER_ID),
-            usage_plan_notes=usage_plan_notes_for(CODEX_PROVIDER_ID),
-            usage_plan_sources=usage_plan_sources_for(CODEX_PROVIDER_ID),
         )
 
     def status(self) -> dict[str, Any]:

@@ -3,7 +3,7 @@ from __future__ import annotations
 import ipaddress
 import json
 import time
-from typing import Any
+from typing import Any, Callable
 
 from flask import Response, jsonify, request, stream_with_context
 
@@ -357,117 +357,63 @@ def gemini_api_responses():
 
 
 def _github_copilot_json_proxy(path: str):
-    denied = _proxy_denied_response()
-    if denied:
-        return denied
+    from plugins._oauth.helpers.providers.github_copilot import COPILOT_HEADERS, safe_copilot_base_url
 
-    body = request.get_json(silent=True)
-    if not isinstance(body, dict):
-        return _json_error("Request body must be a JSON object.")
-
-    provider = get_provider(GITHUB_COPILOT_PROVIDER_ID)
-    ensure_fresh_auth = getattr(provider, "ensure_fresh_auth", None)
-    read_auth = getattr(provider, "read_auth", None)
-    try:
-        if callable(ensure_fresh_auth):
-            auth = ensure_fresh_auth()
-        elif callable(read_auth):
-            auth = read_auth()
-        else:
-            auth = {}
-    except ProviderError as exc:
-        return _json_error(str(exc), status=exc.status, code=exc.code)
-    except Exception as exc:
-        return _json_error(str(exc), status=502, code="upstream_error")
-    access = str(auth.get("access") or "")
-    if not access:
-        return _json_error("GitHub Copilot OAuth is not connected.", status=401, code="not_connected")
-
-    wants_stream = body.get("stream") is True
-    try:
-        import requests
-
-        from plugins._oauth.helpers.providers.github_copilot import COPILOT_HEADERS, safe_copilot_base_url
-
-        base_url = safe_copilot_base_url(auth.get("base_url"), auth.get("enterprise_domain"))
-
-        upstream = requests.post(
-            f"{base_url}{path}",
-            headers={
-                **COPILOT_HEADERS,
-                "Authorization": f"Bearer {access}",
-                "Content-Type": "application/json",
-            },
-            json=body,
-            stream=wants_stream,
-            timeout=120,
-        )
-    except ProviderError as exc:
-        return _json_error(str(exc), status=exc.status, code=exc.code)
-    except Exception as exc:
-        return _json_error(str(exc), status=502, code="upstream_error")
-
-    if wants_stream and upstream.ok:
-        return _stream_upstream_sse(upstream)
-    return _copy_upstream_response(upstream)
+    return _oauth_json_proxy(
+        GITHUB_COPILOT_PROVIDER_ID,
+        path,
+        "GitHub Copilot OAuth is not connected.",
+        lambda auth: safe_copilot_base_url(auth.get("base_url"), auth.get("enterprise_domain")),
+        lambda auth, access: {
+            **COPILOT_HEADERS,
+            "Authorization": f"Bearer {access}",
+            "Content-Type": "application/json",
+        },
+    )
 
 
 def _xai_grok_json_proxy(path: str):
-    denied = _proxy_denied_response()
-    if denied:
-        return denied
-
-    body = request.get_json(silent=True)
-    if not isinstance(body, dict):
-        return _json_error("Request body must be a JSON object.")
-
-    provider = get_provider(XAI_GROK_PROVIDER_ID)
-    ensure_fresh_auth = getattr(provider, "ensure_fresh_auth", None)
-    read_auth = getattr(provider, "read_auth", None)
-    try:
-        if callable(ensure_fresh_auth):
-            auth = ensure_fresh_auth()
-        elif callable(read_auth):
-            auth = read_auth()
-        else:
-            auth = {}
-    except ProviderError as exc:
-        return _json_error(str(exc), status=exc.status, code=exc.code)
-    except Exception as exc:
-        return _json_error(str(exc), status=502, code="upstream_error")
-
-    access = str(auth.get("access") or "")
-    refresh = str(auth.get("refresh") or "")
-    if not access or not refresh:
-        return _json_error("xAI Grok OAuth is not connected.", status=401, code="not_connected")
-
     from plugins._oauth.helpers.providers.xai_grok import safe_api_base_url
 
-    base_url = safe_api_base_url(auth.get("base_url"))
-    wants_stream = body.get("stream") is True
-    try:
-        import requests
-
-        upstream = requests.post(
-            f"{base_url}{path}",
-            headers={
-                "Accept": "application/json",
-                "Authorization": f"Bearer {access}",
-                "Content-Type": "application/json",
-            },
-            json=body,
-            stream=wants_stream,
-            timeout=120,
-        )
-    except Exception as exc:
-        return _json_error(str(exc), status=502, code="upstream_error")
-
-    if wants_stream and upstream.ok:
-        return _stream_upstream_sse(upstream)
-    return _copy_upstream_response(upstream)
+    return _oauth_json_proxy(
+        XAI_GROK_PROVIDER_ID,
+        path,
+        "xAI Grok OAuth is not connected.",
+        lambda auth: safe_api_base_url(auth.get("base_url")),
+        lambda auth, access: {
+            "Accept": "application/json",
+            "Authorization": f"Bearer {access}",
+            "Content-Type": "application/json",
+        },
+        require_refresh=True,
+    )
 
 
 def _gemini_api_json_proxy(path: str):
+    from plugins._oauth.helpers.providers.gemini_api import _gemini_headers, safe_api_base_url
+
+    return _oauth_json_proxy(
+        GEMINI_API_PROVIDER_ID,
+        path,
+        "Google Gemini API OAuth is not connected.",
+        lambda auth: safe_api_base_url(auth.get("base_url")),
+        lambda auth, access: {
+            **_gemini_headers(auth),
+            "Content-Type": "application/json",
+        },
+        require_refresh=True,
+    )
+
+
+def _oauth_json_proxy(
+    provider_id: str,
+    path: str,
+    not_connected_message: str,
+    base_url_for: Callable[[dict[str, Any]], str],
+    headers_for: Callable[[dict[str, Any], str], dict[str, str]],
+    *,
+    require_refresh: bool = False,
+):
     denied = _proxy_denied_response()
     if denied:
         return denied
@@ -476,16 +422,8 @@ def _gemini_api_json_proxy(path: str):
     if not isinstance(body, dict):
         return _json_error("Request body must be a JSON object.")
 
-    provider = get_provider(GEMINI_API_PROVIDER_ID)
-    ensure_fresh_auth = getattr(provider, "ensure_fresh_auth", None)
-    read_auth = getattr(provider, "read_auth", None)
     try:
-        if callable(ensure_fresh_auth):
-            auth = ensure_fresh_auth()
-        elif callable(read_auth):
-            auth = read_auth()
-        else:
-            auth = {}
+        auth = _provider_auth(provider_id)
     except ProviderError as exc:
         return _json_error(str(exc), status=exc.status, code=exc.code)
     except Exception as exc:
@@ -493,32 +431,42 @@ def _gemini_api_json_proxy(path: str):
 
     access = str(auth.get("access") or "")
     refresh = str(auth.get("refresh") or "")
-    if not access or not refresh:
-        return _json_error("Google Gemini API OAuth is not connected.", status=401, code="not_connected")
+    if not access or (require_refresh and not refresh):
+        return _json_error(not_connected_message, status=401, code="not_connected")
 
-    from plugins._oauth.helpers.providers.gemini_api import _gemini_headers, safe_api_base_url
-
-    base_url = safe_api_base_url(auth.get("base_url"))
     wants_stream = body.get("stream") is True
     try:
         import requests
 
+        base_url = base_url_for(auth)
         upstream = requests.post(
             f"{base_url}{path}",
-            headers={
-                **_gemini_headers(auth),
-                "Content-Type": "application/json",
-            },
+            headers=headers_for(auth, access),
             json=body,
             stream=wants_stream,
             timeout=120,
         )
+    except ProviderError as exc:
+        return _json_error(str(exc), status=exc.status, code=exc.code)
     except Exception as exc:
         return _json_error(str(exc), status=502, code="upstream_error")
 
     if wants_stream and upstream.ok:
         return _stream_upstream_sse(upstream)
     return _copy_upstream_response(upstream)
+
+
+def _provider_auth(provider_id: str) -> dict[str, Any]:
+    provider = get_provider(provider_id)
+    ensure_fresh_auth = getattr(provider, "ensure_fresh_auth", None)
+    read_auth = getattr(provider, "read_auth", None)
+    if callable(ensure_fresh_auth):
+        auth = ensure_fresh_auth()
+    elif callable(read_auth):
+        auth = read_auth()
+    else:
+        auth = {}
+    return auth if isinstance(auth, dict) else {}
 
 
 def _stream_upstream_sse(upstream):

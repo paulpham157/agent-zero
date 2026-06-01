@@ -322,8 +322,8 @@ export const store = createStore("oauthConfig", {
       .filter((entry) => entry && Array.isArray(entry.plans) && entry.plans.length);
   },
 
-  usagePlanStatus(entry) {
-    return entry?.implemented ? "Provider available" : "Metadata only";
+  usagePlanStatus() {
+    return "Provider available";
   },
 
   usagePlanNotes(entry) {
