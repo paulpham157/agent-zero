@@ -4,30 +4,61 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 
-def test_oauth_settings_exposes_codex_model_slots():
+def test_oauth_settings_exposes_provider_cards_and_model_slots():
     config_html = (PROJECT_ROOT / "plugins/_oauth/webui/config.html").read_text(encoding="utf-8")
     store_js = (PROJECT_ROOT / "plugins/_oauth/webui/oauth-config-store.js").read_text(encoding="utf-8")
 
+    assert "providerCards" in config_html + store_js
+    assert "OAuth Connections" in config_html + store_js
+    assert "OAUTH_PROVIDERS" not in store_js
+    assert "PROVIDER_FALLBACKS" not in store_js
     assert "Agent Zero models" in config_html
     assert "Main model" in store_js
     assert "Utility model" in store_js
-    assert "Use Codex" in config_html
-    assert "Search available Codex models" in config_html
+    assert "provider_map" in store_js
+    assert "Usage plans" in config_html
+    assert "usagePlanEntries" in store_js
+    assert "usage_plan_catalog" in (PROJECT_ROOT / "plugins/_oauth/api/status.py").read_text(encoding="utf-8")
     assert "copyMainToUtility" in config_html + store_js
 
 
-def test_oauth_settings_remove_redundant_model_action_and_account_label():
+def test_oauth_settings_exposes_provider_specific_controls_and_generic_copy():
     config_html = (PROJECT_ROOT / "plugins/_oauth/webui/config.html").read_text(encoding="utf-8")
     store_js = (PROJECT_ROOT / "plugins/_oauth/webui/oauth-config-store.js").read_text(encoding="utf-8")
 
     assert "Check Models" not in config_html
+    assert "Check models" in config_html
+    assert "enterprise_domain" in config_html + store_js
+    assert "manualCallback" in config_html + store_js
+    assert "Paste callback URL, query string, or code" in config_html + store_js
+    assert "supports_enterprise_domain" in config_html + store_js
+    assert "supports_manual_callback" in config_html + store_js
+    assert "supports_oauth_client_config" in config_html + store_js
+    assert "supports_quota_project" in config_html + store_js
+    assert "OAuth client ID" in config_html
+    assert "quota_project_id" in config_html + store_js
+    assert "submitManualCallback(card.provider_id)" in config_html
+    assert "cancelConnect(card.provider_id)" in config_html
+    assert "oauth-auth-attempt" in config_html
     assert "Codex/ChatGPT Account" not in config_html + store_js
+    assert "Available models from selected provider" in config_html
+    assert "Available models from Codex account" not in config_html
+
+
+def test_oauth_connect_buttons_disable_during_any_provider_connection():
+    config_html = (PROJECT_ROOT / "plugins/_oauth/webui/config.html").read_text(encoding="utf-8")
+    store_js = (PROJECT_ROOT / "plugins/_oauth/webui/oauth-config-store.js").read_text(encoding="utf-8")
+
+    assert ':disabled="Boolean($store.oauthConfig.connectingProvider) || Boolean($store.oauthConfig.disconnectingProvider)"' in config_html
+    assert ':disabled="Boolean($store.oauthConfig.connectingProvider) || $store.oauthConfig.disconnectingProvider"' not in config_html
+    assert "cancelConnect(providerId = \"\")" in store_js
+    assert "if (this.connectingProvider === providerId) this.connectingProvider = \"\";" in store_js
 
 
 def test_oauth_available_models_list_sits_above_advanced_without_borders():
     config_html = (PROJECT_ROOT / "plugins/_oauth/webui/config.html").read_text(encoding="utf-8")
 
-    assert "Available models from Codex account" in config_html
+    assert "Available models from selected provider" in config_html
     assert config_html.index("Available models") < config_html.index("<summary>Advanced</summary>")
     assert ".oauth-models-panel {\n      display: grid;\n      gap: 10px;\n      padding: 0;\n      border: 0;\n    }" in config_html
     model_chip_rule = config_html.split(".oauth-models span {", 1)[1].split("}", 1)[0]
@@ -41,8 +72,31 @@ def test_oauth_model_slots_reuse_model_config_api():
     assert 'const MODEL_CONFIG_API = "/plugins/_model_config";' in store_js
     assert "model_config_get" in store_js
     assert "model_config_set" in store_js
-    assert 'const CODEX_PROVIDER = "codex_oauth";' in store_js
+    assert "isOauthProvider" in store_js
+    assert "providerCards()" in store_js
     assert "saveModelConfigIfDirty" in store_js
+
+
+def test_browser_callback_completion_is_observed_from_modal():
+    store_js = (PROJECT_ROOT / "plugins/_oauth/webui/oauth-config-store.js").read_text(encoding="utf-8")
+
+    assert "startCallbackPolling(providerId)" in store_js
+    assert "stopCallbackPolling(providerId)" in store_js
+    assert "this.providerConnected(providerId)" in store_js
+
+
+def test_usage_plan_catalog_is_visible_without_provider_cards():
+    config_html = (PROJECT_ROOT / "plugins/_oauth/webui/config.html").read_text(encoding="utf-8")
+    store_js = (PROJECT_ROOT / "plugins/_oauth/webui/oauth-config-store.js").read_text(encoding="utf-8")
+    plans_py = (PROJECT_ROOT / "plugins/_oauth/helpers/usage_plans.py").read_text(encoding="utf-8")
+
+    assert "oauth-plan-catalog" in config_html
+    assert "Metadata only" in store_js
+    assert "Google Gemini / Antigravity" in plans_py
+    assert "Google Gemini API" in plans_py
+    assert "GEMINI_API_PROVIDER_ID" in plans_py
+    assert "antigravity_subscription_oauth" in plans_py
+    assert '"allowed": False' in plans_py
 
 
 def test_oauth_model_wrappers_do_not_add_box_borders_or_lateral_padding():
