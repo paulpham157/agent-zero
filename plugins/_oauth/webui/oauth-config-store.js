@@ -9,12 +9,19 @@ import {
 
 const MODEL_CONFIG_API = "/plugins/_model_config";
 const STATUS_API = "/plugins/_oauth/status";
-const START_DEVICE_LOGIN_API = "/plugins/_oauth/start_device_login";
-const POLL_DEVICE_LOGIN_API = "/plugins/_oauth/poll_device_login";
+const START_LOGIN_API = "/plugins/_oauth/start_login";
+const POLL_LOGIN_API = "/plugins/_oauth/poll_device_login";
+const MANUAL_CALLBACK_API = "/plugins/_oauth/manual_callback";
 const MODELS_API = "/plugins/_oauth/models";
 const DISCONNECT_API = "/plugins/_oauth/disconnect";
 const MAX_POLL_MS = 120000;
 const CODEX_PROVIDER = "codex_oauth";
+const PROVIDER_MARKS = {
+  github: "terminal",
+  google: "cloud",
+  openai: "key",
+  xai: "neurology",
+};
 const MODEL_SLOTS = [
   {
     key: "chat_model",
@@ -46,6 +53,17 @@ function ensureConfig(config) {
   codex.proxy_token = String(codex.proxy_token || "");
   codex.codex_version = String(codex.codex_version || "");
   codex.models = Array.isArray(codex.models) ? codex.models : [];
+
+  config.gemini_api = config.gemini_api && typeof config.gemini_api === "object" ? config.gemini_api : {};
+  const geminiApi = config.gemini_api;
+  geminiApi.enabled = geminiApi.enabled !== false;
+  geminiApi.client_id = String(geminiApi.client_id || "");
+  geminiApi.client_secret = String(geminiApi.client_secret || "");
+  geminiApi.quota_project_id = String(geminiApi.quota_project_id || "");
+  geminiApi.scopes = Array.isArray(geminiApi.scopes) ? geminiApi.scopes : [];
+  geminiApi.api_base_url = String(geminiApi.api_base_url || "https://generativelanguage.googleapis.com/v1beta/openai");
+  geminiApi.proxy_base_path = String(geminiApi.proxy_base_path || "/oauth/gemini-api");
+  geminiApi.callback_path = String(geminiApi.callback_path || "/oauth/gemini-api/callback");
   return config;
 }
 
@@ -77,6 +95,10 @@ function messageOf(error) {
   return error instanceof Error ? error.message : String(error);
 }
 
+function providerUiDefaults() {
+  return {};
+}
+
 export const store = createStore("oauthConfig", {
   config: null,
   status: null,
@@ -84,6 +106,12 @@ export const store = createStore("oauthConfig", {
   connecting: false,
   disconnecting: false,
   loadingModels: false,
+  providerModels: {},
+  providerUi: providerUiDefaults(),
+  connectingProvider: "",
+  disconnectingProvider: "",
+  loadingModelsProvider: "",
+  activeModelProvider: CODEX_PROVIDER,
   models: [],
   modelSlots: MODEL_SLOTS,
   modelConfig: null,
@@ -98,9 +126,13 @@ export const store = createStore("oauthConfig", {
     chat_model: { open: false },
     utility_model: { open: false },
   },
+  devices: {},
+  pollTimers: {},
+  pollStartedAt: {},
+  callbackPollTimers: {},
+  callbackPollStartedAt: {},
   device: null,
   pollTimer: null,
-  pollStartedAt: 0,
 
   async init(config, context = null) {
     this.bindConfig(config);
@@ -110,8 +142,18 @@ export const store = createStore("oauthConfig", {
 
   cleanup() {
     this.stopPolling();
+    this.stopCallbackPolling();
     this.config = null;
     this.status = null;
+    this.connecting = false;
+    this.disconnecting = false;
+    this.loadingModels = false;
+    this.providerModels = {};
+    this.providerUi = providerUiDefaults();
+    this.connectingProvider = "";
+    this.disconnectingProvider = "";
+    this.loadingModelsProvider = "";
+    this.activeModelProvider = CODEX_PROVIDER;
     this.models = [];
     this.modelConfig = null;
     this.modelConfigLoading = false;
@@ -122,6 +164,10 @@ export const store = createStore("oauthConfig", {
       chat_model: { open: false },
       utility_model: { open: false },
     };
+    this.devices = {};
+    this.pollStartedAt = {};
+    this.callbackPollTimers = {};
+    this.callbackPollStartedAt = {};
     this.device = null;
   },
 
@@ -136,26 +182,144 @@ export const store = createStore("oauthConfig", {
     return this.config?.codex || {};
   },
 
-  connected() {
-    return Boolean(this.status?.codex?.connected);
+  geminiApi() {
+    return this.config?.gemini_api || {};
   },
 
-  statusLabel() {
+  providerMap() {
+    const mapped = this.status?.provider_map;
+    if (mapped && typeof mapped === "object") return mapped;
+    const providers = Array.isArray(this.status?.providers) ? this.status.providers : [];
+    return providers.reduce((result, provider) => {
+      if (provider?.provider_id) result[provider.provider_id] = provider;
+      return result;
+    }, {});
+  },
+
+  providerStatus(providerId) {
+    return this.providerMap()[providerId] || {};
+  },
+
+  providerUiFor(providerId) {
+    const key = String(providerId || "");
+    if (!key) return {};
+    if (!this.providerUi[key]) {
+      this.providerUi = {
+        ...this.providerUi,
+        [key]: {
+          enterprise_domain: "",
+          manualCallback: "",
+          client_id: "",
+          client_secret: "",
+          quota_project_id: "",
+        },
+      };
+    }
+    return this.providerUi[key];
+  },
+
+  providerCards() {
+    const map = this.providerMap();
+    const providers = Array.isArray(this.status?.providers)
+      ? this.status.providers
+      : Object.values(map);
+    return providers
+      .filter((provider) => provider?.provider_id)
+      .map((status) => {
+        const providerId = status.provider_id;
+        return {
+          ...status,
+          provider_id: providerId,
+          connected: Boolean(status.connected),
+          mark: status.mark || PROVIDER_MARKS[status.icon] || "key",
+          use_label: status.use_label || `Use ${status.short_name || status.display_name || providerId}`,
+          device: this.devices[providerId] || null,
+          connecting: this.connectingProvider === providerId,
+          disconnecting: this.disconnectingProvider === providerId,
+          loadingModels: this.loadingModelsProvider === providerId,
+        };
+      });
+  },
+
+  providerIds() {
+    return this.providerCards().map((card) => card.provider_id);
+  },
+
+  isOauthProvider(providerId) {
+    const key = String(providerId || "");
+    return Boolean(key && this.providerMap()[key]);
+  },
+
+  providerConnected(providerId) {
+    return Boolean(this.providerStatus(providerId)?.connected);
+  },
+
+  providerLabel(providerId) {
+    const status = this.providerStatus(providerId);
+    return status.display_name || providerId;
+  },
+
+  providerUseLabel(providerId) {
+    const status = this.providerStatus(providerId);
+    return status.use_label || `Use ${status.short_name || status.display_name || providerId}`;
+  },
+
+  providerStatusLabel(providerId) {
     if (this.loadingStatus) return "Checking";
-    return this.connected() ? "Connected" : "Not connected";
+    const status = this.providerStatus(providerId);
+    if (!status.connected) return "Not connected";
+    return status.account_label || status.email || "Connected";
   },
 
-  usage() {
-    return this.status?.codex?.usage || null;
+  providerEndpointUrl(providerId) {
+    const status = this.providerStatus(providerId);
+    const proxyBase = String(status.proxy_base_path || "").replace(/\/$/, "");
+    const base = status.v1_base_path || (proxyBase ? `${proxyBase}/v1` : "");
+    return base ? `${window.location.origin}${base}` : "";
   },
 
-  usageWindows() {
-    const usage = this.usage();
+  providerCallbackUrl(providerId) {
+    const status = this.providerStatus(providerId);
+    const path = status.callback_path || "";
+    return path ? `${window.location.origin}${path}` : "";
+  },
+
+  usage(providerId = CODEX_PROVIDER) {
+    return this.providerStatus(providerId)?.usage || null;
+  },
+
+  usageWindows(providerId = CODEX_PROVIDER) {
+    const usage = this.usage(providerId);
     if (!usage?.available) return [];
     return [
       { key: "primary", title: "Session", ...(usage.primary || {}) },
       { key: "secondary", title: "Week", ...(usage.secondary || {}) },
     ].filter((window) => Number.isFinite(this.remainingPercent(window)));
+  },
+
+  usagePlanCatalog() {
+    const catalog = this.status?.usage_plan_catalog;
+    return catalog && typeof catalog === "object" ? catalog : {};
+  },
+
+  usagePlanEntries() {
+    const catalog = this.usagePlanCatalog();
+    const providerIds = this.providerIds();
+    const ids = [
+      ...providerIds,
+      ...Object.keys(catalog).filter((providerId) => !providerIds.includes(providerId)),
+    ];
+    return ids
+      .map((providerId) => catalog[providerId])
+      .filter((entry) => entry && Array.isArray(entry.plans) && entry.plans.length);
+  },
+
+  usagePlanStatus() {
+    return "Provider available";
+  },
+
+  usagePlanNotes(entry) {
+    return Array.isArray(entry?.notes) ? entry.notes.slice(0, 2) : [];
   },
 
   usageWidth(window) {
@@ -190,16 +354,6 @@ export const store = createStore("oauthConfig", {
     const hours = Math.round(minutes / 60);
     if (hours < 48) return `${hours}h`;
     return `${Math.round(hours / 24)}d`;
-  },
-
-  endpointUrl() {
-    const base = this.codex().proxy_base_path || "/oauth/codex";
-    return `${window.location.origin}${base}/v1`;
-  },
-
-  callbackUrl() {
-    const path = this.codex().callback_path || "/auth/callback";
-    return `${window.location.origin}${path}`;
   },
 
   installSettingsHooks(context) {
@@ -251,19 +405,23 @@ export const store = createStore("oauthConfig", {
     return this.modelConfig[key];
   },
 
-  slotUsesCodex(key) {
-    return this.modelSlot(key).provider === CODEX_PROVIDER;
+  slotUsesOauth(key) {
+    return this.isOauthProvider(this.modelSlot(key).provider);
+  },
+
+  slotUsesProvider(key, providerId) {
+    return this.modelSlot(key).provider === providerId;
   },
 
   providerName(provider) {
     if (!provider) return "Not configured";
     const found = (modelConfigStore.chatProviders || []).find((item) => item.value === provider);
-    return found?.label || provider;
+    return found?.label || this.providerLabel(provider);
   },
 
   slotStatusLabel(key) {
     const slot = this.modelSlot(key);
-    if (slot.provider === CODEX_PROVIDER) return "";
+    if (this.slotUsesOauth(key)) return `Using ${this.providerLabel(slot.provider)}`;
     return `Currently ${this.providerName(slot.provider)}`;
   },
 
@@ -272,20 +430,23 @@ export const store = createStore("oauthConfig", {
     this.modelSlotDirty = { ...this.modelSlotDirty, [key]: true };
   },
 
-  useCodexForSlot(key) {
+  useProviderForSlot(key, providerId) {
+    if (!this.isOauthProvider(providerId)) return;
     const slot = this.modelSlot(key);
     const previousProvider = slot.provider;
-    slot.provider = CODEX_PROVIDER;
+    slot.provider = providerId;
     slot.api_base = "";
-    if (previousProvider && previousProvider !== CODEX_PROVIDER) {
+    if (previousProvider && previousProvider !== providerId) {
       slot.name = "";
     }
     if (!slot.kwargs || typeof slot.kwargs !== "object") slot.kwargs = {};
+    this.activeModelProvider = providerId;
+    this.models = this.providerModels[providerId] || [];
     this.markModelDirty(key);
     if (this.models.length) {
       this.openModelDropdown(key);
-    } else {
-      void this.loadModels({ openDropdown: key, silent: true });
+    } else if (this.providerConnected(providerId)) {
+      void this.loadModels({ providerId, openDropdown: key, silent: true });
     }
   },
 
@@ -293,18 +454,22 @@ export const store = createStore("oauthConfig", {
     if (!this.modelConfig) return;
     const main = this.modelSlot("chat_model");
     const utility = this.modelSlot("utility_model");
-    utility.provider = CODEX_PROVIDER;
+    utility.provider = main.provider || "";
     utility.name = main.name || "";
     utility.api_base = main.api_base || "";
     utility.kwargs = clone(main.kwargs || {});
+    this.activeModelProvider = utility.provider || this.activeModelProvider;
     this.markModelDirty("utility_model");
   },
 
   openModelDropdown(key) {
-    if (!this.slotUsesCodex(key)) return;
+    if (!this.slotUsesOauth(key)) return;
+    const providerId = this.modelSlot(key).provider;
+    this.activeModelProvider = providerId;
+    this.models = this.providerModels[providerId] || [];
     this.modelDropdown[key] = { ...this.modelDropdown[key], open: true };
-    if (!this.models.length && !this.loadingModels) {
-      void this.loadModels({ openDropdown: key, silent: true });
+    if (!this.models.length && !this.loadingModelsProvider && this.providerConnected(providerId)) {
+      void this.loadModels({ providerId, openDropdown: key, silent: true });
     }
   },
 
@@ -313,8 +478,9 @@ export const store = createStore("oauthConfig", {
   },
 
   filteredModels(key) {
-    const query = String(this.modelSlot(key).name || "").trim().toLowerCase();
-    const models = this.models || [];
+    const slot = this.modelSlot(key);
+    const query = String(slot.name || "").trim().toLowerCase();
+    const models = this.providerModels[slot.provider] || this.models || [];
     const filtered = query
       ? models.filter((model) => String(model).toLowerCase().includes(query))
       : models;
@@ -323,7 +489,12 @@ export const store = createStore("oauthConfig", {
 
   selectModel(key, model) {
     const slot = this.modelSlot(key);
-    slot.provider = CODEX_PROVIDER;
+    const providerId = this.isOauthProvider(this.activeModelProvider)
+      ? this.activeModelProvider
+      : slot.provider;
+    if (this.isOauthProvider(providerId)) {
+      slot.provider = providerId;
+    }
     slot.name = model;
     this.markModelDirty(key);
     this.closeModelDropdown(key);
@@ -334,7 +505,7 @@ export const store = createStore("oauthConfig", {
     for (const slot of MODEL_SLOTS) {
       if (!this.modelSlotDirty[slot.key]) continue;
       const model = this.modelSlot(slot.key);
-      if (model.provider === CODEX_PROVIDER && !String(model.name || "").trim()) {
+      if (this.isOauthProvider(model.provider) && !String(model.name || "").trim()) {
         throw new Error(`Choose a ${slot.title} before saving.`);
       }
     }
@@ -370,6 +541,21 @@ export const store = createStore("oauthConfig", {
     try {
       const response = await callJsonApi(STATUS_API, {});
       this.status = response;
+      for (const card of this.providerCards()) {
+        const ui = this.providerUiFor(card.provider_id);
+        if (card.enterprise_domain && !ui.enterprise_domain) {
+          ui.enterprise_domain = card.enterprise_domain;
+        }
+        if (card.client_id && !ui.client_id) {
+          ui.client_id = card.client_id;
+        }
+        if (card.quota_project_id && !ui.quota_project_id) {
+          ui.quota_project_id = card.quota_project_id;
+        }
+      }
+      if (!this.isOauthProvider(this.activeModelProvider)) {
+        this.activeModelProvider = this.providerCards()[0]?.provider_id || CODEX_PROVIDER;
+      }
     } catch (error) {
       void toastFrontendError(messageOf(error), "OAuth Connections");
     } finally {
@@ -377,115 +563,286 @@ export const store = createStore("oauthConfig", {
     }
   },
 
-  async connectCodex() {
-    if (this.connecting) return;
+  async connectProvider(providerId) {
+    if (!this.isOauthProvider(providerId) || this.connectingProvider) return;
+    this.connectingProvider = providerId;
     this.connecting = true;
     try {
-      const response = await callJsonApi(START_DEVICE_LOGIN_API, {});
-      if (!response?.ok || !response.verification_url || !response.attempt_id) {
-        throw new Error(response?.error || "Could not start Codex sign-in.");
+      const payload = { provider_id: providerId };
+      const status = this.providerStatus(providerId);
+      const ui = this.providerUiFor(providerId);
+      if (status.supports_enterprise_domain) {
+        payload.enterprise_domain = ui.enterprise_domain || "";
       }
-      this.device = response;
-      window.open(response.verification_url, "_blank", "noopener,noreferrer");
-      void toastFrontendInfo("Enter the code shown here in the opened browser tab.", "OAuth Connections");
-      this.startPolling();
+      if (status.supports_oauth_client_config) {
+        payload.client_id = ui.client_id || this.geminiApi().client_id || "";
+        payload.client_secret = ui.client_secret || this.geminiApi().client_secret || "";
+      }
+      if (status.supports_quota_project) {
+        payload.quota_project_id = ui.quota_project_id || this.geminiApi().quota_project_id || "";
+      }
+      const response = await callJsonApi(START_LOGIN_API, payload);
+      if (!response?.ok) {
+        throw new Error(response?.error || `Could not start ${this.providerLabel(providerId)} sign-in.`);
+      }
+
+      this.devices = { ...this.devices, [providerId]: response };
+      if (providerId === CODEX_PROVIDER) this.device = response;
+
+      if (response.flow === "device_code" && response.verification_url && response.attempt_id) {
+        window.open(response.verification_url, "_blank", "noopener,noreferrer");
+        void toastFrontendInfo("Enter the code shown here in the opened browser tab.", "OAuth Connections");
+        this.startPolling(providerId);
+        return;
+      }
+
+      if (response.flow === "browser_pkce" && response.auth_url) {
+        window.open(response.auth_url, "_blank", "noopener,noreferrer");
+        void toastFrontendInfo("Finish sign-in in the opened browser tab.", "OAuth Connections");
+        this.startCallbackPolling(providerId);
+        return;
+      }
+
+      throw new Error(response?.error || `Could not start ${this.providerLabel(providerId)} sign-in.`);
     } catch (error) {
+      this.clearProviderDevice(providerId);
+      this.connectingProvider = "";
       this.connecting = false;
       void toastFrontendError(messageOf(error), "OAuth Connections");
     }
   },
 
-  startPolling() {
-    this.stopPolling();
-    this.pollStartedAt = Date.now();
+  startPolling(providerId = CODEX_PROVIDER) {
+    this.stopPolling(providerId);
+    this.pollStartedAt = { ...this.pollStartedAt, [providerId]: Date.now() };
     const tick = async () => {
-      if (!this.device?.attempt_id) return;
+      const device = this.devices[providerId];
+      if (!device?.attempt_id) return;
       try {
-        const response = await callJsonApi(POLL_DEVICE_LOGIN_API, {
-          attempt_id: this.device.attempt_id,
+        const response = await callJsonApi(POLL_LOGIN_API, {
+          provider_id: providerId,
+          attempt_id: device.attempt_id,
         });
         if (!response?.ok) {
           if (response?.expired) {
-            this.connecting = false;
-            this.device = null;
-            this.stopPolling();
+            this.clearProviderDevice(providerId);
+            this.stopPolling(providerId);
           }
-          throw new Error(response?.error || "Could not finish Codex sign-in.");
+          throw new Error(response?.error || `Could not finish ${this.providerLabel(providerId)} sign-in.`);
         }
         if (response.completed) {
           await this.loadStatus();
-          this.device = null;
-          this.connecting = false;
-          this.stopPolling();
-          void toastFrontendSuccess("Codex account connected.", "OAuth Connections");
+          this.clearProviderDevice(providerId);
+          this.stopPolling(providerId);
+          if (this.connectingProvider === providerId) this.connectingProvider = "";
+          this.connecting = Boolean(this.connectingProvider);
+          void toastFrontendSuccess(`${this.providerLabel(providerId)} connected.`, "OAuth Connections");
           return;
         }
       } catch (error) {
-        this.connecting = false;
-        this.stopPolling();
+        if (this.connectingProvider === providerId) this.connectingProvider = "";
+        this.connecting = Boolean(this.connectingProvider);
+        this.stopPolling(providerId);
         void toastFrontendError(messageOf(error), "OAuth Connections");
         return;
       }
-      if (Date.now() - this.pollStartedAt > MAX_POLL_MS) {
-        this.connecting = false;
-        this.device = null;
-        this.stopPolling();
-        return;
+      if (Date.now() - Number(this.pollStartedAt[providerId] || 0) > MAX_POLL_MS) {
+        if (this.connectingProvider === providerId) this.connectingProvider = "";
+        this.connecting = Boolean(this.connectingProvider);
+        this.clearProviderDevice(providerId);
+        this.stopPolling(providerId);
       }
     };
+    const delay = Math.max(1500, Number(this.devices[providerId]?.interval || 5) * 1000);
+    this.pollTimers = { ...this.pollTimers, [providerId]: window.setInterval(tick, delay) };
+    if (providerId === CODEX_PROVIDER) this.pollTimer = this.pollTimers[providerId];
     void tick();
-    const delay = Math.max(1500, Number(this.device.interval || 5) * 1000);
-    this.pollTimer = window.setInterval(tick, delay);
   },
 
-  stopPolling() {
-    if (this.pollTimer) window.clearInterval(this.pollTimer);
+  pollProvider(providerId = CODEX_PROVIDER) {
+    this.startPolling(providerId);
+  },
+
+  startCallbackPolling(providerId) {
+    this.stopCallbackPolling(providerId);
+    this.callbackPollStartedAt = { ...this.callbackPollStartedAt, [providerId]: Date.now() };
+    const tick = async () => {
+      await this.loadStatus();
+      if (this.providerConnected(providerId)) {
+        this.clearProviderDevice(providerId);
+        this.stopCallbackPolling(providerId);
+        if (this.connectingProvider === providerId) this.connectingProvider = "";
+        this.connecting = Boolean(this.connectingProvider);
+        void toastFrontendSuccess(`${this.providerLabel(providerId)} connected.`, "OAuth Connections");
+        return;
+      }
+      if (Date.now() - Number(this.callbackPollStartedAt[providerId] || 0) > MAX_POLL_MS) {
+        this.stopCallbackPolling(providerId);
+        if (this.connectingProvider === providerId) this.connectingProvider = "";
+        this.connecting = Boolean(this.connectingProvider);
+      }
+    };
+    this.callbackPollTimers = {
+      ...this.callbackPollTimers,
+      [providerId]: window.setInterval(tick, 2500),
+    };
+    void tick();
+  },
+
+  stopPolling(providerId = "") {
+    if (providerId) {
+      if (this.pollTimers[providerId]) window.clearInterval(this.pollTimers[providerId]);
+      const timers = { ...this.pollTimers };
+      delete timers[providerId];
+      this.pollTimers = timers;
+      const startedAt = { ...this.pollStartedAt };
+      delete startedAt[providerId];
+      this.pollStartedAt = startedAt;
+      if (providerId === CODEX_PROVIDER) this.pollTimer = null;
+      return;
+    }
+
+    for (const timer of Object.values(this.pollTimers || {})) {
+      if (timer) window.clearInterval(timer);
+    }
+    this.pollTimers = {};
+    this.pollStartedAt = {};
     this.pollTimer = null;
   },
 
-  async loadModels({ openDropdown = "", silent = false } = {}) {
-    if (this.loadingModels) return;
-    this.loadingModels = true;
+  stopCallbackPolling(providerId = "") {
+    if (providerId) {
+      if (this.callbackPollTimers[providerId]) window.clearInterval(this.callbackPollTimers[providerId]);
+      const timers = { ...this.callbackPollTimers };
+      delete timers[providerId];
+      this.callbackPollTimers = timers;
+      const startedAt = { ...this.callbackPollStartedAt };
+      delete startedAt[providerId];
+      this.callbackPollStartedAt = startedAt;
+      return;
+    }
+
+    for (const timer of Object.values(this.callbackPollTimers || {})) {
+      if (timer) window.clearInterval(timer);
+    }
+    this.callbackPollTimers = {};
+    this.callbackPollStartedAt = {};
+  },
+
+  clearProviderDevice(providerId = "") {
+    if (!providerId) {
+      this.devices = {};
+      this.device = null;
+      return;
+    }
+    const devices = { ...this.devices };
+    delete devices[providerId];
+    this.devices = devices;
+    if (providerId === CODEX_PROVIDER) this.device = null;
+  },
+
+  async submitManualCallback(providerId) {
+    if (!this.isOauthProvider(providerId)) return;
+    const callback = String(this.providerUiFor(providerId).manualCallback || "").trim();
+    if (!callback) {
+      void toastFrontendError("Paste callback URL, query string, or code.", "OAuth Connections");
+      return;
+    }
+    this.connectingProvider = providerId;
+    this.connecting = true;
     try {
-      const response = await callJsonApi(MODELS_API, {});
-      if (!response?.ok) throw new Error(response?.error || "Could not load Codex models.");
-      this.models = Array.isArray(response.models) ? response.models : [];
-      if (openDropdown) this.openModelDropdown(openDropdown);
-      if (!silent) void toastFrontendSuccess("Codex models loaded.", "OAuth Connections");
+      const response = await callJsonApi(MANUAL_CALLBACK_API, {
+        provider_id: providerId,
+        callback,
+      });
+      if (!response?.ok) {
+        throw new Error(response?.error || `Could not finish ${this.providerLabel(providerId)} sign-in.`);
+      }
+      this.providerUiFor(providerId).manualCallback = "";
+      this.clearProviderDevice(providerId);
+      this.stopCallbackPolling(providerId);
+      await this.loadStatus();
+      void toastFrontendSuccess(`${this.providerLabel(providerId)} connected.`, "OAuth Connections");
     } catch (error) {
+      void toastFrontendError(messageOf(error), "OAuth Connections");
+    } finally {
+      if (this.connectingProvider === providerId) this.connectingProvider = "";
+      this.connecting = Boolean(this.connectingProvider);
+    }
+  },
+
+  async loadModels({ providerId = "", openDropdown = "", silent = false } = {}) {
+    const selectedProvider = providerId || this.activeModelProvider || CODEX_PROVIDER;
+    if (!this.isOauthProvider(selectedProvider) || this.loadingModelsProvider) return;
+    this.loadingModelsProvider = selectedProvider;
+    this.loadingModels = true;
+    this.activeModelProvider = selectedProvider;
+    try {
+      const response = await callJsonApi(MODELS_API, { provider_id: selectedProvider });
+      if (!response?.ok) {
+        throw new Error(response?.error || `Could not load ${this.providerLabel(selectedProvider)} models.`);
+      }
+      const models = Array.isArray(response.models) ? response.models : [];
+      this.providerModels = { ...this.providerModels, [selectedProvider]: models };
+      this.models = models;
+      if (openDropdown) this.openModelDropdown(openDropdown);
+      if (!silent) void toastFrontendSuccess(`${this.providerLabel(selectedProvider)} models loaded.`, "OAuth Connections");
+    } catch (error) {
+      this.providerModels = { ...this.providerModels, [selectedProvider]: [] };
       this.models = [];
       if (!silent) void toastFrontendError(messageOf(error), "OAuth Connections");
     } finally {
+      this.loadingModelsProvider = "";
       this.loadingModels = false;
     }
   },
 
-  async disconnectCodex() {
-    if (this.disconnecting || !this.connected()) return;
-    const confirmed = window.confirm("Disconnect this OpenAI account and remove stored OAuth tokens?");
+  async disconnectProvider(providerId) {
+    if (!this.isOauthProvider(providerId) || this.disconnectingProvider || !this.providerConnected(providerId)) return;
+    const confirmed = window.confirm(`Disconnect ${this.providerLabel(providerId)} and remove stored OAuth tokens?`);
     if (!confirmed) return;
 
+    this.disconnectingProvider = providerId;
     this.disconnecting = true;
     try {
-      const response = await callJsonApi(DISCONNECT_API, {});
+      const response = await callJsonApi(DISCONNECT_API, { provider_id: providerId });
       if (!response?.ok) throw new Error(response?.error || "Could not disconnect the account.");
-      this.status = response.codex ? { ok: true, codex: response.codex } : this.status;
-      this.models = [];
-      this.device = null;
-      this.connecting = false;
-      this.stopPolling();
-      void toastFrontendSuccess("OpenAI account disconnected.", "OAuth Connections");
+      if (response.provider) {
+        const providerMap = { ...this.providerMap(), [providerId]: response.provider };
+        this.status = { ...(this.status || {}), provider_map: providerMap, providers: Object.values(providerMap) };
+        if (providerId === CODEX_PROVIDER) this.status.codex = response.provider;
+      }
+      const providerModels = { ...this.providerModels };
+      delete providerModels[providerId];
+      this.providerModels = providerModels;
+      if (this.activeModelProvider === providerId) this.models = [];
+      this.clearProviderDevice(providerId);
+      if (this.connectingProvider === providerId) this.connectingProvider = "";
+      this.connecting = Boolean(this.connectingProvider);
+      this.stopPolling(providerId);
+      this.stopCallbackPolling(providerId);
+      void toastFrontendSuccess(`${this.providerLabel(providerId)} disconnected.`, "OAuth Connections");
       await this.loadStatus();
     } catch (error) {
       void toastFrontendError(messageOf(error), "OAuth Connections");
     } finally {
-      this.disconnecting = false;
+      if (this.disconnectingProvider === providerId) this.disconnectingProvider = "";
+      this.disconnecting = Boolean(this.disconnectingProvider);
     }
   },
 
-  cancelConnect() {
-    this.connecting = false;
-    this.device = null;
-    this.stopPolling();
+  cancelConnect(providerId = "") {
+    if (providerId) {
+      this.stopPolling(providerId);
+      this.stopCallbackPolling(providerId);
+      this.clearProviderDevice(providerId);
+      if (this.connectingProvider === providerId) this.connectingProvider = "";
+    } else {
+      this.stopPolling();
+      this.stopCallbackPolling();
+      this.clearProviderDevice();
+      this.connectingProvider = "";
+    }
+    this.connecting = Boolean(this.connectingProvider);
   },
 });

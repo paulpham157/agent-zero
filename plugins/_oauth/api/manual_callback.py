@@ -4,23 +4,11 @@ from helpers.api import ApiHandler, Request
 from plugins._oauth.helpers.providers import CODEX_PROVIDER_ID, get_provider
 
 
-class Disconnect(ApiHandler):
+class ManualCallback(ApiHandler):
     async def process(self, input: dict, request: Request) -> dict:
-        del request
         raw_provider_id = _provider_id(input)
         try:
-            provider = get_provider(raw_provider_id)
-            result = provider.disconnect()
-            response = {
-                "ok": True,
-                "provider_id": provider.provider_id,
-                "result": result,
-                "provider": provider.status(),
-                **result,
-            }
-            if provider.provider_id == CODEX_PROVIDER_ID:
-                response["codex"] = response["provider"]
-            return response
+            return get_provider(raw_provider_id).manual_callback(input, request).to_dict()
         except Exception as exc:
             return {
                 "ok": False,
