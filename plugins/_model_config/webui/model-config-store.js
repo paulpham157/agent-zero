@@ -235,6 +235,25 @@ export const store = createStore("modelConfig", {
     if (config?.embedding_model) config.embedding_model._kwargs_text = kwargsToText(config.embedding_model.kwargs);
   },
 
+  syncContextConfigFields(context, refreshCleanSnapshot = false) {
+    const config = context?.settings;
+    if (!config || typeof config !== 'object') return;
+
+    const snapshotBeforeInit = refreshCleanSnapshot && typeof context._toComparableJson === 'function'
+      ? context._toComparableJson(config)
+      : null;
+
+    this.initConfigFields(config);
+
+    if (
+      refreshCleanSnapshot &&
+      typeof context._toComparableJson === 'function' &&
+      context.settingsSnapshotJson === snapshotBeforeInit
+    ) {
+      context.settingsSnapshotJson = context._toComparableJson(config);
+    }
+  },
+
   // Global presets
   async loadGlobalPresets() {
     try {
@@ -300,12 +319,24 @@ export const store = createStore("modelConfig", {
   },
 
   /**
-   * Install save and reset hooks on the plugin settings context.
-   * - Save: persists dirty API keys before the normal config save.
-   * - Reset: reloads global presets when settings are reset to defaults.
+   * Install hooks on the plugin settings context.
+   * - Load/reset: initialize UI-only model fields when the settings object changes.
+   * - Save: persist dirty API keys before the normal config save.
+   * - Reset: reload global presets when settings are reset to defaults.
    */
-  installSettingsHooks(context, config) {
+  installSettingsHooks(context) {
     if (!context || context.__modelConfigHooksInstalled) return;
+
+    this.syncContextConfigFields(context, true);
+
+    const originalLoadSettings = context.loadSettings?.bind(context);
+    if (originalLoadSettings) {
+      context.loadSettings = async (...args) => {
+        const result = await originalLoadSettings(...args);
+        this.syncContextConfigFields(context, true);
+        return result;
+      };
+    }
 
     const originalSave = context.save.bind(context);
     context.save = async () => {
@@ -324,6 +355,7 @@ export const store = createStore("modelConfig", {
       const before = context.settings;
       await originalReset();
       if (context.settings !== before) {
+        this.syncContextConfigFields(context);
         await this.resetGlobalPresets();
       }
     };

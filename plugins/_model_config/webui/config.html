@@ -7,24 +7,12 @@
 </head>
 
 <body>
-  <div x-data="{ lastConfig: null }"
-       x-effect="
-         if (config && config !== lastConfig) {
-           lastConfig = config;
-           const snapshotBeforeInit = typeof context !== 'undefined'
-             ? context._toComparableJson(config)
-             : null;
-           $store.modelConfig.initConfigFields(config);
-           if (typeof context !== 'undefined' && context.settingsSnapshotJson === snapshotBeforeInit) {
-             context.settingsSnapshotJson = context._toComparableJson(config);
-           }
-         }
-       "
+  <div x-data
        x-init="
          await $store.modelConfig.ensureLoaded();
          $store.modelConfig.resetApiKeyDrafts();
          await $store.modelConfig.refreshApiKeyStatus();
-         $store.modelConfig.installSettingsHooks(context, config);
+         $store.modelConfig.installSettingsHooks(context);
        ">
     <template x-if="config && $store.modelConfig._loaded">
       <div class="model-config-sections">
