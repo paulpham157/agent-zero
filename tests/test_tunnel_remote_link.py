@@ -146,7 +146,8 @@ def test_remote_link_provider_options_match_supported_remote_link_providers():
     assert '<option value="serveo">Serveo</option>' in html
     assert '<option value="cloudflared">Cloudflare</option>' not in html
     assert "Cloudflare Tunnel is the quickest shareable URL" in html
-    assert "Agent Zero will start its sign-in flow" in html
+    assert "Tailscale Funnel creates a public HTTPS URL" in html
+    assert "approve sign-in or Funnel access" in html
 
 
 def test_tunnel_provider_normalization_preserves_aliases(tunnel_manager_module):
@@ -162,6 +163,7 @@ def test_tunnel_provider_normalization_preserves_aliases(tunnel_manager_module):
 
 def test_tailscale_cli_commands_are_wired(tunnel_manager_module):
     manager = tunnel_manager_module.TunnelManager()
+    modules = remote_link_modules()
 
     tailscale = manager._create_tunnel(50001, "tailscale")
 
@@ -169,15 +171,18 @@ def test_tailscale_cli_commands_are_wired(tunnel_manager_module):
         "tailscale",
         "funnel",
         "--yes",
+        "--https=443",
         "http://127.0.0.1:50001",
     ]
     assert tailscale.shutdown_command == [
         "tailscale",
         "funnel",
         "--yes",
+        "--https=443",
         "http://127.0.0.1:50001",
         "off",
     ]
+    assert tailscale.timeout == modules.tailscale.TAILSCALE_FUNNEL_TIMEOUT
 
 
 def test_remote_link_providers_have_dedicated_helper_modules():
@@ -523,6 +528,15 @@ def test_tailscale_preflight_starts_managed_daemon_then_runs_up_with_socket(
         return next(status_results)
 
     monkeypatch.setattr(modules.tailscale, "tailscale_status", fake_status)
+    monkeypatch.setattr(
+        modules.tailscale,
+        "tailscale_funnel_help",
+        lambda binary_path, socket_path=None: types.SimpleNamespace(
+            returncode=0,
+            stdout="USAGE\n  tailscale funnel <target>",
+            stderr="",
+        ),
+    )
     popen_commands = []
 
     class FakeProcess:
@@ -651,6 +665,15 @@ def test_tailscale_preflight_runs_up_then_accepts_running_status(
         "tailscale_status",
         lambda binary_path, socket_path=None: next(status_results),
     )
+    monkeypatch.setattr(
+        modules.tailscale,
+        "tailscale_funnel_help",
+        lambda binary_path, socket_path=None: types.SimpleNamespace(
+            returncode=0,
+            stdout="USAGE\n  tailscale funnel <target>",
+            stderr="",
+        ),
+    )
 
     class FakeProcess:
         stdout = iter(["Success.\n"])
@@ -678,6 +701,110 @@ def test_tailscale_preflight_runs_up_then_accepts_running_status(
         "event": "info",
         "message": "Tailscale setup completed. Checking the tailnet connection...",
         "data": None,
+    }
+
+
+def test_tailscale_preflight_rejects_clients_without_funnel(
+    tunnel_manager_module,
+    monkeypatch,
+):
+    modules = remote_link_modules()
+    monkeypatch.setattr(
+        modules.tailscale,
+        "tailscale_status",
+        lambda binary_path, socket_path=None: types.SimpleNamespace(
+            returncode=0,
+            stdout='{"BackendState": "Running"}',
+            stderr="",
+        ),
+    )
+    monkeypatch.setattr(
+        modules.tailscale,
+        "tailscale_funnel_help",
+        lambda binary_path, socket_path=None: types.SimpleNamespace(
+            returncode=1,
+            stdout="",
+            stderr="unknown command: funnel",
+        ),
+    )
+
+    with pytest.raises(RuntimeError, match="does not support `tailscale funnel`"):
+        modules.tailscale.ensure_tailscale_ready("/tmp/tailscale")
+
+
+def test_tailscale_funnel_command_surfaces_approval_url(
+    tunnel_manager_module,
+    monkeypatch,
+):
+    modules = remote_link_modules()
+    popen_commands = []
+    notifications = []
+    monkeypatch.setattr(
+        modules.tailscale,
+        "install_tailscale",
+        lambda notify=None: "/tmp/tailscale",
+    )
+    monkeypatch.setattr(
+        modules.tailscale,
+        "ensure_tailscale_ready",
+        lambda binary_path, notify=None: {
+            "command_prefix": ["--socket", "/tmp/tailscaled.sock"]
+        },
+    )
+
+    class FakeProcess:
+        def __init__(self, command, **kwargs):
+            popen_commands.append(command)
+            self.stdout = iter([
+                "Visit https://login.tailscale.com/a/funnel-approval to enable Funnel\n",
+                "Available on the internet:\n",
+                "https://agent-zero.example.ts.net\n",
+            ])
+
+        def poll(self):
+            return None
+
+        def wait(self, timeout=None):
+            return 0
+
+    monkeypatch.setattr(modules.cli.subprocess, "Popen", FakeProcess)
+
+    tunnel = modules.tailscale.TailscaleTunnel(
+        50001,
+        notify=lambda event, message, data=None: notifications.append({
+            "event": event.value,
+            "message": message,
+            "data": data,
+        }),
+    )
+
+    assert tunnel.start() == "https://agent-zero.example.ts.net"
+    assert popen_commands == [
+        [
+            "/tmp/tailscale",
+            "--socket",
+            "/tmp/tailscaled.sock",
+            "funnel",
+            "--yes",
+            "--https=443",
+            "http://127.0.0.1:50001",
+        ]
+    ]
+    assert {
+        "event": "info",
+        "message": (
+            "Open the Tailscale approval link to finish sign-in or enable Funnel. "
+            "Agent Zero will continue when Tailscale reports the public URL."
+        ),
+        "data": {
+            "provider": "tailscale",
+            "url": "https://login.tailscale.com/a/funnel-approval",
+        },
+    } in notifications
+    assert notifications[-1] == {
+        "event": "tunnel_url",
+        "message": "Tailscale Funnel URL is ready",
+        "data": {"url": "https://agent-zero.example.ts.net"},
     }
 
 

@@ -21,6 +21,8 @@ TAILSCALE_URL_RE = re.compile(r"https://[a-zA-Z0-9.-]+\.ts\.net[^\s\"']*")
 TAILSCALE_LOGIN_URL_RE = re.compile(r"https://login\.tailscale\.com/[^\s\"']+")
 TAILSCALE_STABLE_PACKAGES_URL = "https://pkgs.tailscale.com/stable/?v=latest"
 TAILSCALE_UP_TIMEOUT = 180
+TAILSCALE_FUNNEL_TIMEOUT = 300
+TAILSCALE_FUNNEL_HTTPS_PORT = "443"
 TAILSCALE_DAEMON_START_TIMEOUT = 12
 TAILSCALE_RUNTIME_DIR = Path(files.get_abs_path("tmp", "tailscale"))
 TAILSCALE_STATE_DIR = Path(files.get_abs_path("usr", "tailscale"))
@@ -95,6 +97,16 @@ def tailscale_command(binary_path, args, socket_path=None):
 def tailscale_status(binary_path, socket_path=None):
     return subprocess.run(
         tailscale_command(binary_path, ["status", "--json"], socket_path),
+        check=False,
+        text=True,
+        capture_output=True,
+        timeout=12,
+    )
+
+
+def tailscale_funnel_help(binary_path, socket_path=None):
+    return subprocess.run(
+        tailscale_command(binary_path, ["funnel", "--help"], socket_path),
         check=False,
         text=True,
         capture_output=True,
@@ -355,6 +367,21 @@ def run_tailscale_up(
     )
 
 
+def ensure_tailscale_funnel_command(binary_path, socket_path=None):
+    completed = tailscale_funnel_help(binary_path, socket_path=socket_path)
+    output = compact_output([completed.stderr, completed.stdout])
+    if completed.returncode == 0 and "tailscale funnel" in output.lower():
+        return
+
+    details = f" Details: {output}" if output else ""
+    raise RuntimeError(
+        "Agent Zero prepared Tailscale, but this Tailscale binary does not "
+        "support `tailscale funnel`. Tailscale Remote Control needs Tailscale "
+        "v1.38.3 or newer with Funnel support enabled for your tailnet."
+        f"{details}"
+    )
+
+
 def ensure_tailscale_ready(binary_path, notify=None):
     socket_path = None
     completed = tailscale_status(binary_path)
@@ -381,7 +408,8 @@ def ensure_tailscale_ready(binary_path, notify=None):
     try:
         payload = json.loads(completed.stdout or "{}")
     except json.JSONDecodeError:
-        return
+        ensure_tailscale_funnel_command(binary_path, socket_path=socket_path)
+        return {"command_prefix": tailscale_socket_args(socket_path)}
 
     backend_state = str(payload.get("BackendState") or "").lower()
     if backend_state and backend_state != "running":
@@ -390,6 +418,7 @@ def ensure_tailscale_ready(binary_path, notify=None):
         try:
             payload = json.loads(completed.stdout or "{}")
         except json.JSONDecodeError:
+            ensure_tailscale_funnel_command(binary_path, socket_path=socket_path)
             return {"command_prefix": tailscale_socket_args(socket_path)}
         backend_state = str(payload.get("BackendState") or "").lower()
         if backend_state and backend_state != "running":
@@ -400,29 +429,61 @@ def ensure_tailscale_ready(binary_path, notify=None):
                 "approval, then try again."
             )
 
+    ensure_tailscale_funnel_command(binary_path, socket_path=socket_path)
     return {"command_prefix": tailscale_socket_args(socket_path)}
 
 
 class TailscaleTunnel(CliTunnelHelper):
     def __init__(self, port, notify=None):
         target = f"http://127.0.0.1:{port}"
+        self._announced_login_urls = set()
         super().__init__(
             label="Tailscale Funnel",
             binary="tailscale",
             port=port,
-            command=["tailscale", "funnel", "--yes", target],
+            command=[
+                "tailscale",
+                "funnel",
+                "--yes",
+                f"--https={TAILSCALE_FUNNEL_HTTPS_PORT}",
+                target,
+            ],
             url_pattern=TAILSCALE_URL_RE,
             missing_binary_message=(
                 "Tailscale could not be prepared in this environment. Install "
                 "Tailscale, make sure the `tailscaled` service is available to "
                 "this container, enable Funnel for the tailnet, then try again."
             ),
-            shutdown_command=["tailscale", "funnel", "--yes", target, "off"],
+            shutdown_command=[
+                "tailscale",
+                "funnel",
+                "--yes",
+                f"--https={TAILSCALE_FUNNEL_HTTPS_PORT}",
+                target,
+                "off",
+            ],
+            timeout=TAILSCALE_FUNNEL_TIMEOUT,
             binary_resolver=lambda notify_callback: install_tailscale(
                 notify=notify_callback
             ),
             preflight=ensure_tailscale_ready,
+            output_handler=self._handle_tailscale_output,
             notify=notify,
+        )
+
+    def _handle_tailscale_output(self, line, notify=None):
+        login_match = TAILSCALE_LOGIN_URL_RE.search(line)
+        if not login_match:
+            return
+        login_url = login_match.group(0).rstrip(".,)")
+        if login_url in self._announced_login_urls:
+            return
+        self._announced_login_urls.add(login_url)
+        notify_info(
+            notify,
+            "Open the Tailscale approval link to finish sign-in or enable Funnel. "
+            "Agent Zero will continue when Tailscale reports the public URL.",
+            {"provider": "tailscale", "url": login_url},
         )
 
     def stop(self):

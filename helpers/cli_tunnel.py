@@ -148,6 +148,7 @@ class CliTunnelHelper(TunnelHelper):
         notify=None,
         binary_resolver=None,
         preflight=None,
+        output_handler=None,
     ):
         super().__init__(port, notify=notify)
         self.label = label
@@ -162,6 +163,7 @@ class CliTunnelHelper(TunnelHelper):
         self.binary_resolver = binary_resolver
         self.preflight = preflight
         self.command_prefix = []
+        self.output_handler = output_handler
 
     def _extract_url(self, line):
         match = self.url_pattern.search(line)
@@ -216,6 +218,11 @@ class CliTunnelHelper(TunnelHelper):
             cleaned_line = line.strip()
             if cleaned_line:
                 recent_output.append(cleaned_line)
+                if callable(self.output_handler):
+                    try:
+                        self.output_handler(cleaned_line, self._notify)
+                    except Exception:
+                        pass
             url = self._extract_url(cleaned_line)
             if url:
                 self.tunnel_url = url

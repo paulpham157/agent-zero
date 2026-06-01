@@ -47,7 +47,7 @@ const model = {
 
   get loginActionCopy() {
     if (this.loginProvider === "tailscale") {
-      return "Open the Tailscale login link and approve this container. Agent Zero will continue when Tailscale finishes setup.";
+      return "Open the Tailscale link to approve this container or enable Funnel. Agent Zero will continue when Tailscale reports the public URL.";
     }
     return "Approve the tunnel request, then Agent Zero will finish enabling Remote Control.";
   },
@@ -103,7 +103,7 @@ const model = {
             this.microsoftLoginCode = n.data.code || "";
             this.microsoftLoginUrl = n.data.url || "";
             this.loadingText = this.loginProvider === "tailscale"
-              ? "Waiting for Tailscale login..."
+              ? "Waiting for Tailscale approval..."
               : "Waiting for Microsoft login...";
           } else {
             this.loadingText = n.message;
