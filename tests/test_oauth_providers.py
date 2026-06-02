@@ -75,6 +75,7 @@ from plugins._oauth.helpers.providers.base import (
     write_private_json,
 )
 from plugins._oauth.helpers.providers.registry import get_provider, provider_registry
+from plugins._oauth.helpers.summary import build_oauth_status_summary
 from plugins._oauth.helpers.usage_plans import usage_plan_catalog
 
 
@@ -345,6 +346,38 @@ def test_status_api_returns_provider_registry_shape(monkeypatch):
         XAI_GROK_PROVIDER_ID,
     }
     assert response["codex"] == response["provider_map"][CODEX_PROVIDER_ID]
+
+
+def test_oauth_status_summary_adds_accounts_and_usage_windows():
+    class FakeProvider:
+        provider_id = CODEX_PROVIDER_ID
+
+        def status(self):
+            return {
+                "provider_id": CODEX_PROVIDER_ID,
+                "display_name": "Codex/ChatGPT",
+                "short_name": "Codex",
+                "connected": True,
+                "account_label": "user@example.com",
+                "usage": {
+                    "available": True,
+                    "primary": {"remaining_percent": 91, "label": "5h", "reset_at": 123},
+                    "secondary": {"used_percent": 14, "label": "7d", "reset_at": 456},
+                },
+            }
+
+    summary = build_oauth_status_summary(
+        provider_registry=lambda: {CODEX_PROVIDER_ID: FakeProvider()},
+        routes_installed=lambda: True,
+    )
+
+    assert summary["routes_installed"] is True
+    assert summary["connected_count"] == 1
+    assert summary["oauth_accounts"]["connected"][0]["account_label"] == "user@example.com"
+    assert summary["provider_map"][CODEX_PROVIDER_ID]["usage_windows"] == [
+        {"key": "primary", "title": "Session", "label": "5h", "remaining_percent": 91.0, "reset_at": 123},
+        {"key": "secondary", "title": "Week", "label": "7d", "remaining_percent": 86.0, "reset_at": 456},
+    ]
 
 
 def test_status_api_contains_provider_status_exceptions(monkeypatch):

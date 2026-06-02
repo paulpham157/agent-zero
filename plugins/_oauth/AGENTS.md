@@ -13,6 +13,7 @@
 - `conf/model_providers.yaml` owns OAuth-backed model provider definitions and their `api_key_mode: oauth` metadata.
 - `api/` owns provider-aware settings modal endpoints such as status, login start, polling, manual callback, models, and disconnect.
 - `helpers/providers/` owns provider implementations, provider metadata, registry wiring, token storage helpers, and provider-specific endpoint validation.
+- `helpers/summary.py` owns the shared provider-status/account summary shape consumed by the status API, discovery cards, onboarding, and OAuth settings UI.
 - `helpers/routes.py` owns local OAuth callback and OpenAI-compatible proxy routes mounted by the route bootstrap extension.
 - `webui/config.html` and `webui/oauth-config-store.js` own the OAuth Connections settings UI.
 - `extensions/python/_functions/models/get_api_key/end/` owns the dummy API-key extension used by OAuth model providers.
@@ -23,6 +24,7 @@
 - Core model code such as `models.py` must stay provider-agnostic. Do not add Codex, GitHub Copilot, Gemini, xAI, or other OAuth provider knowledge outside plugin-owned config or plugin hooks.
 - Add OAuth model providers in `_oauth/conf/model_providers.yaml`, not `_model_config/provider_metadata.yaml`.
 - Provider cards and model slot actions must be driven by backend provider status. Do not reintroduce hardcoded frontend provider lists or fallback provider catalogs.
+- OAuth account surfaces in settings, discovery, and onboarding must use the provider registry/status summary rather than Codex-only frontend state.
 - `helpers/providers/registry.py` is the source of truth for connectable OAuth providers.
 - Usage-plan metadata belongs only to connectable providers. Do not add metadata-only subscription families for providers this plugin cannot connect.
 - API handlers should remain provider-aware. Missing or blank `provider_id` defaults to Codex only for existing backward compatibility; falsey non-string IDs must not silently default.
@@ -41,6 +43,7 @@
 - Keep provider policy visible in each provider module; avoid abstracting away endpoint validation or billing/quota caveats.
 - Prefer plugin-local imports such as `plugins._oauth.helpers...` for bundled plugin code.
 - Keep `_oauth` account providers separate from API-key providers in core configuration.
+- Keep the OAuth settings page account-backed only. API-key and local provider setup belongs in model configuration and onboarding.
 - Treat Gemini API OAuth as a Google Cloud OAuth-client flow. Do not conflate it with Antigravity, Gemini Code Assist, Gemini CLI, Google AI Pro, or Google AI Ultra subscription quota.
 - Treat Claude Code subscription auth and Antigravity product auth as non-connectable unless their vendors provide an explicit third-party provider contract.
 - Keep user-facing errors safe: report setup or tier restrictions without exposing tokens, callback secrets, or raw auth payloads.

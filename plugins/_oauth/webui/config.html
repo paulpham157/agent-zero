@@ -15,35 +15,128 @@
         x-effect="$store.oauthConfig.bindConfig(config)"
         x-destroy="$store.oauthConfig.cleanup()"
       >
-        <section class="oauth-provider-grid">
-          <template x-for="card in $store.oauthConfig.providerCards()" :key="card.provider_id">
-            <article class="oauth-provider-card" :class="card.connected ? 'is-connected' : ''">
-              <div class="oauth-provider-head">
-                <div class="oauth-mark">
+        <section class="oauth-provider-list">
+          <div class="oauth-section-head">
+            <div>
+              <h3>Providers</h3>
+              <p>Each account can be connected independently.</p>
+            </div>
+            <button class="oauth-icon-button" type="button" @click="$store.oauthConfig.loadStatus()" title="Refresh status" aria-label="Refresh status">
+              <span class="material-symbols-outlined">refresh</span>
+            </button>
+          </div>
+
+          <div class="oauth-provider-rows">
+            <template x-for="card in $store.oauthConfig.providerCards()" :key="card.provider_id">
+              <article
+                class="oauth-provider-row"
+                :class="{ selected: $store.oauthConfig.selectedProviderId === card.provider_id, connected: card.connected }"
+                @click="$store.oauthConfig.selectProvider(card.provider_id)"
+              >
+                <span class="oauth-mark" :class="{ connected: card.connected }">
                   <span class="material-symbols-outlined" x-text="card.connected ? 'check' : card.mark"></span>
+                </span>
+                <div class="oauth-provider-row-copy">
+                  <strong x-text="card.display_name"></strong>
+                  <span x-text="$store.oauthConfig.providerReadinessLabel(card.provider_id)"></span>
+                </div>
+                <span class="oauth-account-state" :class="{ connected: card.connected }" x-text="card.connected ? 'Connected' : 'Available'"></span>
+                <div class="oauth-row-actions">
+                  <button
+                    class="oauth-connect compact"
+                    type="button"
+                    @click.stop="$store.oauthConfig.handleProviderPrimary(card.provider_id)"
+                    :disabled="$store.oauthConfig.providerPrimaryDisabled(card.provider_id)"
+                    x-show="!card.connected"
+                  >
+                    <span class="material-symbols-outlined" x-text="$store.oauthConfig.connectingProvider === card.provider_id ? 'progress_activity' : ($store.oauthConfig.providerSetupReady(card.provider_id) ? 'login' : 'tune')"></span>
+                    <span x-text="$store.oauthConfig.providerPrimaryLabel(card.provider_id)"></span>
+                  </button>
+                  <button
+                    class="oauth-connect secondary compact"
+                    type="button"
+                    @click.stop="$store.oauthConfig.loadModels({ providerId: card.provider_id })"
+                    :disabled="!card.connected || $store.oauthConfig.loadingModelsProvider === card.provider_id"
+                  >
+                    <span class="material-symbols-outlined" x-text="$store.oauthConfig.loadingModelsProvider === card.provider_id ? 'progress_activity' : 'search'"></span>
+                    <span>Check models</span>
+                  </button>
+                  <button
+                    class="oauth-connect danger compact"
+                    type="button"
+                    @click.stop="$store.oauthConfig.disconnectProvider(card.provider_id)"
+                    :disabled="$store.oauthConfig.disconnectingProvider === card.provider_id"
+                    x-show="card.connected"
+                  >
+                    <span class="material-symbols-outlined" x-text="$store.oauthConfig.disconnectingProvider === card.provider_id ? 'progress_activity' : 'link_off'"></span>
+                    <span x-text="$store.oauthConfig.disconnectingProvider === card.provider_id ? 'Disconnecting' : 'Disconnect'"></span>
+                  </button>
+                </div>
+                <div class="oauth-provider-usage" x-show="$store.oauthConfig.usageWindows(card.provider_id).length">
+                  <template x-for="window in $store.oauthConfig.usageWindows(card.provider_id)" :key="`${card.provider_id}-${window.key}`">
+                    <div class="oauth-usage-window">
+                      <div class="oauth-usage-head">
+                        <span>
+                          <span x-text="`${card.short_name || card.display_name || 'Account'} ${window.title}`"></span>
+                          <small x-show="$store.oauthConfig.formatWindowLabel(window)" x-text="$store.oauthConfig.formatWindowLabel(window)"></small>
+                        </span>
+                        <strong x-text="$store.oauthConfig.formatRemainingPercent(window)"></strong>
+                      </div>
+                      <div class="oauth-usage-bar" aria-hidden="true">
+                        <i :style="{ width: $store.oauthConfig.usageWidth(window) }"></i>
+                      </div>
+                      <p x-show="$store.oauthConfig.formatReset(window)" x-text="`Resets in ${$store.oauthConfig.formatReset(window)}`"></p>
+                    </div>
+                  </template>
+                </div>
+              </article>
+            </template>
+          </div>
+        </section>
+
+        <template x-if="$store.oauthConfig.selectedProvider() && !$store.oauthConfig.selectedProvider().connected">
+          <section class="oauth-provider-detail">
+            <div class="oauth-provider-detail-head">
+              <div class="oauth-provider-head">
+                <div class="oauth-mark" :class="{ connected: $store.oauthConfig.selectedProvider().connected }">
+                  <span class="material-symbols-outlined" x-text="$store.oauthConfig.selectedProvider().connected ? 'check' : $store.oauthConfig.selectedProvider().mark"></span>
                 </div>
                 <div class="oauth-copy">
-                  <h2 x-text="card.display_name"></h2>
-                  <p x-text="$store.oauthConfig.providerStatusLabel(card.provider_id)"></p>
+                  <h2 x-text="$store.oauthConfig.selectedProvider().display_name"></h2>
+                  <p x-text="$store.oauthConfig.providerStatusLabel($store.oauthConfig.selectedProviderId)"></p>
                 </div>
               </div>
+              <div class="oauth-primary">
+                <button
+                  class="oauth-connect"
+                  type="button"
+                  @click="$store.oauthConfig.connectProvider($store.oauthConfig.selectedProviderId)"
+                  :disabled="$store.oauthConfig.providerPrimaryDisabled($store.oauthConfig.selectedProviderId) || !$store.oauthConfig.providerSetupReady($store.oauthConfig.selectedProviderId)"
+                  x-show="!$store.oauthConfig.selectedProvider().connected"
+                >
+                  <span class="material-symbols-outlined" x-text="$store.oauthConfig.connectingProvider === $store.oauthConfig.selectedProviderId ? 'progress_activity' : 'login'"></span>
+                  <span x-text="$store.oauthConfig.providerPrimaryLabel($store.oauthConfig.selectedProviderId)"></span>
+                </button>
+              </div>
+            </div>
 
-              <label class="oauth-provider-input" x-show="card.supports_enterprise_domain && !card.connected">
+            <div class="oauth-detail-grid">
+              <label class="oauth-provider-input" x-show="$store.oauthConfig.selectedProvider().supports_enterprise_domain && !$store.oauthConfig.selectedProvider().connected">
                 <span>Enterprise domain</span>
                 <input
                   type="text"
-                  x-model="$store.oauthConfig.providerUiFor(card.provider_id).enterprise_domain"
+                  x-model="$store.oauthConfig.providerUiFor($store.oauthConfig.selectedProviderId).enterprise_domain"
                   name="enterprise_domain"
                   placeholder="github.com"
                 />
               </label>
 
-              <div class="oauth-provider-fields" x-show="card.supports_oauth_client_config && !card.connected">
+              <div class="oauth-provider-fields" x-show="$store.oauthConfig.selectedProvider().supports_oauth_client_config && !$store.oauthConfig.selectedProvider().connected">
                 <label class="oauth-provider-input">
                   <span>OAuth client ID</span>
                   <input
                     type="text"
-                    x-model="$store.oauthConfig.providerUiFor(card.provider_id).client_id"
+                    x-model="$store.oauthConfig.providerUiFor($store.oauthConfig.selectedProviderId).client_id"
                     name="oauth_client_id"
                     placeholder="Google Cloud OAuth client ID"
                   />
@@ -52,160 +145,66 @@
                   <span>OAuth client secret</span>
                   <input
                     type="password"
-                    x-model="$store.oauthConfig.providerUiFor(card.provider_id).client_secret"
+                    x-model="$store.oauthConfig.providerUiFor($store.oauthConfig.selectedProviderId).client_secret"
                     name="oauth_client_secret"
                     autocomplete="off"
                     placeholder="Google Cloud OAuth client secret"
                   />
                 </label>
-                <label class="oauth-provider-input" x-show="card.supports_quota_project">
+                <label class="oauth-provider-input" x-show="$store.oauthConfig.selectedProvider().supports_quota_project">
                   <span>Quota project</span>
                   <input
                     type="text"
-                    x-model="$store.oauthConfig.providerUiFor(card.provider_id).quota_project_id"
+                    x-model="$store.oauthConfig.providerUiFor($store.oauthConfig.selectedProviderId).quota_project_id"
                     name="quota_project_id"
                     placeholder="Optional Google Cloud project ID"
                   />
                 </label>
               </div>
 
-              <div class="oauth-device" x-show="$store.oauthConfig.devices[card.provider_id]?.user_code">
+              <div class="oauth-device" x-show="$store.oauthConfig.devices[$store.oauthConfig.selectedProviderId]?.user_code">
                 <span>Enter this code</span>
-                <strong x-text="$store.oauthConfig.devices[card.provider_id]?.user_code"></strong>
-                <button class="text-button" type="button" @click="$store.oauthConfig.cancelConnect(card.provider_id)">
+                <strong x-text="$store.oauthConfig.devices[$store.oauthConfig.selectedProviderId]?.user_code"></strong>
+                <button class="text-button" type="button" @click="$store.oauthConfig.cancelConnect($store.oauthConfig.selectedProviderId)">
                   <span class="material-symbols-outlined">close</span>
                   <span>Cancel</span>
                 </button>
               </div>
 
-              <div class="oauth-manual-callback" x-show="card.supports_manual_callback && $store.oauthConfig.devices[card.provider_id]?.flow === 'browser_pkce' && !card.connected">
+              <div class="oauth-manual-callback" x-show="$store.oauthConfig.selectedProvider().supports_manual_callback && $store.oauthConfig.devices[$store.oauthConfig.selectedProviderId]?.flow === 'browser_pkce' && !$store.oauthConfig.selectedProvider().connected">
                 <input
                   type="text"
-                  x-model="$store.oauthConfig.providerUiFor(card.provider_id).manualCallback"
+                  x-model="$store.oauthConfig.providerUiFor($store.oauthConfig.selectedProviderId).manualCallback"
                   placeholder="Paste callback URL, query string, or code"
                 />
-                <button type="button" class="oauth-connect secondary" @click="$store.oauthConfig.submitManualCallback(card.provider_id)">
+                <button type="button" class="oauth-connect secondary" @click="$store.oauthConfig.submitManualCallback($store.oauthConfig.selectedProviderId)">
                   <span class="material-symbols-outlined">check</span>
                   <span>Submit</span>
                 </button>
-                <button type="button" class="oauth-connect secondary" @click="$store.oauthConfig.cancelConnect(card.provider_id)">
+                <button type="button" class="oauth-connect secondary" @click="$store.oauthConfig.cancelConnect($store.oauthConfig.selectedProviderId)">
                   <span class="material-symbols-outlined">close</span>
                   <span>Cancel</span>
                 </button>
               </div>
 
-              <div class="oauth-auth-attempt" x-show="$store.oauthConfig.devices[card.provider_id] && !$store.oauthConfig.devices[card.provider_id]?.user_code && !card.supports_manual_callback">
+              <div class="oauth-auth-attempt" x-show="$store.oauthConfig.devices[$store.oauthConfig.selectedProviderId] && !$store.oauthConfig.devices[$store.oauthConfig.selectedProviderId]?.user_code && !$store.oauthConfig.selectedProvider().supports_manual_callback">
                 <span>Sign-in started</span>
-                <button class="text-button" type="button" @click="$store.oauthConfig.cancelConnect(card.provider_id)">
+                <button class="text-button" type="button" @click="$store.oauthConfig.cancelConnect($store.oauthConfig.selectedProviderId)">
                   <span class="material-symbols-outlined">close</span>
                   <span>Cancel</span>
                 </button>
               </div>
 
-              <p class="oauth-provider-note" x-show="card.warning || card.note" x-text="card.warning || card.note"></p>
-
-              <div class="oauth-primary">
-                <button
-                  class="oauth-connect"
-                  type="button"
-                  @click="$store.oauthConfig.connectProvider(card.provider_id)"
-                  :disabled="Boolean($store.oauthConfig.connectingProvider) || Boolean($store.oauthConfig.disconnectingProvider)"
-                  x-show="!card.connected"
-                >
-                  <span class="material-symbols-outlined" x-text="$store.oauthConfig.connectingProvider === card.provider_id ? 'progress_activity' : 'login'"></span>
-                  <span x-text="$store.oauthConfig.connectingProvider === card.provider_id ? 'Waiting' : 'Connect'"></span>
-                </button>
-                <button
-                  class="oauth-connect danger"
-                  type="button"
-                  @click="$store.oauthConfig.disconnectProvider(card.provider_id)"
-                  :disabled="$store.oauthConfig.disconnectingProvider === card.provider_id"
-                  x-show="card.connected"
-                >
-                  <span class="material-symbols-outlined" x-text="$store.oauthConfig.disconnectingProvider === card.provider_id ? 'progress_activity' : 'link_off'"></span>
-                  <span x-text="$store.oauthConfig.disconnectingProvider === card.provider_id ? 'Disconnecting' : 'Disconnect'"></span>
-                </button>
-                <button
-                  class="oauth-connect secondary"
-                  type="button"
-                  @click="$store.oauthConfig.loadModels({ providerId: card.provider_id })"
-                  :disabled="!card.connected || $store.oauthConfig.loadingModelsProvider === card.provider_id"
-                >
-                  <span class="material-symbols-outlined" x-text="$store.oauthConfig.loadingModelsProvider === card.provider_id ? 'progress_activity' : 'search'"></span>
-                  <span>Check models</span>
-                </button>
-              </div>
-            </article>
-          </template>
-        </section>
-
-        <section class="oauth-usage" x-show="$store.oauthConfig.providerConnected('codex_oauth') && $store.oauthConfig.usageWindows('codex_oauth').length">
-          <template x-for="window in $store.oauthConfig.usageWindows('codex_oauth')" :key="window.key">
-            <div class="oauth-usage-window">
-              <div class="oauth-usage-head">
-                <span>
-                  <span x-text="window.title"></span>
-                  <small x-show="$store.oauthConfig.formatWindowLabel(window)" x-text="$store.oauthConfig.formatWindowLabel(window)"></small>
-                </span>
-                <strong x-text="$store.oauthConfig.formatRemainingPercent(window)"></strong>
-              </div>
-              <div class="oauth-usage-bar" aria-hidden="true">
-                <i :style="{ width: $store.oauthConfig.usageWidth(window) }"></i>
-              </div>
-              <p x-show="$store.oauthConfig.formatReset(window)" x-text="`Resets in ${$store.oauthConfig.formatReset(window)}`"></p>
+              <p class="oauth-provider-note" x-show="$store.oauthConfig.selectedProvider().warning || $store.oauthConfig.selectedProvider().note" x-text="$store.oauthConfig.selectedProvider().warning || $store.oauthConfig.selectedProvider().note"></p>
             </div>
-          </template>
-        </section>
-
-        <section class="oauth-status-row">
-          <div>
-            <span>OAuth Connections</span>
-            <strong x-text="$store.oauthConfig.providerCards().filter((card) => card.connected).length + ' connected'"></strong>
-          </div>
-          <div>
-            <span>Model provider</span>
-            <strong x-text="$store.oauthConfig.providerLabel($store.oauthConfig.activeModelProvider)"></strong>
-          </div>
-          <button class="oauth-icon-button" type="button" @click="$store.oauthConfig.loadStatus()" title="Refresh status" aria-label="Refresh status">
-            <span class="material-symbols-outlined">refresh</span>
-          </button>
-        </section>
-
-        <section class="oauth-plan-catalog" x-show="$store.oauthConfig.usagePlanEntries().length">
-          <div class="oauth-section-head">
-            <div>
-              <h3>Usage plans</h3>
-              <p>Subscription and billing metadata for account-backed model providers.</p>
-            </div>
-          </div>
-
-          <div class="oauth-plan-grid">
-            <template x-for="entry in $store.oauthConfig.usagePlanEntries()" :key="entry.provider_id">
-              <article class="oauth-plan-card">
-                <div class="oauth-plan-head">
-                  <strong x-text="entry.display_name"></strong>
-                  <span x-text="$store.oauthConfig.usagePlanStatus(entry)"></span>
-                </div>
-
-                <div class="oauth-plan-list">
-                  <template x-for="plan in entry.plans" :key="entry.provider_id + plan.id">
-                    <span x-text="plan.label"></span>
-                  </template>
-                </div>
-
-                <template x-for="note in $store.oauthConfig.usagePlanNotes(entry)" :key="entry.provider_id + note">
-                  <p x-text="note"></p>
-                </template>
-              </article>
-            </template>
-          </div>
-        </section>
+          </section>
+        </template>
 
         <section class="oauth-model-config">
           <div class="oauth-section-head">
             <div>
-              <h3>Agent Zero models</h3>
-              <p>Select OAuth provider models used by the Main model and Utility model slots.</p>
+              <h3>Choose your models</h3>
+              <p>Select account-backed models used by the Main model and Utility model slots.</p>
             </div>
             <span class="oauth-save-chip" x-show="$store.oauthConfig.modelConfigDirty">Pending changes</span>
           </div>
@@ -225,17 +224,6 @@
                       <span x-text="$store.oauthConfig.slotStatusLabel(slot.key)"></span>
                     </div>
                     <div class="oauth-model-actions">
-                      <template x-for="provider in $store.oauthConfig.providerCards().filter((card) => card.connected)" :key="slot.key + provider.provider_id">
-                        <button
-                          class="oauth-model-action"
-                          type="button"
-                          x-show="!$store.oauthConfig.slotUsesProvider(slot.key, provider.provider_id)"
-                          @click="$store.oauthConfig.useProviderForSlot(slot.key, provider.provider_id)"
-                        >
-                          <span class="material-symbols-outlined">swap_horiz</span>
-                          <span x-text="$store.oauthConfig.providerUseLabel(provider.provider_id)"></span>
-                        </button>
-                      </template>
                       <button
                         class="oauth-model-action icon"
                         type="button"
@@ -373,6 +361,120 @@
       color: var(--color-text);
     }
 
+    .oauth-provider-list,
+    .oauth-provider-detail {
+      display: grid;
+      gap: 12px;
+      padding: 0;
+      border: 0;
+      border-radius: 0;
+      background: transparent;
+    }
+
+    .oauth-provider-row-copy strong {
+      overflow: hidden;
+      display: block;
+      font-size: 0.88rem;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .oauth-provider-rows {
+      display: grid;
+      gap: 8px;
+    }
+
+    .oauth-provider-row {
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr) auto auto;
+      align-items: center;
+      gap: 10px;
+      min-height: 62px;
+      padding: 10px 12px;
+      border: 1px solid color-mix(in srgb, var(--color-border) 72%, transparent);
+      border-radius: 8px;
+      background: color-mix(in srgb, var(--color-background) 24%, transparent);
+      cursor: pointer;
+      transition: border-color .18s ease, background .18s ease;
+    }
+
+    .oauth-provider-row:hover,
+    .oauth-provider-row.selected {
+      border-color: color-mix(in srgb, var(--color-primary) 62%, var(--color-border));
+      background: color-mix(in srgb, var(--color-primary) 7%, var(--color-panel));
+    }
+
+    .oauth-provider-row-copy {
+      display: grid;
+      min-width: 0;
+      gap: 3px;
+    }
+
+    .oauth-provider-row-copy span {
+      overflow: hidden;
+      color: var(--color-text-secondary);
+      font-size: 0.74rem;
+      font-weight: 700;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .oauth-account-state {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 24px;
+      padding: 2px 8px;
+      border: 1px solid color-mix(in srgb, var(--color-border) 74%, transparent);
+      border-radius: 999px;
+      color: var(--color-text-secondary);
+      font-size: 0.68rem;
+      font-weight: 800;
+      white-space: nowrap;
+    }
+
+    .oauth-account-state.connected {
+      border-color: color-mix(in srgb, #35d07f 46%, var(--color-border));
+      color: var(--color-text);
+    }
+
+    .oauth .oauth-provider-row.connected .oauth-provider-row-copy strong {
+      color: var(--color-text, #fff);
+    }
+
+    .oauth .oauth-provider-row.connected .oauth-provider-row-copy span {
+      color: var(--color-text-secondary, rgba(255, 255, 255, .72));
+    }
+
+    .oauth-row-actions {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 8px;
+    }
+
+    .oauth-provider-usage {
+      display: grid;
+      grid-column: 2 / -1;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+      min-width: 0;
+      padding: 4px 0 0;
+    }
+
+    .oauth-provider-detail-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .oauth-detail-grid {
+      display: grid;
+      gap: 12px;
+    }
+
     .oauth-provider-grid {
       display: grid;
       grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -392,6 +494,11 @@
     }
 
     .oauth-provider-card.is-connected .oauth-mark {
+      color: #08120c;
+      background: #35d07f;
+    }
+
+    .oauth-mark.connected {
       color: #08120c;
       background: #35d07f;
     }
@@ -474,6 +581,14 @@
       opacity: .65;
     }
 
+    .oauth-connect.compact {
+      min-width: 0;
+      min-height: 34px;
+      padding: 0 10px;
+      font-size: 0.76rem;
+      white-space: nowrap;
+    }
+
     .oauth-provider-input,
     .oauth-provider-fields,
     .oauth-manual-callback,
@@ -552,15 +667,6 @@
       letter-spacing: 0;
     }
 
-    .oauth-usage {
-      display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 10px;
-      padding: 12px 14px;
-      border: 1px solid var(--color-border);
-      border-radius: 8px;
-    }
-
     .oauth-usage-window {
       display: grid;
       min-width: 0;
@@ -582,6 +688,18 @@
       color: var(--color-text-secondary);
       font-size: 0.78rem;
       font-weight: 750;
+    }
+
+    .oauth .oauth-provider-row.connected .oauth-usage-head span {
+      color: var(--color-text-secondary, rgba(255, 255, 255, .72));
+    }
+
+    .oauth .oauth-provider-row.connected .oauth-usage-head strong {
+      color: var(--color-text, #fff);
+    }
+
+    .oauth .oauth-provider-row.connected .oauth-usage-window p {
+      color: var(--color-text-secondary, rgba(255, 255, 255, .72));
     }
 
     .oauth-usage-head small {
@@ -669,77 +787,6 @@
       gap: 12px;
       padding: 0;
       border: 0;
-    }
-
-    .oauth-plan-catalog {
-      display: grid;
-      gap: 12px;
-      padding: 0;
-      border: 0;
-    }
-
-    .oauth-plan-grid {
-      display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 12px;
-    }
-
-    .oauth-plan-card {
-      display: grid;
-      min-width: 0;
-      align-content: start;
-      gap: 10px;
-      padding: 12px;
-      border: 1px solid var(--color-border);
-      border-radius: 8px;
-      background: color-mix(in srgb, var(--color-panel) 82%, transparent);
-    }
-
-    .oauth-plan-head {
-      display: flex;
-      min-width: 0;
-      align-items: center;
-      justify-content: space-between;
-      gap: 10px;
-    }
-
-    .oauth-plan-head strong {
-      overflow: hidden;
-      font-size: 0.88rem;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-    }
-
-    .oauth-plan-head span {
-      flex: 0 0 auto;
-      padding: 2px 7px;
-      border-radius: 999px;
-      background: color-mix(in srgb, var(--color-border) 48%, transparent);
-      color: var(--color-text-secondary);
-      font-size: 0.68rem;
-      font-weight: 750;
-    }
-
-    .oauth-plan-list {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 6px;
-    }
-
-    .oauth-plan-list span {
-      padding: 4px 7px;
-      border-radius: 999px;
-      background: color-mix(in srgb, var(--color-border) 34%, transparent);
-      color: var(--color-text-secondary);
-      font-size: 0.72rem;
-      line-height: 1.2;
-    }
-
-    .oauth-plan-card p {
-      margin: 0;
-      color: var(--color-text-secondary);
-      font-size: 0.74rem;
-      line-height: 1.35;
     }
 
     .oauth-models-panel {
@@ -951,13 +998,13 @@
     }
 
     .oauth-advanced {
-      border: 1px solid var(--color-border);
-      border-radius: 8px;
+      border: 0;
+      border-radius: 0;
       padding: 0;
     }
 
     .oauth-advanced summary {
-      padding: 12px 14px;
+      padding: 8px 0;
       color: var(--color-text-secondary);
       font-size: 0.84rem;
       font-weight: 750;
@@ -1045,20 +1092,38 @@
       .oauth-provider-grid {
         grid-template-columns: 1fr;
       }
+
+      .oauth-model-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .oauth-provider-row {
+        grid-template-columns: auto minmax(0, 1fr) auto;
+      }
+
+      .oauth-row-actions {
+        grid-column: 2 / -1;
+        justify-content: flex-start;
+      }
     }
 
     @media (max-width: 720px) {
       .oauth-device,
-      .oauth-usage,
+      .oauth-provider-usage,
       .oauth-status-row,
-      .oauth-plan-grid,
       .oauth-model-grid,
       .oauth-model-head,
       .oauth-grid,
       .oauth-details div,
       .oauth-manual-callback,
-      .oauth-auth-attempt {
+      .oauth-auth-attempt,
+      .oauth-provider-row,
+      .oauth-provider-detail-head {
         grid-template-columns: 1fr;
+      }
+
+      .oauth-provider-detail-head {
+        display: grid;
       }
 
       .oauth-section-head {
@@ -1067,6 +1132,14 @@
 
       .oauth-primary {
         width: 100%;
+      }
+
+      .oauth-row-actions {
+        grid-column: auto;
+      }
+
+      .oauth-provider-usage {
+        grid-column: auto;
       }
 
       .oauth-model-actions {

@@ -4,6 +4,8 @@ Generic local OAuth bridge for Agent Zero.
 
 Tokens in `auth.json` are password-equivalent credentials. Keep this plugin on trusted local machines only. Do not configure `auth_file_path` to share a rotating refresh-token file with Codex CLI or another client.
 
+The settings UI groups providers as account-backed connections. More than one account provider can be connected at the same time, and the Main/Utility model slots can choose models from any connected OAuth provider.
+
 ## Providers
 
 ### Codex/ChatGPT (`codex_oauth`)
@@ -36,6 +38,8 @@ Tokens in `auth.json` are password-equivalent credentials. Keep this plugin on t
 ## Usage Plan Metadata
 
 The status API exposes `usage_plan_catalog` for subscription and billing context. It covers only connectable providers: Codex, GitHub Copilot, Google Gemini API, and xAI Grok.
+
+The same status response also includes `oauth_accounts`, a compact summary used by the settings modal, welcome discovery card, and onboarding wizard. Keep that summary provider-registry driven so new OAuth providers appear consistently across those surfaces.
 
 ## Remote xAI Callback
 

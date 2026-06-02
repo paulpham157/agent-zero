@@ -111,6 +111,7 @@ export const store = createStore("oauthConfig", {
   connectingProvider: "",
   disconnectingProvider: "",
   loadingModelsProvider: "",
+  selectedProviderId: "",
   activeModelProvider: CODEX_PROVIDER,
   models: [],
   modelSlots: MODEL_SLOTS,
@@ -153,6 +154,7 @@ export const store = createStore("oauthConfig", {
     this.connectingProvider = "";
     this.disconnectingProvider = "";
     this.loadingModelsProvider = "";
+    this.selectedProviderId = "";
     this.activeModelProvider = CODEX_PROVIDER;
     this.models = [];
     this.modelConfig = null;
@@ -241,6 +243,32 @@ export const store = createStore("oauthConfig", {
       });
   },
 
+  connectedProviderCards() {
+    return this.providerCards().filter((card) => card.connected);
+  },
+
+  availableProviderCards() {
+    return this.providerCards().filter((card) => !card.connected);
+  },
+
+  selectedProvider() {
+    const selected = this.providerCards().find((card) => card.provider_id === this.selectedProviderId);
+    return selected || this.providerCards()[0] || null;
+  },
+
+  selectProvider(providerId) {
+    if (!this.isOauthProvider(providerId)) return;
+    this.selectedProviderId = providerId;
+  },
+
+  connectedSummaryLabel() {
+    const connected = this.connectedProviderCards().length;
+    const total = this.providerCards().length;
+    if (!connected) return "Connect account-backed providers here. More than one can be connected at the same time.";
+    if (connected === 1) return `1 of ${total} account providers connected.`;
+    return `${connected} of ${total} account providers connected.`;
+  },
+
   providerIds() {
     return this.providerCards().map((card) => card.provider_id);
   },
@@ -271,6 +299,45 @@ export const store = createStore("oauthConfig", {
     return status.account_label || status.email || "Connected";
   },
 
+  providerReadinessLabel(providerId) {
+    const status = this.providerStatus(providerId);
+    if (this.loadingStatus) return "Checking";
+    if (status.connected) return this.providerStatusLabel(providerId);
+    if (!this.providerSetupReady(providerId)) return "Needs OAuth client details";
+    if (status.warning) return "Available with restrictions";
+    return "Ready to connect";
+  },
+
+  providerSetupReady(providerId) {
+    const status = this.providerStatus(providerId);
+    if (!status.supports_oauth_client_config) return true;
+    const ui = this.providerUiFor(providerId);
+    const clientId = ui.client_id || status.client_id || this.geminiApi().client_id || "";
+    const hasSecret = Boolean(
+      ui.client_secret
+      || this.geminiApi().client_secret
+      || status.client_secret_configured
+    );
+    return Boolean(String(clientId).trim() && hasSecret);
+  },
+
+  providerPrimaryLabel(providerId) {
+    if (this.connectingProvider === providerId) return "Waiting";
+    return this.providerSetupReady(providerId) ? "Connect" : "Configure";
+  },
+
+  providerPrimaryDisabled(providerId) {
+    if (!this.isOauthProvider(providerId)) return true;
+    if (this.connectingProvider || this.disconnectingProvider) return true;
+    return false;
+  },
+
+  handleProviderPrimary(providerId) {
+    this.selectProvider(providerId);
+    if (!this.providerSetupReady(providerId)) return;
+    void this.connectProvider(providerId);
+  },
+
   providerEndpointUrl(providerId) {
     const status = this.providerStatus(providerId);
     const proxyBase = String(status.proxy_base_path || "").replace(/\/$/, "");
@@ -289,12 +356,30 @@ export const store = createStore("oauthConfig", {
   },
 
   usageWindows(providerId = CODEX_PROVIDER) {
+    const status = this.providerStatus(providerId);
+    if (Array.isArray(status.usage_windows) && status.usage_windows.length) {
+      return status.usage_windows.filter((window) => Number.isFinite(this.remainingPercent(window)));
+    }
     const usage = this.usage(providerId);
     if (!usage?.available) return [];
     return [
       { key: "primary", title: "Session", ...(usage.primary || {}) },
       { key: "secondary", title: "Week", ...(usage.secondary || {}) },
     ].filter((window) => Number.isFinite(this.remainingPercent(window)));
+  },
+
+  connectedUsageWindows() {
+    const windows = [];
+    for (const card of this.connectedProviderCards()) {
+      for (const window of this.usageWindows(card.provider_id)) {
+        windows.push({
+          ...window,
+          key: `${card.provider_id}-${window.key}`,
+          title: `${card.short_name || card.display_name || "Account"} ${window.title}`,
+        });
+      }
+    }
+    return windows;
   },
 
   usagePlanCatalog() {
@@ -555,6 +640,11 @@ export const store = createStore("oauthConfig", {
       }
       if (!this.isOauthProvider(this.activeModelProvider)) {
         this.activeModelProvider = this.providerCards()[0]?.provider_id || CODEX_PROVIDER;
+      }
+      if (!this.isOauthProvider(this.selectedProviderId)) {
+        this.selectedProviderId = this.connectedProviderCards()[0]?.provider_id
+          || this.providerCards()[0]?.provider_id
+          || "";
       }
     } catch (error) {
       void toastFrontendError(messageOf(error), "OAuth Connections");
