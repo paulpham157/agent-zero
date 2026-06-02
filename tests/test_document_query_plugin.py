@@ -1,13 +1,19 @@
 from __future__ import annotations
 
 import asyncio
+import sys
 from pathlib import Path
 
 import pytest
 from PIL import Image
 
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
 from plugins._document_query import hooks as document_query_hooks
 from plugins._document_query.helpers.fetch import FetchedDocument, fetch_public_resource
+import plugins._document_query.helpers.document_query as document_query_module
 from plugins._document_query.helpers.document_query import (
     DocumentQueryHelper,
     DocumentQueryStore,
@@ -17,9 +23,6 @@ from plugins._document_query.helpers.parsers import get_parsers_for_mimetype
 from plugins._document_query.helpers.parsers import liteparse as liteparse_module
 from plugins._document_query.helpers.parsers.liteparse import LiteParseParser
 from plugins._document_query.helpers.parsers.text import TextParser
-
-
-ROOT = Path(__file__).resolve().parents[1]
 
 
 def run_async(coro):
@@ -50,6 +53,52 @@ class CountingAsyncParser(BaseParser):
 
     def _parse_sync(self, document: FetchedDocument, config: dict) -> str:
         return document.uri
+
+
+class _StoreContext:
+    def __init__(self, context_id: str):
+        self.id = context_id
+        self.data = {}
+
+    def get_data(self, key: str, recursive: bool = True):
+        return self.data.get(key)
+
+    def set_data(self, key: str, value, recursive: bool = True):
+        self.data[key] = value
+
+
+class _StoreAgent:
+    def __init__(self, context_id: str):
+        self.config = object()
+        self.context = _StoreContext(context_id)
+
+
+class _FakeVectorDB:
+    def __init__(self):
+        self.docs = []
+
+    async def insert_documents(self, docs):
+        ids = []
+        for doc in docs:
+            doc_id = f"doc-{len(self.docs)}"
+            doc.metadata["id"] = doc_id
+            ids.append(doc_id)
+            self.docs.append(doc)
+        return ids
+
+    async def search_by_metadata(self, filter: str, limit: int = 0):
+        document_uri = filter.split("'", 2)[1]
+        docs = [
+            doc
+            for doc in self.docs
+            if doc.metadata.get("document_uri") == document_uri
+        ]
+        return docs[:limit] if limit > 0 else docs
+
+    async def delete_documents_by_ids(self, ids: list[str]):
+        removed = [doc for doc in self.docs if doc.metadata.get("id") in ids]
+        self.docs = [doc for doc in self.docs if doc.metadata.get("id") not in ids]
+        return removed
 
 
 def test_fetch_file_detects_mimetype_and_reads_once(tmp_path):
@@ -194,6 +243,41 @@ def test_document_query_allows_uncapped_index_chunks():
     chunks = store._split_text_for_index(("alpha beta gamma delta " * 400).strip())
 
     assert len(chunks) > 10
+
+
+def test_document_query_store_reuses_vector_db_per_context(monkeypatch):
+    monkeypatch.setattr(
+        document_query_module,
+        "_load_config",
+        lambda _agent: {
+            "chunk_size": 100,
+            "chunk_overlap": 10,
+            "max_index_chunks": 20,
+        },
+    )
+    monkeypatch.setattr(
+        DocumentQueryStore,
+        "init_vector_db",
+        lambda _self: _FakeVectorDB(),
+    )
+
+    agent = _StoreAgent("ctx-one")
+    store = DocumentQueryStore.get(agent)
+
+    success, ids = run_async(
+        store.add_document("alpha beta gamma " * 20, "/tmp/book.txt")
+    )
+    second_store = DocumentQueryStore.get(agent)
+
+    assert success is True
+    assert ids
+    assert second_store is store
+    assert second_store.vector_db is store.vector_db
+    assert run_async(second_store.document_exists("/tmp/book.txt")) is True
+
+    isolated_store = DocumentQueryStore.get(_StoreAgent("ctx-two"))
+    assert isolated_store is not store
+    assert run_async(isolated_store.document_exists("/tmp/book.txt")) is False
 
 
 def test_document_query_thumbnail_matches_plugin_hub_limits():

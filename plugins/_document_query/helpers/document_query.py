@@ -72,15 +72,30 @@ def _load_config(agent: Agent) -> dict:
 class DocumentQueryStore:
     """FAISS Store for document query results."""
 
+    CONTEXT_DATA_KEY = "_document_query_store"
     DEFAULT_CHUNK_SIZE = 1000
     DEFAULT_CHUNK_OVERLAP = 100
     DEFAULT_MAX_INDEX_CHUNKS = 1200
+    _GET_LOCK = threading.RLock()
 
-    @staticmethod
-    def get(agent: Agent):
+    @classmethod
+    def get(cls, agent: Agent):
         if not agent or not agent.config:
             raise ValueError("Agent and agent config must be provided")
-        return DocumentQueryStore(agent)
+
+        context = getattr(agent, "context", None)
+        if context is None:
+            return cls(agent)
+
+        with cls._GET_LOCK:
+            store = context.get_data(cls.CONTEXT_DATA_KEY, recursive=False)
+            if not isinstance(store, cls):
+                store = cls(agent)
+                context.set_data(cls.CONTEXT_DATA_KEY, store, recursive=False)
+            else:
+                store.agent = agent
+                store.config = _load_config(agent)
+            return store
 
     def __init__(self, agent: Agent):
         self.agent = agent
