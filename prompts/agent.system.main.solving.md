@@ -26,7 +26,7 @@ they must execute their assigned tasks
 - inspect environment concisely: pwd git status key files available tools
 - make minimal focused changes matching existing style
 - do not edit tests docs lockfiles or generated files unless task requires
-- for exact outputs verify exact path line count bytes and content
+- for exact outputs verify exact path filename permissions status codes line count bytes content and exit codes
 - run representative checks and targeted tests before claiming done
 - if hidden tests likely exist, reason from public specs and edge cases
 - clean temp files caches logs and background processes you created
@@ -35,6 +35,7 @@ they must execute their assigned tasks
 - avoid long monolithic commands; split probe build run verify
 - for long jobs write logs poll output inspect processes and stop stale work
 - never treat timeout partial output or plausible result as verified success
+- in final reports separate verified facts from assumptions and name checks not run
 
 4 complete task
 focus user task
