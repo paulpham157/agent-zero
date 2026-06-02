@@ -8,7 +8,8 @@ timeouts and thread-safe parsers.
 - **Strategy-pattern parsers** - MIME-type routing to dedicated parser classes
 - **Centralized fetching** - local and HTTP(S) resources are fetched once, size-checked, then passed to parsers
 - **LiteParse first path** - fast local parsing for PDFs and supported document/image formats, with legacy fallbacks
-- **Adaptive OCR** - large text-rich PDFs skip OCR automatically to avoid pathological parse times
+- **Adaptive OCR** - long PDFs skip OCR automatically to avoid pathological parse times
+- **Adaptive indexing** - very large extracted documents increase chunk size to keep embedding work bounded
 - **Bounded parser execution** - sync parsers are offloaded to asyncio.to_thread and globally capped across chats
 - **Configurable timeouts** - per-document and gather-level timeouts
 - **Expanded format support** - PDF, HTML, text, YAML, XML, TOML, JS, TS, images, and catch-all Unstructured
@@ -28,10 +29,11 @@ See default_config.yaml for all options. Key settings:
 | context_intro_chunks | 2 | Leading chunks included per document for title/abstract grounding |
 | chunk_size | 1000 | Text splitter chunk size |
 | chunk_overlap | 100 | Text splitter overlap |
+| max_index_chunks | 1200 | Maximum indexed chunks before adaptive chunk sizing, or 0 for no cap |
 | search_threshold | 0.5 | Similarity search threshold |
 | liteparse_enabled | true | Prefer LiteParse before legacy parser fallbacks |
 | liteparse_num_workers | 2 | Max LiteParse OCR workers per parser job |
-| liteparse_ocr_auto_disable_pages | 30 | Disable OCR for text-rich PDFs at or above this effective page count |
+| liteparse_ocr_auto_disable_pages | 30 | Disable OCR for PDFs at or above this effective page count |
 | thread_offload | true | Offload sync parsers to thread pool |
 
 LiteParse is installed into the Agent Zero framework runtime from hooks.py during

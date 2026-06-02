@@ -6,8 +6,12 @@ from pathlib import Path
 import pytest
 from PIL import Image
 
+from plugins._document_query import hooks as document_query_hooks
 from plugins._document_query.helpers.fetch import FetchedDocument, fetch_public_resource
-from plugins._document_query.helpers.document_query import DocumentQueryHelper
+from plugins._document_query.helpers.document_query import (
+    DocumentQueryHelper,
+    DocumentQueryStore,
+)
 from plugins._document_query.helpers.parsers.base import BaseParser
 from plugins._document_query.helpers.parsers import get_parsers_for_mimetype
 from plugins._document_query.helpers.parsers import liteparse as liteparse_module
@@ -105,12 +109,14 @@ def test_compatibility_imports_point_to_plugin_classes():
 
 def test_liteparse_is_installed_by_docker_and_plugin_hook_requirements():
     root_requirements = (ROOT / "requirements.txt").read_text(encoding="utf-8")
-    plugin_requirements = (
-        ROOT / "plugins" / "_document_query" / "requirements.txt"
+    hooks_source = (
+        ROOT / "plugins" / "_document_query" / "hooks.py"
     ).read_text(encoding="utf-8")
 
     assert "liteparse==2.0.3" in root_requirements
-    assert plugin_requirements.strip().splitlines() == ["liteparse==2.0.3"]
+    assert "_ROOT_REQUIREMENTS_FILE" in hooks_source
+    assert document_query_hooks._liteparse_requirement() == "liteparse==2.0.3"
+    assert not (ROOT / "plugins" / "_document_query" / "requirements.txt").exists()
 
 
 def test_default_config_bounds_liteparse_runtime_concurrency():
@@ -120,6 +126,7 @@ def test_default_config_bounds_liteparse_runtime_concurrency():
 
     assert "parser_concurrency: 1" in default_config
     assert "context_intro_chunks: 2" in default_config
+    assert "max_index_chunks: 1200" in default_config
     assert "liteparse_num_workers: 2" in default_config
     assert "liteparse_ocr_auto_disable_pages: 30" in default_config
     assert "liteparse_subprocess" not in default_config
@@ -137,6 +144,7 @@ def test_config_panel_exposes_document_query_settings():
         "gather_timeout",
         "chunk_size",
         "chunk_overlap",
+        "max_index_chunks",
         "search_threshold",
         "search_limit",
         "context_intro_chunks",
@@ -160,6 +168,32 @@ def test_config_panel_exposes_document_query_settings():
     ]:
         assert f"config.{setting}" in config_html
     assert "liteparse_subprocess" not in config_html
+
+
+def test_document_query_adapts_chunk_size_for_large_documents():
+    store = object.__new__(DocumentQueryStore)
+    store.config = {
+        "chunk_size": 100,
+        "chunk_overlap": 10,
+        "max_index_chunks": 10,
+    }
+
+    chunks = store._split_text_for_index(("alpha beta gamma delta " * 400).strip())
+
+    assert 1 < len(chunks) <= 10
+
+
+def test_document_query_allows_uncapped_index_chunks():
+    store = object.__new__(DocumentQueryStore)
+    store.config = {
+        "chunk_size": 100,
+        "chunk_overlap": 10,
+        "max_index_chunks": 0,
+    }
+
+    chunks = store._split_text_for_index(("alpha beta gamma delta " * 400).strip())
+
+    assert len(chunks) > 10
 
 
 def test_document_query_thumbnail_matches_plugin_hub_limits():
@@ -251,7 +285,7 @@ def test_liteparse_keeps_ocr_for_small_pdf(monkeypatch):
     assert kwargs["ocr_enabled"] is True
 
 
-def test_liteparse_keeps_ocr_for_large_text_sparse_pdf(monkeypatch):
+def test_liteparse_disables_ocr_for_large_text_sparse_pdf(monkeypatch):
     parser = LiteParseParser()
     fetched = FetchedDocument(
         uri="/tmp/scan.pdf",
@@ -273,7 +307,7 @@ def test_liteparse_keeps_ocr_for_large_text_sparse_pdf(monkeypatch):
 
     kwargs = parser._liteparse_kwargs({}, fetched, "/tmp/scan.pdf")
 
-    assert kwargs["ocr_enabled"] is True
+    assert kwargs["ocr_enabled"] is False
 
 
 def test_liteparse_respects_explicit_ocr_disabled(monkeypatch):

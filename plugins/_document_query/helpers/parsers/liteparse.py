@@ -14,7 +14,6 @@ from .base import BaseParser
 
 
 DEFAULT_OCR_AUTO_DISABLE_PAGES = 30
-DEFAULT_OCR_AUTO_MIN_CHARS_PER_PAGE = 80
 DEFAULT_OCR_AUTO_SAMPLE_PAGES = 5
 
 
@@ -182,11 +181,7 @@ class LiteParseParser(BaseParser):
         if effective_pages < auto_disable_pages:
             return False
 
-        min_chars_per_page = _positive_int(
-            config.get("liteparse_ocr_auto_min_chars_per_page"),
-            DEFAULT_OCR_AUTO_MIN_CHARS_PER_PAGE,
-        )
-        return (profile.text_chars / profile.sampled_pages) >= min_chars_per_page
+        return True
 
 
 def _pdf_text_profile(file_path: str, config: dict) -> _PdfTextProfile | None:

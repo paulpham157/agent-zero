@@ -40,6 +40,14 @@ def _positive_int(value: Any, default: int) -> int:
     return parsed if parsed > 0 else default
 
 
+def _nonnegative_int(value: Any, default: int) -> int:
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return default
+    return parsed if parsed >= 0 else default
+
+
 def _parser_semaphore(config: dict) -> asyncio.Semaphore:
     concurrency = _positive_int(
         config.get("parser_concurrency"),
@@ -66,6 +74,7 @@ class DocumentQueryStore:
 
     DEFAULT_CHUNK_SIZE = 1000
     DEFAULT_CHUNK_OVERLAP = 100
+    DEFAULT_MAX_INDEX_CHUNKS = 1200
 
     @staticmethod
     def get(agent: Agent):
@@ -103,12 +112,7 @@ class DocumentQueryStore:
         doc_metadata = metadata or {}
         doc_metadata["document_uri"] = document_uri
         doc_metadata["timestamp"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        chunk_size = self.config.get("chunk_size", self.DEFAULT_CHUNK_SIZE)
-        chunk_overlap = self.config.get("chunk_overlap", self.DEFAULT_CHUNK_OVERLAP)
-        text_splitter = RecursiveCharacterTextSplitter(
-            chunk_size=chunk_size, chunk_overlap=chunk_overlap
-        )
-        chunks = text_splitter.split_text(text)
+        chunks = self._split_text_for_index(text)
         docs = []
         for i, chunk in enumerate(chunks):
             chunk_metadata = doc_metadata.copy()
@@ -128,6 +132,51 @@ class DocumentQueryStore:
             err_text = errors.format_error(e)
             PrintStyle.error(f"Error adding document '{document_uri}': {err_text}")
             return False, []
+
+    def _split_text_for_index(self, text: str) -> list[str]:
+        chunk_size = _positive_int(
+            self.config.get("chunk_size"),
+            self.DEFAULT_CHUNK_SIZE,
+        )
+        chunk_overlap = min(
+            _nonnegative_int(
+                self.config.get("chunk_overlap"),
+                self.DEFAULT_CHUNK_OVERLAP,
+            ),
+            max(0, chunk_size - 1),
+        )
+        chunks = self._split_text(text, chunk_size, chunk_overlap)
+
+        max_chunks = _nonnegative_int(
+            self.config.get("max_index_chunks"),
+            self.DEFAULT_MAX_INDEX_CHUNKS,
+        )
+        if not max_chunks or len(chunks) <= max_chunks:
+            return chunks
+
+        overlap_ratio = chunk_overlap / chunk_size if chunk_size else 0
+        overlap_ratio = max(0, min(overlap_ratio, 0.5))
+        target_size = max(
+            chunk_size + 1,
+            int(len(text) / max(1, max_chunks * (1 - overlap_ratio))) + 1,
+        )
+
+        for _ in range(8):
+            target_overlap = min(int(target_size * overlap_ratio), target_size - 1)
+            chunks = self._split_text(text, target_size, target_overlap)
+            if len(chunks) <= max_chunks or target_size >= len(text):
+                return chunks
+            target_size = min(len(text), int(target_size * 1.25) + 1)
+
+        return chunks
+
+    @staticmethod
+    def _split_text(text: str, chunk_size: int, chunk_overlap: int) -> list[str]:
+        text_splitter = RecursiveCharacterTextSplitter(
+            chunk_size=chunk_size,
+            chunk_overlap=chunk_overlap,
+        )
+        return text_splitter.split_text(text)
 
     async def get_document(self, document_uri: str) -> Optional[Document]:
         if not self.vector_db:

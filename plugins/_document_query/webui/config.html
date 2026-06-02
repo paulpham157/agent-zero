@@ -15,6 +15,7 @@
             context_intro_chunks: 2,
             chunk_size: 1000,
             chunk_overlap: 100,
+            max_index_chunks: 1200,
             search_threshold: 0.5,
             search_limit: 100,
             max_remote_bytes: 52428800,
@@ -40,6 +41,7 @@
             this.ensureInt('context_intro_chunks', 2, 0);
             this.ensureInt('chunk_size', 1000, 100);
             this.ensureInt('chunk_overlap', 100, 0);
+            this.ensureInt('max_index_chunks', 1200, 0);
             this.ensureInt('search_limit', 100, 1);
             this.ensureInt('max_remote_bytes', 52428800, 1);
             this.ensureNumber('search_threshold', 0.5, 0, 1);
@@ -169,6 +171,20 @@
                         <input type="number" min="0" max="1" step="0.05"
                             @change="ensureNumber('search_threshold', 0.5, 0, 1)"
                             x-model.number="config.search_threshold" />
+                    </div>
+                </div>
+
+                <div class="field">
+                    <div class="field-label">
+                        <div class="field-title">Max index chunks</div>
+                        <div class="field-description">
+                            Adapt chunk size when a parsed document would exceed this many indexed chunks. Use 0 for no cap.
+                        </div>
+                    </div>
+                    <div class="field-control">
+                        <input type="number" min="0" step="50"
+                            @change="ensureInt('max_index_chunks', 1200, 0)"
+                            x-model.number="config.max_index_chunks" />
                     </div>
                 </div>
 

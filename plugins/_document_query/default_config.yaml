@@ -13,6 +13,7 @@ parser_concurrency: 1        # max parser jobs running across all chats in this 
 context_intro_chunks: 2      # always include leading chunks per document for title/abstract grounding
 chunk_size: 1000
 chunk_overlap: 100
+max_index_chunks: 1200       # adapt chunk size above this many indexed chunks
 search_threshold: 0.5
 search_limit: 100
 max_remote_bytes: 52428800   # 50 MB
@@ -29,9 +30,8 @@ liteparse_dpi: 150
 liteparse_preserve_very_small_text: false
 liteparse_output_format: text
 liteparse_num_workers: 2     # balanced default for OCR speed without overloading shared Web UI runtime
-liteparse_ocr_auto_disable: true       # disable OCR automatically for large text-rich PDFs
+liteparse_ocr_auto_disable: true       # disable OCR automatically for long PDFs
 liteparse_ocr_auto_disable_pages: 30   # OCR-on runtime climbs sharply around this page count
-liteparse_ocr_auto_min_chars_per_page: 80
 liteparse_ocr_auto_sample_pages: 5
 pdf_ocr_fallback: true       # enable legacy Tesseract fallback after PyMuPDF
 thread_offload: true         # offload sync parsers to thread pool
