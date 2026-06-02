@@ -10,6 +10,7 @@ from helpers.ws_manager import WsResult
 
 from plugins._a0_connector.helpers.exec_config import build_exec_config
 from plugins._a0_connector.helpers.event_bridge import get_context_log_entries
+from plugins._a0_connector.helpers.version import agent_zero_version
 from plugins._a0_connector.helpers.ws_runtime import (
     clear_remote_tree_snapshot,
     clear_sid_host_browser_metadata,
@@ -119,6 +120,7 @@ class WsConnector(WsHandler):
             self._associate_declared_context(data, sid)
             return {
                 "protocol": PROTOCOL_VERSION,
+                "agent_zero_version": agent_zero_version(),
                 "features": WS_FEATURES,
                 "exec_config": build_exec_config(),
                 "remote_tools": self._remote_tool_state(sid),

@@ -6,6 +6,7 @@ import sys
 
 from helpers.api import Request, Response
 import plugins._a0_connector.api.v1.base as connector_base
+from plugins._a0_connector.helpers.version import agent_zero_version
 
 
 _BASE_FEATURES = [
@@ -80,6 +81,7 @@ class Capabilities(connector_base.PublicConnectorApiHandler):
         return {
             "protocol": "a0-connector.v1",
             "version": "0.1.0",
+            "agent_zero_version": agent_zero_version(),
             "auth": ["session"],
             "auth_required": bool(login.is_login_required()),
             "transports": ["http", "websocket"],
