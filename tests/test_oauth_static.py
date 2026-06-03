@@ -19,7 +19,11 @@ def test_oauth_settings_exposes_provider_cards_and_model_slots():
     assert "provider_map" in store_js
     assert "<h3>Accounts</h3>" not in config_html
     assert "oauth-plan-catalog" not in config_html
-    assert "oauth-model-provider-choice" not in config_html
+    assert "oauth-model-provider-field" in config_html
+    assert "slotProviderChoices(slot.key)" in config_html
+    assert "connectedProviderCards().length" in config_html
+    assert "useProviderForSlot(slot.key, $event.target.value)" in config_html
+    assert "slotCanUseModels(slot.key)" in config_html
     assert "<span>Account</span>" not in config_html
     assert "oauth-connected-panel" not in config_html
     assert "oauth-provider-usage" in config_html
@@ -53,7 +57,8 @@ def test_oauth_settings_exposes_provider_specific_controls_and_generic_copy():
     assert "oauth-auth-attempt" in config_html
     assert "oauth-detail-metrics" not in config_html
     assert "Codex/ChatGPT Account" not in config_html + store_js
-    assert "Available models from selected provider" in config_html
+    assert "activeModelsDescription()" in config_html + store_js
+    assert "activeProviderModels()" in config_html + store_js
     assert "Available models from Codex account" not in config_html
     assert "disconnectProvider(card.provider_id)" in config_html
     assert "disconnectProvider($store.oauthConfig.selectedProviderId)" not in config_html
@@ -78,7 +83,7 @@ def test_oauth_connect_buttons_disable_during_any_provider_connection():
 def test_oauth_available_models_list_sits_above_advanced_without_borders():
     config_html = (PROJECT_ROOT / "plugins/_oauth/webui/config.html").read_text(encoding="utf-8")
 
-    assert "Available models from selected provider" in config_html
+    assert "activeModelsDescription()" in config_html
     assert config_html.index("<h3>Providers</h3>") < config_html.index("Choose your models")
     assert config_html.index("<h3>Providers</h3>") < config_html.index("<summary>Advanced</summary>")
     assert config_html.index("Available models") < config_html.index("<summary>Advanced</summary>")
@@ -99,6 +104,12 @@ def test_oauth_model_slots_reuse_model_config_api():
     assert "isOauthProvider" in store_js
     assert "providerCards()" in store_js
     assert "saveModelConfigIfDirty" in store_js
+    assert "slotProviderChoices()" in store_js
+    assert "modelProviderOptionLabel(provider)" in store_js
+    assert "return this.connectedProviderCards();" in store_js
+    assert "if (!this.providerConnected(providerId)) return;" in store_js
+    assert "const providerId = slot.provider;" in store_js
+    assert "const providerId = this.isOauthProvider(this.activeModelProvider)" not in store_js
 
 
 def test_browser_callback_completion_is_observed_from_modal():

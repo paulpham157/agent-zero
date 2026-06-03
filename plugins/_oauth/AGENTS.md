@@ -25,6 +25,7 @@
 - Add OAuth model providers in `_oauth/conf/model_providers.yaml`, not `_model_config/provider_metadata.yaml`.
 - Provider cards and model slot actions must be driven by backend provider status. Do not reintroduce hardcoded frontend provider lists or fallback provider catalogs.
 - OAuth account surfaces in settings, discovery, and onboarding must use the provider registry/status summary rather than Codex-only frontend state.
+- OAuth settings model slots must keep provider choice editable per slot, list only connected OAuth account providers, and persist the selected provider IDs into `chat_model.provider` and `utility_model.provider`.
 - `helpers/providers/registry.py` is the source of truth for connectable OAuth providers.
 - Usage-plan metadata belongs only to connectable providers. Do not add metadata-only subscription families for providers this plugin cannot connect.
 - API handlers should remain provider-aware. Missing or blank `provider_id` defaults to Codex only for existing backward compatibility; falsey non-string IDs must not silently default.

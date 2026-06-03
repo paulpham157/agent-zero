@@ -504,10 +504,33 @@ export const store = createStore("oauthConfig", {
     return found?.label || this.providerLabel(provider);
   },
 
+  slotProviderChoices() {
+    return this.connectedProviderCards();
+  },
+
+  modelProviderOptionLabel(provider) {
+    return provider?.display_name || provider?.short_name || provider?.provider_id || "Connected account";
+  },
+
   slotStatusLabel(key) {
     const slot = this.modelSlot(key);
-    if (this.slotUsesOauth(key)) return `Using ${this.providerLabel(slot.provider)}`;
+    if (this.slotUsesOauth(key)) return "";
     return `Currently ${this.providerName(slot.provider)}`;
+  },
+
+  slotCanUseModels(key) {
+    const providerId = this.modelSlot(key).provider;
+    return this.isOauthProvider(providerId) && this.providerConnected(providerId);
+  },
+
+  activeProviderModels() {
+    if (!this.providerConnected(this.activeModelProvider)) return [];
+    return this.providerModels[this.activeModelProvider] || [];
+  },
+
+  activeModelsDescription() {
+    if (!this.providerConnected(this.activeModelProvider)) return "";
+    return `Available models from ${this.providerLabel(this.activeModelProvider)}`;
   },
 
   markModelDirty(key) {
@@ -516,7 +539,7 @@ export const store = createStore("oauthConfig", {
   },
 
   useProviderForSlot(key, providerId) {
-    if (!this.isOauthProvider(providerId)) return;
+    if (!this.providerConnected(providerId)) return;
     const slot = this.modelSlot(key);
     const previousProvider = slot.provider;
     slot.provider = providerId;
@@ -526,7 +549,7 @@ export const store = createStore("oauthConfig", {
     }
     if (!slot.kwargs || typeof slot.kwargs !== "object") slot.kwargs = {};
     this.activeModelProvider = providerId;
-    this.models = this.providerModels[providerId] || [];
+    this.models = this.activeProviderModels();
     this.markModelDirty(key);
     if (this.models.length) {
       this.openModelDropdown(key);
@@ -544,14 +567,15 @@ export const store = createStore("oauthConfig", {
     utility.api_base = main.api_base || "";
     utility.kwargs = clone(main.kwargs || {});
     this.activeModelProvider = utility.provider || this.activeModelProvider;
+    this.models = this.activeProviderModels();
     this.markModelDirty("utility_model");
   },
 
   openModelDropdown(key) {
-    if (!this.slotUsesOauth(key)) return;
+    if (!this.slotCanUseModels(key)) return;
     const providerId = this.modelSlot(key).provider;
     this.activeModelProvider = providerId;
-    this.models = this.providerModels[providerId] || [];
+    this.models = this.activeProviderModels();
     this.modelDropdown[key] = { ...this.modelDropdown[key], open: true };
     if (!this.models.length && !this.loadingModelsProvider && this.providerConnected(providerId)) {
       void this.loadModels({ providerId, openDropdown: key, silent: true });
@@ -565,7 +589,7 @@ export const store = createStore("oauthConfig", {
   filteredModels(key) {
     const slot = this.modelSlot(key);
     const query = String(slot.name || "").trim().toLowerCase();
-    const models = this.providerModels[slot.provider] || this.models || [];
+    const models = this.providerModels[slot.provider] || [];
     const filtered = query
       ? models.filter((model) => String(model).toLowerCase().includes(query))
       : models;
@@ -574,13 +598,11 @@ export const store = createStore("oauthConfig", {
 
   selectModel(key, model) {
     const slot = this.modelSlot(key);
-    const providerId = this.isOauthProvider(this.activeModelProvider)
-      ? this.activeModelProvider
-      : slot.provider;
-    if (this.isOauthProvider(providerId)) {
-      slot.provider = providerId;
-    }
+    const providerId = slot.provider;
+    if (!this.providerConnected(providerId)) return;
     slot.name = model;
+    this.activeModelProvider = providerId;
+    this.models = this.activeProviderModels();
     this.markModelDirty(key);
     this.closeModelDropdown(key);
   },
@@ -638,8 +660,11 @@ export const store = createStore("oauthConfig", {
           ui.quota_project_id = card.quota_project_id;
         }
       }
-      if (!this.isOauthProvider(this.activeModelProvider)) {
-        this.activeModelProvider = this.providerCards()[0]?.provider_id || CODEX_PROVIDER;
+      if (!this.providerConnected(this.activeModelProvider)) {
+        this.activeModelProvider = this.connectedProviderCards()[0]?.provider_id
+          || this.providerCards()[0]?.provider_id
+          || CODEX_PROVIDER;
+        this.models = this.activeProviderModels();
       }
       if (!this.isOauthProvider(this.selectedProviderId)) {
         this.selectedProviderId = this.connectedProviderCards()[0]?.provider_id

@@ -221,7 +221,7 @@
                     <span class="oauth-model-icon material-symbols-outlined" x-text="slot.icon"></span>
                     <div class="oauth-model-title">
                       <strong x-text="slot.title"></strong>
-                      <span x-text="$store.oauthConfig.slotStatusLabel(slot.key)"></span>
+                      <span x-show="$store.oauthConfig.slotStatusLabel(slot.key)" x-text="$store.oauthConfig.slotStatusLabel(slot.key)"></span>
                     </div>
                     <div class="oauth-model-actions">
                       <button
@@ -240,14 +240,28 @@
                   <p class="oauth-model-description" x-text="slot.description"></p>
 
                   <div class="oauth-model-picker" @click.outside="$store.oauthConfig.closeModelDropdown(slot.key)">
+                    <label class="oauth-model-provider-field">
+                      <span>Provider</span>
+                      <select
+                        :value="$store.oauthConfig.modelSlot(slot.key).provider"
+                        @change="$store.oauthConfig.useProviderForSlot(slot.key, $event.target.value)"
+                        :disabled="!$store.oauthConfig.connectedProviderCards().length"
+                      >
+                        <option value="" disabled>Choose connected provider</option>
+                        <template x-for="provider in $store.oauthConfig.slotProviderChoices(slot.key)" :key="`${slot.key}-${provider.provider_id}`">
+                          <option :value="provider.provider_id" x-text="$store.oauthConfig.modelProviderOptionLabel(provider)"></option>
+                        </template>
+                      </select>
+                    </label>
+
                     <div class="oauth-model-input-row">
                       <input
                         type="text"
                         x-model="$store.oauthConfig.modelSlot(slot.key).name"
                         @input="$store.oauthConfig.markModelDirty(slot.key)"
                         @focus="$store.oauthConfig.openModelDropdown(slot.key)"
-                        :disabled="!$store.oauthConfig.slotUsesOauth(slot.key)"
-                        placeholder="Search or enter a provider model"
+                        :disabled="!$store.oauthConfig.slotCanUseModels(slot.key)"
+                        :placeholder="$store.oauthConfig.slotCanUseModels(slot.key) ? 'Search or enter a provider model' : 'Choose a connected provider first'"
                       />
                       <button
                         class="oauth-model-search"
@@ -255,7 +269,7 @@
                         title="Check models"
                         aria-label="Check models"
                         @click="$store.oauthConfig.loadModels({ providerId: $store.oauthConfig.modelSlot(slot.key).provider, openDropdown: slot.key })"
-                        :disabled="!$store.oauthConfig.slotUsesOauth(slot.key) || !$store.oauthConfig.providerConnected($store.oauthConfig.modelSlot(slot.key).provider) || $store.oauthConfig.loadingModelsProvider === $store.oauthConfig.modelSlot(slot.key).provider"
+                        :disabled="!$store.oauthConfig.slotCanUseModels(slot.key) || $store.oauthConfig.loadingModelsProvider === $store.oauthConfig.modelSlot(slot.key).provider"
                       >
                         <span class="material-symbols-outlined" x-text="$store.oauthConfig.loadingModelsProvider === $store.oauthConfig.modelSlot(slot.key).provider ? 'progress_activity' : 'search'"></span>
                       </button>
@@ -285,15 +299,15 @@
           </template>
         </section>
 
-        <section class="oauth-models-panel" x-show="$store.oauthConfig.models.length">
+        <section class="oauth-models-panel" x-show="$store.oauthConfig.activeProviderModels().length">
           <div class="oauth-section-head">
             <div>
               <h3>Available models</h3>
-              <p>Available models from selected provider</p>
+              <p x-text="$store.oauthConfig.activeModelsDescription()"></p>
             </div>
           </div>
           <div class="oauth-models">
-            <template x-for="model in $store.oauthConfig.models" :key="model">
+            <template x-for="model in $store.oauthConfig.activeProviderModels()" :key="model">
               <span x-text="model"></span>
             </template>
           </div>
@@ -932,7 +946,38 @@
 
     .oauth-model-picker {
       position: relative;
+      display: grid;
+      gap: 8px;
       min-width: 0;
+    }
+
+    .oauth-model-provider-field {
+      display: grid;
+      min-width: 0;
+      gap: 6px;
+    }
+
+    .oauth-model-provider-field span {
+      color: var(--color-text-secondary);
+      font-size: 0.74rem;
+      font-weight: 750;
+    }
+
+    .oauth-model-provider-field select {
+      width: 100%;
+      min-width: 0;
+      min-height: 36px;
+      padding: 7px 10px;
+      border: 1px solid color-mix(in srgb, var(--color-border) 74%, transparent);
+      border-radius: 8px;
+      background: var(--color-input);
+      color: var(--color-text);
+      font: inherit;
+      font-size: 0.82rem;
+    }
+
+    .oauth-model-provider-field select:disabled {
+      opacity: .58;
     }
 
     .oauth-model-input-row {
