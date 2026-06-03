@@ -1,7 +1,7 @@
 from abc import abstractmethod
 import json
 import threading
-from urllib.parse import urlsplit
+from urllib.parse import urlsplit, unquote
 from functools import wraps
 from pathlib import Path
 from typing import Union, Dict, Any
@@ -109,8 +109,16 @@ def is_safe_next_url(value: str | None) -> bool:
         return False
     if "\r" in value or "\n" in value:
         return False
+    # Reject raw backslashes (browsers normalize `/\host` to `//host` -> external).
+    if "\\" in value:
+        return False
 
-    parsed = urlsplit(value)
+    # Decode percent-escapes so encoded backslashes (e.g. `%5C`) are caught too.
+    decoded = unquote(value)
+    if "\\" in decoded:
+        return False
+
+    parsed = urlsplit(decoded)
     if parsed.scheme or parsed.netloc:
         return False
 

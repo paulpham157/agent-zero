@@ -171,3 +171,23 @@ def test_auth_redirect_includes_original_path_and_query(monkeypatch) -> None:
     location = response.headers["Location"]
     assert location.startswith("/login?next=")
     assert "%2Fplugins%2Fa0_voqualizer%2Fwebui%2Fvoqualizer.html%3Fcontext%3DrlO1iMV7" in location
+
+
+def test_is_safe_next_url_rejects_backslash_open_redirects() -> None:
+    from helpers.api import is_safe_next_url
+
+    # Raw backslash forms
+    assert is_safe_next_url("/\\evil.example") is False
+    assert is_safe_next_url("\\/evil.example") is False
+    assert is_safe_next_url("/path\\evil") is False
+
+    # Percent-encoded backslash forms
+    assert is_safe_next_url("/%5Cevil.example") is False
+    assert is_safe_next_url("%5C/evil.example") is False
+    assert is_safe_next_url("/%5cevil.example") is False  # lowercase hex
+
+    # Mixed / double-encoded edge
+    assert is_safe_next_url("/path/%5Cevil") is False
+
+    # Sanity: a legitimate relative path still passes
+    assert is_safe_next_url("/plugins/a0_voqualizer/webui/voqualizer.html") is True
