@@ -140,10 +140,13 @@ def test_right_canvas_uses_desktop_surface_id_and_migrates_legacy_office_state()
     assert "editor-preview-title" in editor_web_panel
     assert "editor-preview-page-editor" in editor_web_panel
     assert "editor-table-wrap" in editor_web_panel
+    assert "editor-empty" in editor_web_panel
+    assert "runNewMenuAction('open')" in editor_web_panel
+    assert "runNewMenuAction('markdown')" in editor_web_panel
     assert "closeAllFiles" in editor_store
     assert "confirmPendingClose" in editor_store
-    assert "ensureInitialMarkdownFile" in editor_store
-    assert "await this.ensureInitialMarkdownFile();" in editor_store
+    assert "ensureInitialMarkdownFile" not in editor_store
+    assert "_initialCreatePromise" not in editor_store
     assert "startPreviewEdit" in editor_store
     assert "applyPreviewEdit" in editor_store
     assert "previewEditDirty" in editor_store
@@ -500,6 +503,20 @@ def test_editor_plugin_owns_markdown_sessions_and_active_context_extras():
     assert "from plugins._office.helpers import document_store, markdown_sessions" not in office_ws
     assert not (PROJECT_ROOT / "plugins" / "_office" / "helpers" / "markdown_sessions.py").exists()
     assert "syncTextEditorResultsIntoOpenEditor" in editor_result_sync
+
+
+def test_editor_open_file_browser_prefers_context_home_before_workdir_fallback():
+    editor_store = read("plugins", "_editor", "webui", "editor-store.js")
+    start = editor_store.index("async openFileBrowser()")
+    end = editor_store.index("\n  async openPath", start)
+    open_file_browser = editor_store[start:end]
+
+    home_lookup = open_file_browser.index('const home = await callEditor("home");')
+    settings_fallback = open_file_browser.index('const response = await callJsonApi("settings_get", null);')
+
+    assert home_lookup < settings_fallback
+    assert "workdirPath = home.path;" in open_file_browser
+    assert "workdirPath = response?.settings?.workdir_path || workdirPath;" in open_file_browser
 
 
 def test_office_and_desktop_skills_are_rehomed_and_renamed():
