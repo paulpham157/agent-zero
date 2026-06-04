@@ -52,9 +52,14 @@ def test_oauth_settings_exposes_provider_specific_controls_and_generic_copy():
     assert "supports_quota_project" in config_html + store_js
     assert "OAuth client ID" in config_html
     assert "quota_project_id" in config_html + store_js
-    assert "submitManualCallback($store.oauthConfig.selectedProviderId)" in config_html
-    assert "cancelConnect($store.oauthConfig.selectedProviderId)" in config_html
+    assert "providerDetailOpen(card.provider_id)" in config_html + store_js
+    assert "providerDevice(card.provider_id)?.user_code" in config_html
+    assert "submitManualCallback(card.provider_id)" in config_html
+    assert "cancelConnect(card.provider_id)" in config_html
+    assert "selectedProvider()" not in config_html
     assert "oauth-auth-attempt" in config_html
+    assert "oauth-provider-row-detail" in config_html
+    assert "oauth-provider-detail" not in config_html
     assert "oauth-detail-metrics" not in config_html
     assert "Codex/ChatGPT Account" not in config_html + store_js
     assert "activeModelsDescription()" in config_html + store_js
@@ -88,7 +93,8 @@ def test_oauth_available_models_list_sits_above_advanced_without_borders():
     assert config_html.index("<h3>Providers</h3>") < config_html.index("<summary>Advanced</summary>")
     assert config_html.index("Available models") < config_html.index("<summary>Advanced</summary>")
     assert ".oauth-models-panel {\n      display: grid;\n      gap: 10px;\n      padding: 0;\n      border: 0;\n    }" in config_html
-    assert ".oauth-provider-list,\n    .oauth-provider-detail {\n      display: grid;\n      gap: 12px;\n      padding: 0;\n      border: 0;" in config_html
+    assert ".oauth-provider-list {\n      display: grid;\n      gap: 12px;\n      padding: 0;\n      border: 0;" in config_html
+    assert ".oauth-provider-row-detail {\n      display: grid;\n      grid-column: 1 / -1;" in config_html
     assert ".oauth-advanced {\n      border: 0;\n      border-radius: 0;\n      padding: 0;\n    }" in config_html
     model_chip_rule = config_html.split(".oauth-models span {", 1)[1].split("}", 1)[0]
     assert "border:" not in model_chip_rule

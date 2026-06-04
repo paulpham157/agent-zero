@@ -89,116 +89,90 @@
                     </div>
                   </template>
                 </div>
+
+                <div class="oauth-provider-row-detail" x-show="$store.oauthConfig.providerDetailOpen(card.provider_id)" @click.stop>
+                  <div class="oauth-detail-grid">
+                    <label class="oauth-provider-input" x-show="$store.oauthConfig.providerShowSetupFields(card.provider_id) && card.supports_enterprise_domain">
+                      <span>Enterprise domain</span>
+                      <input
+                        type="text"
+                        x-model="$store.oauthConfig.providerUiFor(card.provider_id).enterprise_domain"
+                        name="enterprise_domain"
+                        placeholder="github.com"
+                      />
+                    </label>
+
+                    <div class="oauth-provider-fields" x-show="$store.oauthConfig.providerShowSetupFields(card.provider_id) && card.supports_oauth_client_config">
+                      <label class="oauth-provider-input">
+                        <span>OAuth client ID</span>
+                        <input
+                          type="text"
+                          x-model="$store.oauthConfig.providerUiFor(card.provider_id).client_id"
+                          name="oauth_client_id"
+                          placeholder="Google Cloud OAuth client ID"
+                        />
+                      </label>
+                      <label class="oauth-provider-input">
+                        <span>OAuth client secret</span>
+                        <input
+                          type="password"
+                          x-model="$store.oauthConfig.providerUiFor(card.provider_id).client_secret"
+                          name="oauth_client_secret"
+                          autocomplete="off"
+                          placeholder="Google Cloud OAuth client secret"
+                        />
+                      </label>
+                      <label class="oauth-provider-input" x-show="card.supports_quota_project">
+                        <span>Quota project</span>
+                        <input
+                          type="text"
+                          x-model="$store.oauthConfig.providerUiFor(card.provider_id).quota_project_id"
+                          name="quota_project_id"
+                          placeholder="Optional Google Cloud project ID"
+                        />
+                      </label>
+                    </div>
+
+                    <div class="oauth-device" x-show="$store.oauthConfig.providerDevice(card.provider_id)?.user_code">
+                      <span>Enter this code</span>
+                      <strong x-text="$store.oauthConfig.providerDevice(card.provider_id)?.user_code"></strong>
+                      <button class="text-button" type="button" @click="$store.oauthConfig.cancelConnect(card.provider_id)">
+                        <span class="material-symbols-outlined">close</span>
+                        <span>Cancel</span>
+                      </button>
+                    </div>
+
+                    <div class="oauth-manual-callback" x-show="card.supports_manual_callback && $store.oauthConfig.providerDevice(card.provider_id)?.flow === 'browser_pkce' && !card.connected">
+                      <input
+                        type="text"
+                        x-model="$store.oauthConfig.providerUiFor(card.provider_id).manualCallback"
+                        placeholder="Paste callback URL, query string, or code"
+                      />
+                      <button type="button" class="oauth-connect secondary" @click="$store.oauthConfig.submitManualCallback(card.provider_id)">
+                        <span class="material-symbols-outlined">check</span>
+                        <span>Submit</span>
+                      </button>
+                      <button type="button" class="oauth-connect secondary" @click="$store.oauthConfig.cancelConnect(card.provider_id)">
+                        <span class="material-symbols-outlined">close</span>
+                        <span>Cancel</span>
+                      </button>
+                    </div>
+
+                    <div class="oauth-auth-attempt" x-show="$store.oauthConfig.providerDevice(card.provider_id) && !$store.oauthConfig.providerDevice(card.provider_id)?.user_code && !card.supports_manual_callback">
+                      <span>Sign-in started</span>
+                      <button class="text-button" type="button" @click="$store.oauthConfig.cancelConnect(card.provider_id)">
+                        <span class="material-symbols-outlined">close</span>
+                        <span>Cancel</span>
+                      </button>
+                    </div>
+
+                    <p class="oauth-provider-note" x-show="$store.oauthConfig.providerShowNote(card.provider_id)" x-text="card.warning || card.note"></p>
+                  </div>
+                </div>
               </article>
             </template>
           </div>
         </section>
-
-        <template x-if="$store.oauthConfig.selectedProvider() && !$store.oauthConfig.selectedProvider().connected">
-          <section class="oauth-provider-detail">
-            <div class="oauth-provider-detail-head">
-              <div class="oauth-provider-head">
-                <div class="oauth-mark" :class="{ connected: $store.oauthConfig.selectedProvider().connected }">
-                  <span class="material-symbols-outlined" x-text="$store.oauthConfig.selectedProvider().connected ? 'check' : $store.oauthConfig.selectedProvider().mark"></span>
-                </div>
-                <div class="oauth-copy">
-                  <h2 x-text="$store.oauthConfig.selectedProvider().display_name"></h2>
-                  <p x-text="$store.oauthConfig.providerStatusLabel($store.oauthConfig.selectedProviderId)"></p>
-                </div>
-              </div>
-              <div class="oauth-primary">
-                <button
-                  class="oauth-connect"
-                  type="button"
-                  @click="$store.oauthConfig.connectProvider($store.oauthConfig.selectedProviderId)"
-                  :disabled="$store.oauthConfig.providerPrimaryDisabled($store.oauthConfig.selectedProviderId) || !$store.oauthConfig.providerSetupReady($store.oauthConfig.selectedProviderId)"
-                  x-show="!$store.oauthConfig.selectedProvider().connected"
-                >
-                  <span class="material-symbols-outlined" x-text="$store.oauthConfig.connectingProvider === $store.oauthConfig.selectedProviderId ? 'progress_activity' : 'login'"></span>
-                  <span x-text="$store.oauthConfig.providerPrimaryLabel($store.oauthConfig.selectedProviderId)"></span>
-                </button>
-              </div>
-            </div>
-
-            <div class="oauth-detail-grid">
-              <label class="oauth-provider-input" x-show="$store.oauthConfig.selectedProvider().supports_enterprise_domain && !$store.oauthConfig.selectedProvider().connected">
-                <span>Enterprise domain</span>
-                <input
-                  type="text"
-                  x-model="$store.oauthConfig.providerUiFor($store.oauthConfig.selectedProviderId).enterprise_domain"
-                  name="enterprise_domain"
-                  placeholder="github.com"
-                />
-              </label>
-
-              <div class="oauth-provider-fields" x-show="$store.oauthConfig.selectedProvider().supports_oauth_client_config && !$store.oauthConfig.selectedProvider().connected">
-                <label class="oauth-provider-input">
-                  <span>OAuth client ID</span>
-                  <input
-                    type="text"
-                    x-model="$store.oauthConfig.providerUiFor($store.oauthConfig.selectedProviderId).client_id"
-                    name="oauth_client_id"
-                    placeholder="Google Cloud OAuth client ID"
-                  />
-                </label>
-                <label class="oauth-provider-input">
-                  <span>OAuth client secret</span>
-                  <input
-                    type="password"
-                    x-model="$store.oauthConfig.providerUiFor($store.oauthConfig.selectedProviderId).client_secret"
-                    name="oauth_client_secret"
-                    autocomplete="off"
-                    placeholder="Google Cloud OAuth client secret"
-                  />
-                </label>
-                <label class="oauth-provider-input" x-show="$store.oauthConfig.selectedProvider().supports_quota_project">
-                  <span>Quota project</span>
-                  <input
-                    type="text"
-                    x-model="$store.oauthConfig.providerUiFor($store.oauthConfig.selectedProviderId).quota_project_id"
-                    name="quota_project_id"
-                    placeholder="Optional Google Cloud project ID"
-                  />
-                </label>
-              </div>
-
-              <div class="oauth-device" x-show="$store.oauthConfig.devices[$store.oauthConfig.selectedProviderId]?.user_code">
-                <span>Enter this code</span>
-                <strong x-text="$store.oauthConfig.devices[$store.oauthConfig.selectedProviderId]?.user_code"></strong>
-                <button class="text-button" type="button" @click="$store.oauthConfig.cancelConnect($store.oauthConfig.selectedProviderId)">
-                  <span class="material-symbols-outlined">close</span>
-                  <span>Cancel</span>
-                </button>
-              </div>
-
-              <div class="oauth-manual-callback" x-show="$store.oauthConfig.selectedProvider().supports_manual_callback && $store.oauthConfig.devices[$store.oauthConfig.selectedProviderId]?.flow === 'browser_pkce' && !$store.oauthConfig.selectedProvider().connected">
-                <input
-                  type="text"
-                  x-model="$store.oauthConfig.providerUiFor($store.oauthConfig.selectedProviderId).manualCallback"
-                  placeholder="Paste callback URL, query string, or code"
-                />
-                <button type="button" class="oauth-connect secondary" @click="$store.oauthConfig.submitManualCallback($store.oauthConfig.selectedProviderId)">
-                  <span class="material-symbols-outlined">check</span>
-                  <span>Submit</span>
-                </button>
-                <button type="button" class="oauth-connect secondary" @click="$store.oauthConfig.cancelConnect($store.oauthConfig.selectedProviderId)">
-                  <span class="material-symbols-outlined">close</span>
-                  <span>Cancel</span>
-                </button>
-              </div>
-
-              <div class="oauth-auth-attempt" x-show="$store.oauthConfig.devices[$store.oauthConfig.selectedProviderId] && !$store.oauthConfig.devices[$store.oauthConfig.selectedProviderId]?.user_code && !$store.oauthConfig.selectedProvider().supports_manual_callback">
-                <span>Sign-in started</span>
-                <button class="text-button" type="button" @click="$store.oauthConfig.cancelConnect($store.oauthConfig.selectedProviderId)">
-                  <span class="material-symbols-outlined">close</span>
-                  <span>Cancel</span>
-                </button>
-              </div>
-
-              <p class="oauth-provider-note" x-show="$store.oauthConfig.selectedProvider().warning || $store.oauthConfig.selectedProvider().note" x-text="$store.oauthConfig.selectedProvider().warning || $store.oauthConfig.selectedProvider().note"></p>
-            </div>
-          </section>
-        </template>
 
         <section class="oauth-model-config">
           <div class="oauth-section-head">
@@ -375,8 +349,7 @@
       color: var(--color-text);
     }
 
-    .oauth-provider-list,
-    .oauth-provider-detail {
+    .oauth-provider-list {
       display: grid;
       gap: 12px;
       padding: 0;
@@ -477,11 +450,11 @@
       padding: 4px 0 0;
     }
 
-    .oauth-provider-detail-head {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 12px;
+    .oauth-provider-row-detail {
+      display: grid;
+      grid-column: 1 / -1;
+      min-width: 0;
+      padding-top: 2px;
     }
 
     .oauth-detail-grid {
@@ -1154,6 +1127,7 @@
 
     @media (max-width: 720px) {
       .oauth-device,
+      .oauth-provider-row-detail,
       .oauth-provider-usage,
       .oauth-status-row,
       .oauth-model-grid,
@@ -1162,13 +1136,8 @@
       .oauth-details div,
       .oauth-manual-callback,
       .oauth-auth-attempt,
-      .oauth-provider-row,
-      .oauth-provider-detail-head {
+      .oauth-provider-row {
         grid-template-columns: 1fr;
-      }
-
-      .oauth-provider-detail-head {
-        display: grid;
       }
 
       .oauth-section-head {

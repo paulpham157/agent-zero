@@ -299,6 +299,34 @@ export const store = createStore("oauthConfig", {
     return status.account_label || status.email || "Connected";
   },
 
+  providerDevice(providerId) {
+    return this.devices[String(providerId || "")] || null;
+  },
+
+  providerShowSetupFields(providerId) {
+    if (this.providerConnected(providerId)) return false;
+    if (this.providerDevice(providerId)) return false;
+    return this.selectedProviderId === providerId;
+  },
+
+  providerShowNote(providerId) {
+    if (this.providerConnected(providerId)) return false;
+    const status = this.providerStatus(providerId);
+    return this.selectedProviderId === providerId && Boolean(status.warning || status.note);
+  },
+
+  providerDetailOpen(providerId) {
+    if (!this.isOauthProvider(providerId) || this.providerConnected(providerId)) return false;
+    if (this.providerDevice(providerId)) return true;
+    const status = this.providerStatus(providerId);
+    return this.selectedProviderId === providerId && Boolean(
+      status.supports_enterprise_domain
+      || status.supports_oauth_client_config
+      || status.warning
+      || status.note
+    );
+  },
+
   providerReadinessLabel(providerId) {
     const status = this.providerStatus(providerId);
     if (this.loadingStatus) return "Checking";
