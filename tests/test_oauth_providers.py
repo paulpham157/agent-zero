@@ -55,8 +55,8 @@ from plugins._oauth.api import poll_device_login as poll_device_login_api
 from plugins._oauth.api import start_device_login as start_device_login_api
 from plugins._oauth.api import start_login as start_login_api
 from plugins._oauth.api.models import Models
-from plugins._oauth.extensions.python._functions.models.get_api_key.end._20_oauth_account_dummy_key import (
-    OAuthAccountDummyKey,
+from plugins._oauth.extensions.python._functions.models.get_api_key.end import (
+    _20_oauth_account_dummy_key as oauth_dummy_key,
 )
 from plugins._oauth.helpers import state
 from plugins._oauth.helpers.providers import base as provider_base
@@ -665,10 +665,25 @@ def test_poll_device_login_unknown_provider_returns_structured_error():
     [CODEX_PROVIDER_ID, GITHUB_COPILOT_PROVIDER_ID, GEMINI_API_PROVIDER_ID, XAI_GROK_PROVIDER_ID],
 )
 @pytest.mark.parametrize("initial", [None, "None"])
-def test_oauth_providers_report_dummy_api_key_when_missing(provider_id, initial):
+def test_oauth_providers_leave_api_key_empty_until_connected(monkeypatch, provider_id, initial):
+    monkeypatch.setattr(oauth_dummy_key, "oauth_provider_is_connected", lambda _provider_id: False)
     data = {"args": (provider_id,), "kwargs": {}, "result": initial}
 
-    OAuthAccountDummyKey(agent=None).execute(data=data)
+    oauth_dummy_key.OAuthAccountDummyKey(agent=None).execute(data=data)
+
+    assert data["result"] == initial
+
+
+@pytest.mark.parametrize(
+    "provider_id",
+    [CODEX_PROVIDER_ID, GITHUB_COPILOT_PROVIDER_ID, GEMINI_API_PROVIDER_ID, XAI_GROK_PROVIDER_ID],
+)
+@pytest.mark.parametrize("initial", [None, "None"])
+def test_oauth_providers_report_dummy_api_key_when_connected(monkeypatch, provider_id, initial):
+    monkeypatch.setattr(oauth_dummy_key, "oauth_provider_is_connected", lambda _provider_id: True)
+    data = {"args": (provider_id,), "kwargs": {}, "result": initial}
+
+    oauth_dummy_key.OAuthAccountDummyKey(agent=None).execute(data=data)
 
     assert data["result"] == DUMMY_API_KEY
 
@@ -677,12 +692,13 @@ def test_oauth_providers_report_dummy_api_key_when_missing(provider_id, initial)
     "provider_id",
     [CODEX_PROVIDER_ID, GITHUB_COPILOT_PROVIDER_ID, GEMINI_API_PROVIDER_ID, XAI_GROK_PROVIDER_ID],
 )
-def test_oauth_providers_report_dummy_api_key_when_result_missing(provider_id):
+def test_oauth_providers_leave_missing_result_unset_when_disconnected(monkeypatch, provider_id):
+    monkeypatch.setattr(oauth_dummy_key, "oauth_provider_is_connected", lambda _provider_id: False)
     data = {"args": (provider_id,), "kwargs": {}}
 
-    OAuthAccountDummyKey(agent=None).execute(data=data)
+    oauth_dummy_key.OAuthAccountDummyKey(agent=None).execute(data=data)
 
-    assert data["result"] == DUMMY_API_KEY
+    assert "result" not in data
 
 
 @pytest.mark.parametrize(
@@ -692,7 +708,7 @@ def test_oauth_providers_report_dummy_api_key_when_result_missing(provider_id):
 def test_oauth_providers_preserve_configured_api_key(provider_id):
     data = {"args": (provider_id,), "kwargs": {}, "result": "configured"}
 
-    OAuthAccountDummyKey(agent=None).execute(data=data)
+    oauth_dummy_key.OAuthAccountDummyKey(agent=None).execute(data=data)
 
     assert data["result"] == "configured"
 
@@ -708,10 +724,10 @@ def test_model_provider_config_contains_all_oauth_providers():
         GEMINI_API_PROVIDER_ID,
         XAI_GROK_PROVIDER_ID,
     }
-    assert chat[CODEX_PROVIDER_ID]["kwargs"]["api_key"] == DUMMY_API_KEY
-    assert chat[GITHUB_COPILOT_PROVIDER_ID]["kwargs"]["api_key"] == DUMMY_API_KEY
-    assert chat[GEMINI_API_PROVIDER_ID]["kwargs"]["api_key"] == DUMMY_API_KEY
-    assert chat[XAI_GROK_PROVIDER_ID]["kwargs"]["api_key"] == DUMMY_API_KEY
+    assert "api_key" not in chat[CODEX_PROVIDER_ID]["kwargs"]
+    assert "api_key" not in chat[GITHUB_COPILOT_PROVIDER_ID]["kwargs"]
+    assert "api_key" not in chat[GEMINI_API_PROVIDER_ID]["kwargs"]
+    assert "api_key" not in chat[XAI_GROK_PROVIDER_ID]["kwargs"]
     assert chat[CODEX_PROVIDER_ID]["kwargs"]["api_base"] == "http://127.0.0.1/oauth/codex/v1"
     assert (
         chat[GITHUB_COPILOT_PROVIDER_ID]["kwargs"]["api_base"]

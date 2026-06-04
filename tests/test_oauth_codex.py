@@ -15,8 +15,8 @@ import yaml
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from plugins._oauth.helpers import codex
 from plugins._oauth.helpers import routes
-from plugins._oauth.extensions.python._functions.models.get_api_key.end._20_oauth_account_dummy_key import (
-    OAuthAccountDummyKey,
+from plugins._oauth.extensions.python._functions.models.get_api_key.end import (
+    _20_oauth_account_dummy_key as oauth_dummy_key,
 )
 
 
@@ -686,10 +686,20 @@ def test_provider_config_uses_container_local_agent_zero_origin():
     assert "50001" not in json.dumps(codex_provider)
 
 
-def test_codex_provider_reports_dummy_api_key_when_missing():
+def test_codex_provider_leaves_api_key_empty_until_connected(monkeypatch):
+    monkeypatch.setattr(oauth_dummy_key, "oauth_provider_is_connected", lambda _provider_id: False)
     data = {"args": ("codex_oauth",), "kwargs": {}, "result": "None"}
 
-    OAuthAccountDummyKey(agent=None).execute(data=data)
+    oauth_dummy_key.OAuthAccountDummyKey(agent=None).execute(data=data)
+
+    assert data["result"] == "None"
+
+
+def test_codex_provider_reports_dummy_api_key_when_connected(monkeypatch):
+    monkeypatch.setattr(oauth_dummy_key, "oauth_provider_is_connected", lambda _provider_id: True)
+    data = {"args": ("codex_oauth",), "kwargs": {}, "result": "None"}
+
+    oauth_dummy_key.OAuthAccountDummyKey(agent=None).execute(data=data)
 
     assert data["result"] == "oauth"
 
@@ -697,6 +707,6 @@ def test_codex_provider_reports_dummy_api_key_when_missing():
 def test_codex_provider_preserves_configured_api_key():
     data = {"args": ("codex_oauth",), "kwargs": {}, "result": "configured"}
 
-    OAuthAccountDummyKey(agent=None).execute(data=data)
+    oauth_dummy_key.OAuthAccountDummyKey(agent=None).execute(data=data)
 
     assert data["result"] == "configured"

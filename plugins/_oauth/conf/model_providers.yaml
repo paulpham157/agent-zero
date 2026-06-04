@@ -7,7 +7,6 @@ chat:
       endpoint_url: "/models"
     kwargs:
       api_base: "http://127.0.0.1/oauth/codex/v1"
-      api_key: "oauth"
   github_copilot_oauth:
     name: GitHub Copilot Account
     litellm_provider: openai
@@ -16,7 +15,6 @@ chat:
       endpoint_url: "/models"
     kwargs:
       api_base: "http://127.0.0.1/oauth/github-copilot/v1"
-      api_key: "oauth"
   gemini_api_oauth:
     name: Google Gemini API Account
     litellm_provider: openai
@@ -25,7 +23,6 @@ chat:
       endpoint_url: "/models"
     kwargs:
       api_base: "http://127.0.0.1/oauth/gemini-api/v1"
-      api_key: "oauth"
   xai_grok_oauth:
     name: xAI Grok Account
     litellm_provider: openai
@@ -34,4 +31,3 @@ chat:
       endpoint_url: "/models"
     kwargs:
       api_base: "http://127.0.0.1/oauth/xai-grok/v1"
-      api_key: "oauth"
