@@ -758,9 +758,23 @@ export const store = createStore("oauthConfig", {
   startPolling(providerId = CODEX_PROVIDER) {
     this.stopPolling(providerId);
     this.pollStartedAt = { ...this.pollStartedAt, [providerId]: Date.now() };
+    const clearTimer = () => {
+      if (this.pollTimers[providerId]) window.clearTimeout(this.pollTimers[providerId]);
+      const timers = { ...this.pollTimers };
+      delete timers[providerId];
+      this.pollTimers = timers;
+      if (providerId === CODEX_PROVIDER) this.pollTimer = null;
+    };
+    const schedule = (delayMs) => {
+      clearTimer();
+      this.pollTimers = { ...this.pollTimers, [providerId]: window.setTimeout(tick, delayMs) };
+      if (providerId === CODEX_PROVIDER) this.pollTimer = this.pollTimers[providerId];
+    };
     const tick = async () => {
+      clearTimer();
       const device = this.devices[providerId];
       if (!device?.attempt_id) return;
+      let nextDelay = Math.max(1500, Number(device.interval || 5) * 1000);
       try {
         const response = await callJsonApi(POLL_LOGIN_API, {
           provider_id: providerId,
@@ -782,6 +796,16 @@ export const store = createStore("oauthConfig", {
           void toastFrontendSuccess(`${this.providerLabel(providerId)} connected.`, "OAuth Connections");
           return;
         }
+        if (response.interval || response.expires_at) {
+          const updatedDevice = {
+            ...device,
+            interval: response.interval || device.interval,
+            expires_at: response.expires_at || device.expires_at,
+          };
+          this.devices = { ...this.devices, [providerId]: updatedDevice };
+          if (providerId === CODEX_PROVIDER) this.device = updatedDevice;
+          nextDelay = Math.max(1500, Number(updatedDevice.interval || 5) * 1000);
+        }
       } catch (error) {
         if (this.connectingProvider === providerId) this.connectingProvider = "";
         this.connecting = Boolean(this.connectingProvider);
@@ -789,17 +813,21 @@ export const store = createStore("oauthConfig", {
         void toastFrontendError(messageOf(error), "OAuth Connections");
         return;
       }
-      if (Date.now() - Number(this.pollStartedAt[providerId] || 0) > MAX_POLL_MS) {
+      const expiresAt = Number(this.devices[providerId]?.expires_at || 0);
+      const timedOut = expiresAt > 0
+        ? Date.now() / 1000 > expiresAt
+        : Date.now() - Number(this.pollStartedAt[providerId] || 0) > MAX_POLL_MS;
+      if (timedOut) {
         if (this.connectingProvider === providerId) this.connectingProvider = "";
         this.connecting = Boolean(this.connectingProvider);
         this.clearProviderDevice(providerId);
         this.stopPolling(providerId);
+        return;
       }
+      schedule(nextDelay);
     };
-    const delay = Math.max(1500, Number(this.devices[providerId]?.interval || 5) * 1000);
-    this.pollTimers = { ...this.pollTimers, [providerId]: window.setInterval(tick, delay) };
-    if (providerId === CODEX_PROVIDER) this.pollTimer = this.pollTimers[providerId];
-    void tick();
+    const initialDelay = Math.max(1500, Number(this.devices[providerId]?.interval || 5) * 1000);
+    schedule(initialDelay);
   },
 
   pollProvider(providerId = CODEX_PROVIDER) {
@@ -834,7 +862,7 @@ export const store = createStore("oauthConfig", {
 
   stopPolling(providerId = "") {
     if (providerId) {
-      if (this.pollTimers[providerId]) window.clearInterval(this.pollTimers[providerId]);
+      if (this.pollTimers[providerId]) window.clearTimeout(this.pollTimers[providerId]);
       const timers = { ...this.pollTimers };
       delete timers[providerId];
       this.pollTimers = timers;
@@ -846,7 +874,7 @@ export const store = createStore("oauthConfig", {
     }
 
     for (const timer of Object.values(this.pollTimers || {})) {
-      if (timer) window.clearInterval(timer);
+      if (timer) window.clearTimeout(timer);
     }
     this.pollTimers = {};
     this.pollStartedAt = {};

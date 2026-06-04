@@ -126,6 +126,21 @@ def test_browser_callback_completion_is_observed_from_modal():
     assert "this.providerConnected(providerId)" in store_js
 
 
+def test_device_polling_honors_provider_interval_updates():
+    store_js = (PROJECT_ROOT / "plugins/_oauth/webui/oauth-config-store.js").read_text(encoding="utf-8")
+
+    start_polling = store_js.split("startPolling(providerId = CODEX_PROVIDER)", 1)[1].split(
+        "pollProvider(providerId = CODEX_PROVIDER)",
+        1,
+    )[0]
+    assert "window.setTimeout(tick, delayMs)" in start_polling
+    assert "window.setInterval(tick" not in start_polling
+    assert "void tick();" not in start_polling
+    assert "interval: response.interval || device.interval" in start_polling
+    assert "expires_at: response.expires_at || device.expires_at" in start_polling
+    assert "Date.now() / 1000 > expiresAt" in start_polling
+
+
 def test_usage_plan_catalog_stays_backend_only_on_oauth_settings_page():
     config_html = (PROJECT_ROOT / "plugins/_oauth/webui/config.html").read_text(encoding="utf-8")
     store_js = (PROJECT_ROOT / "plugins/_oauth/webui/oauth-config-store.js").read_text(encoding="utf-8")

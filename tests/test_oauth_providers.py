@@ -540,7 +540,7 @@ def test_manual_callback_dispatches_to_xai_provider_without_active_attempt():
     assert "no active xai grok sign-in attempt" in response["error"].lower()
 
 
-def test_start_device_login_wrapper_calls_codex_provider(monkeypatch):
+def test_start_device_login_wrapper_defaults_to_codex_provider(monkeypatch):
     calls = []
 
     class FakeProvider:
@@ -574,6 +574,56 @@ def test_start_device_login_wrapper_calls_codex_provider(monkeypatch):
     assert response["provider_id"] == CODEX_PROVIDER_ID
     assert response["flow"] == "device_code"
     assert response["attempt_id"] == "attempt-1"
+
+
+def test_start_device_login_with_provider_id_calls_github_provider(monkeypatch):
+    calls = []
+
+    class FakeProvider:
+        def start_login(self, input, request):
+            calls.append((input, request))
+            return LoginStartResult(
+                ok=True,
+                provider_id=GITHUB_COPILOT_PROVIDER_ID,
+                flow="device_code",
+                attempt_id="github-attempt-1",
+                verification_url="https://github.com/login/device",
+                user_code="1234-5678",
+            )
+
+    monkeypatch.setattr(
+        start_device_login_api,
+        "get_provider",
+        lambda provider_id: calls.append(("provider_id", provider_id)) or FakeProvider(),
+    )
+
+    request = FakeRequest()
+    payload = {"provider_id": GITHUB_COPILOT_PROVIDER_ID, "enterprise_domain": ""}
+    response = asyncio.run(
+        start_device_login_api.StartDeviceLogin(None, None).process(payload, request)
+    )
+
+    assert calls[0] == ("provider_id", GITHUB_COPILOT_PROVIDER_ID)
+    assert calls[1] == (payload, request)
+    assert response["ok"] is True
+    assert response["provider_id"] == GITHUB_COPILOT_PROVIDER_ID
+    assert response["flow"] == "device_code"
+    assert response["attempt_id"] == "github-attempt-1"
+    assert response["verification_url"] == "https://github.com/login/device"
+    assert response["user_code"] == "1234-5678"
+
+
+def test_start_device_login_unknown_provider_returns_structured_error():
+    response = asyncio.run(
+        start_device_login_api.StartDeviceLogin(None, None).process(
+            {"provider_id": "missing"},
+            FakeRequest(),
+        )
+    )
+
+    assert response["ok"] is False
+    assert response["provider_id"] == "missing"
+    assert "Unknown OAuth provider" in response["error"]
 
 
 def test_poll_device_login_wrapper_calls_codex_provider(monkeypatch):
