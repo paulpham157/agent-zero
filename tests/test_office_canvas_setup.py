@@ -519,6 +519,31 @@ def test_editor_open_file_browser_prefers_context_home_before_workdir_fallback()
     assert "workdirPath = response?.settings?.workdir_path || workdirPath;" in open_file_browser
 
 
+def test_editor_toolbar_places_preview_toggle_left_and_save_on_right():
+    editor_panel = read("plugins", "_editor", "webui", "editor-panel.html")
+    toolbar_start = editor_panel.index('<div class="editor-toolbar"')
+    toolbar_end = editor_panel.index('<div class="editor-search-bar"', toolbar_start)
+    toolbar = editor_panel[toolbar_start:toolbar_end]
+
+    mode_toggle = toolbar.index("editor-mode-toggle")
+    source_tools = toolbar.index("editor-source-tools")
+    preview_tools = toolbar.index("editor-preview-tools")
+    spacer = toolbar.index("editor-toolbar-spacer")
+    save_button = toolbar.index("editor-save-button")
+    file_actions = toolbar.index("editor-file-actions")
+    file_menu = toolbar.index("editor-file-menu")
+
+    assert mode_toggle < source_tools
+    assert mode_toggle < preview_tools
+    assert spacer < save_button < file_actions < file_menu
+    assert "@click=\"$store.editor.save()\"" in toolbar
+
+    file_menu_markup = toolbar[file_menu:]
+    assert "<span>Save</span>" not in file_menu_markup
+    assert "<span>Rename</span>" in file_menu_markup
+    assert "<span>Close File</span>" in file_menu_markup
+
+
 def test_office_and_desktop_skills_are_rehomed_and_renamed():
     office_skills = PROJECT_ROOT / "plugins" / "_office" / "skills"
     desktop_skills = PROJECT_ROOT / "plugins" / "_desktop" / "skills"
