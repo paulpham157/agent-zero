@@ -59,7 +59,7 @@ def create_bot(
     if on_command_control:
         router.message.register(
             on_command_control,
-            Command(commands=integration_commands.command_names()),
+            Command(commands=integration_commands.command_names(integration="telegram")),
         )
 
     if on_callback_query:

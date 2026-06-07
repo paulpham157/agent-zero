@@ -47,7 +47,7 @@ async def handle_command(
     reply_to_message_id: int | None,
     text: str,
 ) -> bool:
-    parsed = integration_commands.parse_command(text or "")
+    parsed = integration_commands.parse_command(text or "", integration="telegram")
     if not parsed:
         return False
     command, args = parsed

@@ -25,6 +25,7 @@ class IntegrationCommandDef:
     aliases: tuple[str, ...] = ()
     args_hint: str = ""
     menu: bool = True
+    integrations: tuple[str, ...] = ()
 
 
 COMMAND_REGISTRY: tuple[IntegrationCommandDef, ...] = (
@@ -40,6 +41,7 @@ COMMAND_REGISTRY: tuple[IntegrationCommandDef, ...] = (
         "Show or switch recent chat sessions.",
         "Session",
         aliases=("session",),
+        integrations=("telegram",),
     ),
     IntegrationCommandDef("clear", "Reset the current chat context.", "Session", aliases=("reset",)),
     IntegrationCommandDef(
@@ -63,12 +65,14 @@ COMMAND_REGISTRY: tuple[IntegrationCommandDef, ...] = (
         "Enable or disable Telegram response streaming.",
         "Configuration",
         args_hint="[on|off]",
+        integrations=("telegram",),
     ),
     IntegrationCommandDef(
         "tools",
         "Show or hide Telegram tool progress.",
         "Configuration",
         args_hint="[on|off]",
+        integrations=("telegram",),
     ),
     IntegrationCommandDef(
         "project",
@@ -109,46 +113,55 @@ def extract_command_line(text: str) -> str:
     return ""
 
 
-def parse_command(text: str) -> tuple[str, str] | None:
+def parse_command(text: str, *, integration: str | None = None) -> tuple[str, str] | None:
     line = extract_command_line(text)
     if not line.startswith("/"):
         return None
 
     command, _, args = line.partition(" ")
     command = _normalize_command_token(command)
-    resolved = resolve_command(command)
+    resolved = resolve_command(command, integration=integration)
     if not resolved:
         return None
 
     return f"/{resolved.name}", args.strip()
 
 
-def resolve_command(command: str) -> IntegrationCommandDef | None:
+def resolve_command(command: str, *, integration: str | None = None) -> IntegrationCommandDef | None:
     normalized = _normalize_command_token(command)
     if not normalized.startswith("/"):
         normalized = f"/{normalized}"
-    return _COMMAND_LOOKUP.get(normalized)
+    command_def = _COMMAND_LOOKUP.get(normalized)
+    if not command_def or not _is_command_available(command_def, integration):
+        return None
+    return command_def
 
 
 def telegram_menu_commands() -> list[tuple[str, str]]:
     return [
         (command.name, _telegram_description(command))
         for command in COMMAND_REGISTRY
-        if command.menu
+        if command.menu and _is_command_available(command, "telegram")
     ]
 
 
-def command_names(include_aliases: bool = True) -> list[str]:
+def command_names(include_aliases: bool = True, *, integration: str | None = None) -> list[str]:
     names: list[str] = []
     for command in COMMAND_REGISTRY:
+        if not _is_command_available(command, integration):
+            continue
         names.append(command.name)
         if include_aliases:
             names.extend(command.aliases)
     return names
 
 
-def help_text(*, full: bool = False) -> str:
-    commands = COMMAND_REGISTRY if full else tuple(c for c in COMMAND_REGISTRY if c.menu)
+def help_text(*, full: bool = False, integration: str | None = None) -> str:
+    commands = tuple(
+        command
+        for command in COMMAND_REGISTRY
+        if _is_command_available(command, integration) and (full or command.menu)
+    )
     lines = ["Available commands:"]
     for command in commands:
         args = f" {command.args_hint}" if command.args_hint else ""
@@ -159,19 +172,24 @@ def help_text(*, full: bool = False) -> str:
     return "\n".join(lines)
 
 
-def unknown_command_text(command: str) -> str:
+def unknown_command_text(command: str, *, integration: str | None = None) -> str:
     token = _normalize_command_token(command).split(" ", 1)[0]
-    return f"Unknown command: {token}\n\n{help_text(full=True)}"
+    return f"Unknown command: {token}\n\n{help_text(full=True, integration=integration)}"
 
 
-def try_handle_command(context: "AgentContext", text: str) -> str | None:
-    parsed = parse_command(text)
+def try_handle_command(
+    context: "AgentContext",
+    text: str,
+    *,
+    integration: str | None = None,
+) -> str | None:
+    parsed = parse_command(text, integration=integration)
     if not parsed:
         return None
 
     command, args = parsed
     if command == "/commands":
-        return help_text(full=True)
+        return help_text(full=True, integration=integration)
     if command == "/status":
         return _handle_status(context)
     if command == "/sessions":
@@ -211,6 +229,14 @@ def _normalize_command_token(command: str) -> str:
     if "@" in token:
         token = token.split("@", 1)[0]
     return f"{token} {rest[0]}".strip() if rest else token
+
+
+def _is_command_available(command: IntegrationCommandDef, integration: str | None) -> bool:
+    if not command.integrations:
+        return True
+    if not integration:
+        return False
+    return integration.lower() in command.integrations
 
 
 def _handle_queue(context: "AgentContext", args: str) -> str:

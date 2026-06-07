@@ -186,7 +186,7 @@ async def handle_message(message: TgMessage, bot_name: str, bot_cfg: dict):
     ):
         return
 
-    command_reply = integration_commands.try_handle_command(context, text)
+    command_reply = integration_commands.try_handle_command(context, text, integration="telegram")
     if command_reply is not None:
         await _send_with_temp_bot(
             instance.bot.token,
@@ -201,7 +201,7 @@ async def handle_message(message: TgMessage, bot_name: str, bot_cfg: dict):
         await _send_with_temp_bot(
             instance.bot.token,
             message.chat.id,
-            integration_commands.unknown_command_text(command),
+            integration_commands.unknown_command_text(command, integration="telegram"),
             parse_mode=None,
             reply_to_message_id=message.message_id,
         )
@@ -303,7 +303,7 @@ async def handle_callback_query(query: CallbackQuery, bot_name: str, bot_cfg: di
     if text.startswith("tg:"):
         return
 
-    command_reply = integration_commands.try_handle_command(context, text)
+    command_reply = integration_commands.try_handle_command(context, text, integration="telegram")
     if command_reply is not None:
         if instance:
             await _send_with_temp_bot(

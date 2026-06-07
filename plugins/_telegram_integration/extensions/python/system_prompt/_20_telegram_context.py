@@ -40,8 +40,8 @@ def _telegram_commands_prompt() -> str:
         "If the user asks what commands exist, refer them to /commands.",
         "Current integration commands:",
     ]
-    for name in integration_commands.command_names(include_aliases=False):
-        definition = integration_commands.resolve_command(name)
+    for name in integration_commands.command_names(include_aliases=False, integration="telegram"):
+        definition = integration_commands.resolve_command(name, integration="telegram")
         if definition:
             args = f" {definition.args_hint}" if definition.args_hint else ""
             lines.append(f"- /{definition.name}{args}: {definition.description}")
