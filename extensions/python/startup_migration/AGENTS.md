@@ -13,6 +13,7 @@
 - Migrations must be safe to run repeatedly.
 - Preserve user data and create backups or reversible paths when changing durable state.
 - Keep long-running work bounded and observable.
+- `_10_self_update_manager.py` may replace `/exe/self_update_manager.py` from the repository copy when the installed runtime updater is stale; it must validate required safety markers and keep a backup before replacement.
 
 ## Work Guidance
 
