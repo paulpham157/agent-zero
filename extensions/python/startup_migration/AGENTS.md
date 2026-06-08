@@ -1,0 +1,27 @@
+# Startup Migration Extensions DOX
+
+## Purpose
+
+- Own backend startup migrations.
+
+## Ownership
+
+- Ordered Python files in this folder own idempotent migration steps that run during startup.
+
+## Local Contracts
+
+- Migrations must be safe to run repeatedly.
+- Preserve user data and create backups or reversible paths when changing durable state.
+- Keep long-running work bounded and observable.
+
+## Work Guidance
+
+- Add migrations only for durable state changes that cannot be handled lazily elsewhere.
+
+## Verification
+
+- Smoke-test startup on a clean checkout and on representative existing user state when practical.
+
+## Child DOX Index
+
+No child DOX files.

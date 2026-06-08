@@ -48,3 +48,5 @@ Direct child DOX files:
 | [components/AGENTS.md](components/AGENTS.md) | Alpine component HTML, component stores, and component-local styles. |
 | [css/AGENTS.md](css/AGENTS.md) | Shared WebUI stylesheet modules. |
 | [js/AGENTS.md](js/AGENTS.md) | Shared frontend JavaScript modules and client-side infrastructure. |
+| [public/AGENTS.md](public/AGENTS.md) | First-party static WebUI images, icons, splash art, and PWA assets. |
+| [vendor/AGENTS.md](vendor/AGENTS.md) | Vendored third-party browser libraries. |
