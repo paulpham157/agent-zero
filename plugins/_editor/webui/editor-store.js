@@ -225,7 +225,6 @@ const model = {
   _previewEnhanceTimer: null,
   _staticHighlightPromise: null,
   _pendingPreviewFragment: "",
-  _initialCreatePromise: null,
 
   async init() {
     if (this._initialized) return;
@@ -244,7 +243,6 @@ const model = {
     this._mode = options?.mode === "canvas" ? "canvas" : "modal";
     if (this._mode === "modal") {
       this.setupMarkdownModal(element);
-      await this.ensureInitialMarkdownFile();
     }
     this.scheduleSourceEditorInit();
   },
@@ -261,7 +259,6 @@ const model = {
       });
       return;
     }
-    await this.ensureInitialMarkdownFile();
   },
 
   beforeHostHidden() {
@@ -848,24 +845,20 @@ const model = {
     });
   },
 
-  async ensureInitialMarkdownFile() {
-    if (this.session || this.visibleTabs().length > 0 || this.loading) return null;
-    if (!this._root || this._initialCreatePromise) return this._initialCreatePromise;
-    this._initialCreatePromise = this.create("document", "md").finally(() => {
-      this._initialCreatePromise = null;
-    });
-    return await this._initialCreatePromise;
-  },
-
   async openFileBrowser() {
     let workdirPath = "/a0/usr/workdir";
     try {
-      const response = await callJsonApi("settings_get", null);
-      workdirPath = response?.settings?.workdir_path || workdirPath;
+      const home = await callEditor("home");
+      if (home?.path) {
+        workdirPath = home.path;
+      } else {
+        const response = await callJsonApi("settings_get", null);
+        workdirPath = response?.settings?.workdir_path || workdirPath;
+      }
     } catch {
       try {
-        const home = await callEditor("home");
-        workdirPath = home?.path || workdirPath;
+        const response = await callJsonApi("settings_get", null);
+        workdirPath = response?.settings?.workdir_path || workdirPath;
       } catch {
         // The file browser can still open with the static fallback.
       }

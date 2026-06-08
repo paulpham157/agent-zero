@@ -15,7 +15,7 @@ from helpers.print_style import PrintStyle
 _LOCK = threading.Lock()
 _CHECKED = False
 _PLUGIN_DIR = Path(__file__).resolve().parent
-_REQUIREMENTS_FILE = _PLUGIN_DIR / "requirements.txt"
+_ROOT_REQUIREMENTS_FILE = _PLUGIN_DIR.parents[1] / "requirements.txt"
 
 
 def has_liteparse() -> bool:
@@ -66,9 +66,10 @@ def _install_requirements() -> None:
         raise RuntimeError(
             "Document Query plugin requires 'uv' to install liteparse automatically"
         )
-    if not _REQUIREMENTS_FILE.is_file():
+    requirement = _liteparse_requirement()
+    if not requirement:
         raise RuntimeError(
-            f"Document Query requirements file not found: {_REQUIREMENTS_FILE}"
+            f"Document Query LiteParse requirement not found in {_ROOT_REQUIREMENTS_FILE}"
         )
 
     cmd = [
@@ -77,9 +78,18 @@ def _install_requirements() -> None:
         "install",
         "--python",
         sys.executable,
-        "-r",
-        str(_REQUIREMENTS_FILE),
+        requirement,
     ]
 
     PrintStyle.info("Document Query: liteparse not found, installing plugin dependency")
     subprocess.check_call(cmd, cwd=str(_PLUGIN_DIR))
+
+
+def _liteparse_requirement() -> str:
+    if not _ROOT_REQUIREMENTS_FILE.is_file():
+        return ""
+    for line in _ROOT_REQUIREMENTS_FILE.read_text(encoding="utf-8").splitlines():
+        requirement = line.strip()
+        if requirement.startswith("liteparse"):
+            return requirement
+    return ""

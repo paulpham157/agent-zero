@@ -55,8 +55,8 @@ from plugins._oauth.api import poll_device_login as poll_device_login_api
 from plugins._oauth.api import start_device_login as start_device_login_api
 from plugins._oauth.api import start_login as start_login_api
 from plugins._oauth.api.models import Models
-from plugins._oauth.extensions.python._functions.models.get_api_key.end._20_oauth_account_dummy_key import (
-    OAuthAccountDummyKey,
+from plugins._oauth.extensions.python._functions.models.get_api_key.end import (
+    _20_oauth_account_dummy_key as oauth_dummy_key,
 )
 from plugins._oauth.helpers import state
 from plugins._oauth.helpers.providers import base as provider_base
@@ -75,6 +75,7 @@ from plugins._oauth.helpers.providers.base import (
     write_private_json,
 )
 from plugins._oauth.helpers.providers.registry import get_provider, provider_registry
+from plugins._oauth.helpers.summary import build_oauth_status_summary
 from plugins._oauth.helpers.usage_plans import usage_plan_catalog
 
 
@@ -347,6 +348,38 @@ def test_status_api_returns_provider_registry_shape(monkeypatch):
     assert response["codex"] == response["provider_map"][CODEX_PROVIDER_ID]
 
 
+def test_oauth_status_summary_adds_accounts_and_usage_windows():
+    class FakeProvider:
+        provider_id = CODEX_PROVIDER_ID
+
+        def status(self):
+            return {
+                "provider_id": CODEX_PROVIDER_ID,
+                "display_name": "Codex/ChatGPT",
+                "short_name": "Codex",
+                "connected": True,
+                "account_label": "user@example.com",
+                "usage": {
+                    "available": True,
+                    "primary": {"remaining_percent": 91, "label": "5h", "reset_at": 123},
+                    "secondary": {"used_percent": 14, "label": "7d", "reset_at": 456},
+                },
+            }
+
+    summary = build_oauth_status_summary(
+        provider_registry=lambda: {CODEX_PROVIDER_ID: FakeProvider()},
+        routes_installed=lambda: True,
+    )
+
+    assert summary["routes_installed"] is True
+    assert summary["connected_count"] == 1
+    assert summary["oauth_accounts"]["connected"][0]["account_label"] == "user@example.com"
+    assert summary["provider_map"][CODEX_PROVIDER_ID]["usage_windows"] == [
+        {"key": "primary", "title": "Session", "label": "5h", "remaining_percent": 91.0, "reset_at": 123},
+        {"key": "secondary", "title": "Week", "label": "7d", "remaining_percent": 86.0, "reset_at": 456},
+    ]
+
+
 def test_status_api_contains_provider_status_exceptions(monkeypatch):
     class GoodProvider:
         provider_id = CODEX_PROVIDER_ID
@@ -507,7 +540,7 @@ def test_manual_callback_dispatches_to_xai_provider_without_active_attempt():
     assert "no active xai grok sign-in attempt" in response["error"].lower()
 
 
-def test_start_device_login_wrapper_calls_codex_provider(monkeypatch):
+def test_start_device_login_wrapper_defaults_to_codex_provider(monkeypatch):
     calls = []
 
     class FakeProvider:
@@ -541,6 +574,56 @@ def test_start_device_login_wrapper_calls_codex_provider(monkeypatch):
     assert response["provider_id"] == CODEX_PROVIDER_ID
     assert response["flow"] == "device_code"
     assert response["attempt_id"] == "attempt-1"
+
+
+def test_start_device_login_with_provider_id_calls_github_provider(monkeypatch):
+    calls = []
+
+    class FakeProvider:
+        def start_login(self, input, request):
+            calls.append((input, request))
+            return LoginStartResult(
+                ok=True,
+                provider_id=GITHUB_COPILOT_PROVIDER_ID,
+                flow="device_code",
+                attempt_id="github-attempt-1",
+                verification_url="https://github.com/login/device",
+                user_code="1234-5678",
+            )
+
+    monkeypatch.setattr(
+        start_device_login_api,
+        "get_provider",
+        lambda provider_id: calls.append(("provider_id", provider_id)) or FakeProvider(),
+    )
+
+    request = FakeRequest()
+    payload = {"provider_id": GITHUB_COPILOT_PROVIDER_ID, "enterprise_domain": ""}
+    response = asyncio.run(
+        start_device_login_api.StartDeviceLogin(None, None).process(payload, request)
+    )
+
+    assert calls[0] == ("provider_id", GITHUB_COPILOT_PROVIDER_ID)
+    assert calls[1] == (payload, request)
+    assert response["ok"] is True
+    assert response["provider_id"] == GITHUB_COPILOT_PROVIDER_ID
+    assert response["flow"] == "device_code"
+    assert response["attempt_id"] == "github-attempt-1"
+    assert response["verification_url"] == "https://github.com/login/device"
+    assert response["user_code"] == "1234-5678"
+
+
+def test_start_device_login_unknown_provider_returns_structured_error():
+    response = asyncio.run(
+        start_device_login_api.StartDeviceLogin(None, None).process(
+            {"provider_id": "missing"},
+            FakeRequest(),
+        )
+    )
+
+    assert response["ok"] is False
+    assert response["provider_id"] == "missing"
+    assert "Unknown OAuth provider" in response["error"]
 
 
 def test_poll_device_login_wrapper_calls_codex_provider(monkeypatch):
@@ -632,10 +715,25 @@ def test_poll_device_login_unknown_provider_returns_structured_error():
     [CODEX_PROVIDER_ID, GITHUB_COPILOT_PROVIDER_ID, GEMINI_API_PROVIDER_ID, XAI_GROK_PROVIDER_ID],
 )
 @pytest.mark.parametrize("initial", [None, "None"])
-def test_oauth_providers_report_dummy_api_key_when_missing(provider_id, initial):
+def test_oauth_providers_leave_api_key_empty_until_connected(monkeypatch, provider_id, initial):
+    monkeypatch.setattr(oauth_dummy_key, "oauth_provider_is_connected", lambda _provider_id: False)
     data = {"args": (provider_id,), "kwargs": {}, "result": initial}
 
-    OAuthAccountDummyKey(agent=None).execute(data=data)
+    oauth_dummy_key.OAuthAccountDummyKey(agent=None).execute(data=data)
+
+    assert data["result"] == initial
+
+
+@pytest.mark.parametrize(
+    "provider_id",
+    [CODEX_PROVIDER_ID, GITHUB_COPILOT_PROVIDER_ID, GEMINI_API_PROVIDER_ID, XAI_GROK_PROVIDER_ID],
+)
+@pytest.mark.parametrize("initial", [None, "None"])
+def test_oauth_providers_report_dummy_api_key_when_connected(monkeypatch, provider_id, initial):
+    monkeypatch.setattr(oauth_dummy_key, "oauth_provider_is_connected", lambda _provider_id: True)
+    data = {"args": (provider_id,), "kwargs": {}, "result": initial}
+
+    oauth_dummy_key.OAuthAccountDummyKey(agent=None).execute(data=data)
 
     assert data["result"] == DUMMY_API_KEY
 
@@ -644,12 +742,13 @@ def test_oauth_providers_report_dummy_api_key_when_missing(provider_id, initial)
     "provider_id",
     [CODEX_PROVIDER_ID, GITHUB_COPILOT_PROVIDER_ID, GEMINI_API_PROVIDER_ID, XAI_GROK_PROVIDER_ID],
 )
-def test_oauth_providers_report_dummy_api_key_when_result_missing(provider_id):
+def test_oauth_providers_leave_missing_result_unset_when_disconnected(monkeypatch, provider_id):
+    monkeypatch.setattr(oauth_dummy_key, "oauth_provider_is_connected", lambda _provider_id: False)
     data = {"args": (provider_id,), "kwargs": {}}
 
-    OAuthAccountDummyKey(agent=None).execute(data=data)
+    oauth_dummy_key.OAuthAccountDummyKey(agent=None).execute(data=data)
 
-    assert data["result"] == DUMMY_API_KEY
+    assert "result" not in data
 
 
 @pytest.mark.parametrize(
@@ -659,7 +758,7 @@ def test_oauth_providers_report_dummy_api_key_when_result_missing(provider_id):
 def test_oauth_providers_preserve_configured_api_key(provider_id):
     data = {"args": (provider_id,), "kwargs": {}, "result": "configured"}
 
-    OAuthAccountDummyKey(agent=None).execute(data=data)
+    oauth_dummy_key.OAuthAccountDummyKey(agent=None).execute(data=data)
 
     assert data["result"] == "configured"
 
@@ -675,10 +774,10 @@ def test_model_provider_config_contains_all_oauth_providers():
         GEMINI_API_PROVIDER_ID,
         XAI_GROK_PROVIDER_ID,
     }
-    assert chat[CODEX_PROVIDER_ID]["kwargs"]["api_key"] == DUMMY_API_KEY
-    assert chat[GITHUB_COPILOT_PROVIDER_ID]["kwargs"]["api_key"] == DUMMY_API_KEY
-    assert chat[GEMINI_API_PROVIDER_ID]["kwargs"]["api_key"] == DUMMY_API_KEY
-    assert chat[XAI_GROK_PROVIDER_ID]["kwargs"]["api_key"] == DUMMY_API_KEY
+    assert "api_key" not in chat[CODEX_PROVIDER_ID]["kwargs"]
+    assert "api_key" not in chat[GITHUB_COPILOT_PROVIDER_ID]["kwargs"]
+    assert "api_key" not in chat[GEMINI_API_PROVIDER_ID]["kwargs"]
+    assert "api_key" not in chat[XAI_GROK_PROVIDER_ID]["kwargs"]
     assert chat[CODEX_PROVIDER_ID]["kwargs"]["api_base"] == "http://127.0.0.1/oauth/codex/v1"
     assert (
         chat[GITHUB_COPILOT_PROVIDER_ID]["kwargs"]["api_base"]

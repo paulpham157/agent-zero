@@ -313,6 +313,10 @@ class FileBrowser:
             full_path = (self.base_dir / current_path).resolve()
             if not str(full_path).startswith(str(self.base_dir)):
                 raise ValueError("Invalid path")
+            if not full_path.exists():
+                raise FileNotFoundError("Directory not found")
+            if not full_path.is_dir():
+                raise NotADirectoryError("Path is not a directory")
 
             # Use ls command instead of os.scandir for better error handling
             files, folders = self._get_files_via_ls(full_path)
@@ -342,7 +346,12 @@ class FileBrowser:
 
         except Exception as e:
             PrintStyle.error(f"Error reading directory: {e}")
-            return {"entries": [], "current_path": "", "parent_path": ""}
+            return {
+                "entries": [],
+                "current_path": current_path,
+                "parent_path": "",
+                "error": str(e),
+            }
 
     def get_full_path(self, file_path: str, allow_dir: bool = False) -> str:
         """Get full file path if it exists and is within base_dir"""

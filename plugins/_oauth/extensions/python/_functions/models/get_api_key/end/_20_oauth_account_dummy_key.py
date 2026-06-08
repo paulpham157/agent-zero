@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from helpers.extension import Extension
-from plugins._oauth.helpers.providers import DUMMY_API_KEY, oauth_provider_ids
+from plugins._oauth.helpers.providers import DUMMY_API_KEY, get_provider, oauth_provider_ids
 
 
 class OAuthAccountDummyKey(Extension):
@@ -22,5 +22,15 @@ class OAuthAccountDummyKey(Extension):
             return
 
         result = str(data.get("result") or "").strip()
-        if not result or result == "None":
+        if (not result or result == "None") and oauth_provider_is_connected(service):
             data["result"] = DUMMY_API_KEY
+
+
+def oauth_provider_is_connected(provider_id: str) -> bool:
+    try:
+        status = get_provider(provider_id).status()
+    except Exception:
+        return False
+    if not isinstance(status, dict):
+        return False
+    return bool(status.get("connected"))

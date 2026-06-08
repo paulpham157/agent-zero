@@ -14,7 +14,8 @@ Actions: `open`, `list`, `state`, `set_active`, `navigate`, `back`, `forward`, `
 Common args: `action`, `browser_id`, `url`, `ref`, `target_ref`, `text`, `selector`, `selectors`, `script`, `modifiers`, `keys`, `key`, `include_content`, `focus_popup`, `event_type`, `x`, `y`, `to_x`, `to_y`, `delta_x`, `delta_y`, `button`, `quality`, `full_page`, `path`, `paths`, `value`, `values`, `checked`, `width`, `height`, `calls`.
 
 Workflow:
-- `open` creates a tab and returns id/state.
+- `open` creates a tab and returns id/state. In host-browser mode, if the requested URL is already open, the host may reuse and activate that existing tab.
+- If the user asks for an existing tab, page title, or already-open URL, call `list` first, match by `title` or `currentUrl`, then use `set_active` or `navigate` on that `browser_id` instead of opening a new tab.
 - `content` returns markdown with refs like `[link 3]`, `[button 6]`, `[input text 8]`.
 - Interactions use refs from the latest `content` capture.
 - For same-page controls that are easier to identify structurally, `click`, `type`, `submit`, `type_submit`, `scroll`, `select_option`, `set_checked`, and `upload_file` may use `selector` instead of `ref`; the tool resolves the selector through `content` first.
