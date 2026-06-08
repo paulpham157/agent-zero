@@ -74,7 +74,7 @@ const TAB_ITEMS = Object.freeze([
     icon: "system_update_alt",
     sections: [
       { id: "section-self-update", label: "Self Update", icon: "system_update_alt" },
-      { id: "section-update-advanced", label: "Advanced Settings", icon: "tune" },
+      { id: "section-backup-restore", label: "Backup & Restore", icon: "backup" },
     ],
   },
 ]);
@@ -106,6 +106,8 @@ const model = {
   _paneScrollPane: null,
   _scrollSyncFrame: null,
   _updateStatusRefreshedAt: 0,
+  expandedNavGroups: {},
+  searchQuery: "",
   
   // Tab state
   _activeTab: DEFAULT_TAB,
@@ -130,6 +132,7 @@ const model = {
       if (saved) this._activeTab = this.normalizeTabId(saved);
     } catch {}
     this._activeSection = this.getFirstSectionId(this._activeTab);
+    this.expandedNavGroups = this.createDefaultExpandedNavGroups(this._activeTab);
   },
 
   async onOpen() {
@@ -176,6 +179,7 @@ const model = {
     this.additional = null;
     this.error = null;
     this.isLoading = false;
+    this.searchQuery = "";
   },
 
   // Tab management
@@ -189,6 +193,7 @@ const model = {
       localStorage.setItem(VIEW_MODE_STORAGE_KEY, current);
     } catch {}
 
+    this.setNavGroupExpanded(current, true);
     this.bindPaneScroll();
   },
 
@@ -204,6 +209,29 @@ const model = {
     return TAB_ITEMS;
   },
 
+  get normalizedSearchQuery() {
+    return String(this.searchQuery || "").trim().toLowerCase();
+  },
+
+  get hasSearchQuery() {
+    return this.normalizedSearchQuery.length > 0;
+  },
+
+  get filteredNavItems() {
+    const query = this.normalizedSearchQuery;
+    if (!query) return TAB_ITEMS;
+
+    return TAB_ITEMS
+      .map((item) => {
+        const itemMatches = this.getNavSearchText(item).includes(query);
+        const sections = itemMatches
+          ? item.sections
+          : item.sections.filter((section) => this.getNavSearchText(section).includes(query));
+        return sections.length ? { ...item, sections } : null;
+      })
+      .filter(Boolean);
+  },
+
   get activeTabItem() {
     return TAB_ITEMS.find((item) => item.id === this.activeTab) || TAB_ITEMS[0];
   },
@@ -215,6 +243,59 @@ const model = {
   getFirstSectionId(tabName = this.activeTab) {
     const tab = TAB_ITEMS.find((item) => item.id === tabName) || TAB_ITEMS[0];
     return tab?.sections?.[0]?.id || null;
+  },
+
+  getNavSearchText(item) {
+    return `${item?.label || ""} ${item?.id || ""}`.toLowerCase();
+  },
+
+  createDefaultExpandedNavGroups(activeTab = this.activeTab) {
+    return TAB_ITEMS.reduce((groups, item) => {
+      groups[item.id] = item.id === activeTab;
+      return groups;
+    }, {});
+  },
+
+  isNavGroupExpanded(tabName) {
+    if (this.hasSearchQuery) return true;
+    const tabId = this.normalizeTabId(tabName);
+    return Boolean(this.expandedNavGroups?.[tabId]);
+  },
+
+  setNavGroupExpanded(tabName, expanded) {
+    const tabId = this.normalizeTabId(tabName);
+    this.expandedNavGroups = {
+      ...(this.expandedNavGroups || {}),
+      [tabId]: Boolean(expanded),
+    };
+  },
+
+  toggleNavGroup(tabName) {
+    const tabId = this.normalizeTabId(tabName);
+    if (this.hasSearchQuery) {
+      this.enterTab(tabId);
+      return;
+    }
+    if (this.activeTab !== tabId) {
+      this.enterTab(tabId);
+      this.setNavGroupExpanded(tabId, true);
+      return;
+    }
+    this.setNavGroupExpanded(tabId, !this.isNavGroupExpanded(tabId));
+  },
+
+  clearSearch() {
+    this.searchQuery = "";
+  },
+
+  openFirstSearchResult() {
+    const item = this.filteredNavItems[0];
+    const section = item?.sections?.[0];
+    if (section?.id) {
+      this.scrollToSection(section.id);
+    } else if (item?.id) {
+      this.enterTab(item.id);
+    }
   },
 
   get browserTimezone() {
@@ -281,6 +362,7 @@ const model = {
   enterTab(tabName) {
     this.activeTab = tabName;
     this._activeSection = this.getFirstSectionId(this.activeTab);
+    this.setNavGroupExpanded(this.activeTab, true);
     this.resetPaneScroll();
     if (tabName === "backup") this.refreshUpdateStatus();
   },
