@@ -101,6 +101,7 @@ Key Files:
 - helpers/plugins.py: Plugin discovery and configuration logic.
 - webui/js/AlpineStore.js: Store factory for reactive frontend state.
 - helpers/api.py: Base class for all API endpoints.
+- models.py: LLM provider configuration and LiteLLM wrappers; framework LiteLLM defaults such as `drop_params=True` are merged with `litellm_global_kwargs`, configured values override framework defaults, and the merged kwargs are applied at LiteLLM module and per-call boundaries.
 - scripts/openrouter_release_notes_system_prompt.md: Editable system prompt used to generate GitHub release notes during Docker publishing.
 - knowledge/main/about/: Agent self-knowledge files, indexed into the vector DB for runtime recall. Not user-facing docs - written for the agent's internal reference.
 - webui/components/AGENTS.md: DOX contract for Alpine component architecture.

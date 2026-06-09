@@ -48,6 +48,48 @@ def test_extract_json_root_string_returns_canonical_snapshot():
     assert extract_tools.extract_json_root_string('[{"tool_name":"response"}]') is None
 
 
+def test_litellm_global_kwargs_merge_defaults_and_config(monkeypatch):
+    monkeypatch.setattr(
+        models.settings,
+        "get_settings",
+        lambda: {"litellm_global_kwargs": {}},
+    )
+
+    assert models._merge_litellm_call_kwargs({})["drop_params"] is True
+    assert models._merge_litellm_call_kwargs({"temperature": 0}) == {
+        "drop_params": True,
+        "temperature": 0,
+    }
+
+    monkeypatch.setattr(
+        models.settings,
+        "get_settings",
+        lambda: {"litellm_global_kwargs": {"drop_params": "false", "timeout": "30"}},
+    )
+
+    assert models._merge_litellm_call_kwargs({}) == {
+        "drop_params": False,
+        "timeout": 30,
+    }
+
+    original_drop_params = getattr(models.litellm, "drop_params", None)
+    had_timeout = hasattr(models.litellm, "timeout")
+    original_timeout = getattr(models.litellm, "timeout", None)
+    try:
+        assert models.set_litellm_params() == {
+            "drop_params": False,
+            "timeout": 30,
+        }
+        assert models.litellm.drop_params is False
+        assert models.litellm.timeout == 30
+    finally:
+        setattr(models.litellm, "drop_params", original_drop_params)
+        if had_timeout:
+            setattr(models.litellm, "timeout", original_timeout)
+        elif hasattr(models.litellm, "timeout"):
+            delattr(models.litellm, "timeout")
+
+
 @pytest.mark.asyncio
 async def test_unified_call_stops_after_canonical_root_snapshot(monkeypatch):
     stream = _AsyncChunkStream(
@@ -61,6 +103,7 @@ async def test_unified_call_stops_after_canonical_root_snapshot(monkeypatch):
 
     async def fake_acompletion(*args, **kwargs):
         assert kwargs["stream"] is True
+        assert kwargs["drop_params"] is True
         return stream
 
     async def fake_rate_limiter(*args, **kwargs):
@@ -68,6 +111,11 @@ async def test_unified_call_stops_after_canonical_root_snapshot(monkeypatch):
 
     monkeypatch.setattr(models, "acompletion", fake_acompletion)
     monkeypatch.setattr(models, "apply_rate_limiter", fake_rate_limiter)
+    monkeypatch.setattr(
+        models.settings,
+        "get_settings",
+        lambda: {"litellm_global_kwargs": {}},
+    )
 
     wrapper = models.LiteLLMChatWrapper(
         model="test-model",

@@ -45,6 +45,48 @@ from sentence_transformers import SentenceTransformer
 from pydantic import ConfigDict
 
 
+DEFAULT_LITELLM_GLOBAL_KWARGS: dict[str, Any] = {
+    "drop_params": True,
+}
+
+
+def _normalize_litellm_kwargs(values: dict[str, Any]) -> dict[str, Any]:
+    # Normalize .env/UI-style scalar strings into native types for LiteLLM.
+    result: dict[str, Any] = {}
+    for k, v in values.items():
+        if isinstance(v, str):
+            stripped = v.strip()
+            lowered = stripped.lower()
+            if lowered == "true":
+                result[k] = True
+            elif lowered == "false":
+                result[k] = False
+            elif lowered in ("none", "null"):
+                result[k] = None
+            else:
+                try:
+                    result[k] = int(stripped)
+                except ValueError:
+                    try:
+                        result[k] = float(stripped)
+                    except ValueError:
+                        result[k] = v
+        else:
+            result[k] = v
+    return result
+
+
+def get_litellm_global_kwargs() -> dict[str, Any]:
+    kwargs = _normalize_litellm_kwargs(DEFAULT_LITELLM_GLOBAL_KWARGS)
+    try:
+        configured = settings.get_settings().get("litellm_global_kwargs", {})  # type: ignore[union-attr]
+    except Exception:
+        configured = {}
+    if isinstance(configured, dict):
+        kwargs.update(_normalize_litellm_kwargs(configured))
+    return kwargs
+
+
 # keep provider logging quiet in normal operation
 def turn_off_logging():
     os.environ["LITELLM_LOG"] = "ERROR"  # only errors
@@ -55,9 +97,30 @@ def turn_off_logging():
             logging.getLogger(name).setLevel(logging.ERROR)
 
 
+def set_litellm_params():
+    global_kwargs = get_litellm_global_kwargs()
+    for key, value in global_kwargs.items():
+        setattr(litellm, key, value)
+    return global_kwargs
+
+
+def configure_litellm():
+    turn_off_logging()
+    set_litellm_params()
+
+
+def _merge_litellm_call_kwargs(*overrides: dict[str, Any] | None) -> dict[str, Any]:
+    kwargs = get_litellm_global_kwargs()
+    for override in overrides:
+        if isinstance(override, dict):
+            kwargs.update(override)
+    return kwargs
+
+
 # init
 load_dotenv()
-turn_off_logging()
+configure_litellm()
+
 
 class ModelType(Enum):
     CHAT = "Chat"
@@ -390,13 +453,16 @@ class LiteLLMChatWrapper(SimpleChatModel):
     ) -> str:
         import asyncio
 
+        configure_litellm()
         msgs = self._convert_messages(messages)
 
         # Apply rate limiting if configured
         apply_rate_limiter_sync(self.a0_model_conf, str(msgs))
 
         # Call the model
-        call_kwargs = _without_stream_kwarg({**self.kwargs, **kwargs})
+        call_kwargs = _without_stream_kwarg(
+            _merge_litellm_call_kwargs(self.kwargs, kwargs)
+        )
         resp = completion(
             model=self.model_name, messages=msgs, stop=stop, **call_kwargs
         )
@@ -415,13 +481,16 @@ class LiteLLMChatWrapper(SimpleChatModel):
     ) -> Iterator[ChatGenerationChunk]:
         import asyncio
 
+        configure_litellm()
         msgs = self._convert_messages(messages)
 
         # Apply rate limiting if configured
         apply_rate_limiter_sync(self.a0_model_conf, str(msgs))
 
         result = ChatGenerationResult()
-        call_kwargs = _without_stream_kwarg({**self.kwargs, **kwargs})
+        call_kwargs = _without_stream_kwarg(
+            _merge_litellm_call_kwargs(self.kwargs, kwargs)
+        )
 
         for chunk in completion(
             model=self.model_name,
@@ -447,13 +516,16 @@ class LiteLLMChatWrapper(SimpleChatModel):
         run_manager: Optional[AsyncCallbackManagerForLLMRun] = None,
         **kwargs: Any,
     ) -> AsyncIterator[ChatGenerationChunk]:
+        configure_litellm()
         msgs = self._convert_messages(messages)
 
         # Apply rate limiting if configured
         await apply_rate_limiter(self.a0_model_conf, str(msgs))
 
         result = ChatGenerationResult()
-        call_kwargs = _without_stream_kwarg({**self.kwargs, **kwargs})
+        call_kwargs = _without_stream_kwarg(
+            _merge_litellm_call_kwargs(self.kwargs, kwargs)
+        )
 
         response = await acompletion(
             model=self.model_name,
@@ -488,7 +560,7 @@ class LiteLLMChatWrapper(SimpleChatModel):
         **kwargs: Any,
     ) -> Tuple[str, str]:
 
-        turn_off_logging()
+        configure_litellm()
 
         if not messages:
             messages = []
@@ -507,7 +579,9 @@ class LiteLLMChatWrapper(SimpleChatModel):
         )
 
         # Prepare call kwargs and retry config (strip A0-only params before calling LiteLLM)
-        call_kwargs: dict[str, Any] = _without_stream_kwarg({**self.kwargs, **kwargs})
+        call_kwargs: dict[str, Any] = _without_stream_kwarg(
+            _merge_litellm_call_kwargs(self.kwargs, kwargs)
+        )
         max_retries: int = int(call_kwargs.pop("a0_retry_attempts", 2))
         retry_delay_s: float = float(call_kwargs.pop("a0_retry_delay_seconds", 1.5))
         stream = reasoning_callback is not None or response_callback is not None or tokens_callback is not None
@@ -610,20 +684,30 @@ class LiteLLMEmbeddingWrapper(Embeddings):
         self.a0_model_conf = model_config
 
     def embed_documents(self, texts: List[str]) -> List[List[float]]:
+        configure_litellm()
         # Apply rate limiting if configured
         apply_rate_limiter_sync(self.a0_model_conf, " ".join(texts))
 
-        resp = embedding(model=self.model_name, input=texts, **self.kwargs)
+        resp = embedding(
+            model=self.model_name,
+            input=texts,
+            **_merge_litellm_call_kwargs(self.kwargs),
+        )
         return [
             item.get("embedding") if isinstance(item, dict) else item.embedding  # type: ignore
             for item in resp.data  # type: ignore
         ]
 
     def embed_query(self, text: str) -> List[float]:
+        configure_litellm()
         # Apply rate limiting if configured
         apply_rate_limiter_sync(self.a0_model_conf, text)
 
-        resp = embedding(model=self.model_name, input=[text], **self.kwargs)
+        resp = embedding(
+            model=self.model_name,
+            input=[text],
+            **_merge_litellm_call_kwargs(self.kwargs),
+        )
         item = resp.data[0]  # type: ignore
         return item.get("embedding") if isinstance(item, dict) else item.embedding  # type: ignore
 
@@ -781,22 +865,6 @@ def _adjust_call_args(provider_name: str, model_name: str, kwargs: dict):
 def _merge_provider_defaults(
     provider_type: ProviderModelType, original_provider: str, kwargs: dict
 ) -> tuple[str, dict]:
-    # Normalize .env-style numeric strings (e.g., "timeout=30") into ints/floats for LiteLLM
-    def _normalize_values(values: dict) -> dict:
-        result: dict[str, Any] = {}
-        for k, v in values.items():
-            if isinstance(v, str):
-                try:
-                    result[k] = int(v)
-                except ValueError:
-                    try:
-                        result[k] = float(v)
-                    except ValueError:
-                        result[k] = v
-            else:
-                result[k] = v
-        return result
-
     provider_name = original_provider  # default: unchanged
     cfg = get_provider_config(provider_type, original_provider)
     if cfg:
@@ -814,14 +882,11 @@ def _merge_provider_defaults(
         if key and key not in ("None", "NA"):
             kwargs["api_key"] = key
 
-    # Merge LiteLLM global kwargs (timeouts, stream_timeout, etc.)
-    try:
-        global_kwargs = settings.get_settings().get("litellm_global_kwargs", {})  # type: ignore[union-attr]
-    except Exception:
-        global_kwargs = {}
-    if isinstance(global_kwargs, dict):
-        for k, v in _normalize_values(global_kwargs).items():
-            kwargs.setdefault(k, v)
+    # Merge LiteLLM global kwargs. Framework defaults are merged first, then
+    # configured global kwargs override those defaults; explicit provider/model
+    # kwargs still keep priority via setdefault.
+    for k, v in get_litellm_global_kwargs().items():
+        kwargs.setdefault(k, v)
 
     return provider_name, kwargs
 
