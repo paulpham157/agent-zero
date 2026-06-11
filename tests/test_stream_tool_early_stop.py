@@ -358,6 +358,53 @@ async def test_unified_call_falls_back_to_chat_when_responses_endpoint_missing(
 
 
 @pytest.mark.asyncio
+async def test_unified_call_falls_back_when_litellm_hides_responses_404_url(
+    monkeypatch,
+):
+    class NotFoundError(Exception):
+        status_code = 404
+
+    calls: list[str] = []
+
+    async def fake_aresponses(*args, **kwargs):
+        calls.append("responses")
+        raise NotFoundError(
+            'litellm.NotFoundError: NotFoundError: OpenAIException - {"detail":"Not Found"}'
+        )
+
+    async def fake_acompletion(*args, **kwargs):
+        calls.append("chat")
+        assert kwargs["stream"] is True
+        assert kwargs["drop_params"] is True
+        return _AsyncChunkStream([_chunk("fallback")])
+
+    async def fake_rate_limiter(*args, **kwargs):
+        return None
+
+    monkeypatch.setattr(litellm_transport, "aresponses", fake_aresponses)
+    monkeypatch.setattr(litellm_transport, "acompletion", fake_acompletion)
+    monkeypatch.setattr(models, "apply_rate_limiter", fake_rate_limiter)
+
+    wrapper = models.LiteLLMChatWrapper(
+        model="claude-opus-4.7",
+        provider="openai",
+        model_config=None,
+    )
+
+    async def response_callback(chunk: str, full: str):
+        return None
+
+    response, reasoning = await wrapper.unified_call(
+        messages=[],
+        response_callback=response_callback,
+    )
+
+    assert response == "fallback"
+    assert reasoning == ""
+    assert calls == ["responses", "chat"]
+
+
+@pytest.mark.asyncio
 async def test_unified_call_preserves_cache_control_with_chat_for_non_native_responses(
     monkeypatch,
 ):

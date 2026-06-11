@@ -1523,6 +1523,8 @@ def _is_responses_not_supported_error(exc: Exception) -> bool:
     text = _exception_text(exc).lower()
     if any(marker in text for marker in ("429", "too many requests", "rate limit")):
         return False
+    if _is_not_found_error(exc) and _looks_like_responses_endpoint_not_found(text):
+        return True
     if "/v1/responses" in text and any(
         marker in text for marker in ("404", "not found")
     ):
@@ -1538,6 +1540,22 @@ def _is_responses_not_supported_error(exc: Exception) -> bool:
             "no 'tools' defined while 'tool_choice' is specified",
         )
     )
+
+
+def _is_not_found_error(exc: Exception) -> bool:
+    if _exception_status_code(exc) == 404:
+        return True
+    return "notfounderror" in _exception_type_chain(exc).lower()
+
+
+def _looks_like_responses_endpoint_not_found(text: str) -> bool:
+    if "/v1/responses" in text:
+        return True
+    if "not found" not in text:
+        return False
+    if "openaiexception" in text:
+        return True
+    return "detail" in text and "not found" in text
 
 
 def _is_responses_state_unsupported_error(exc: Exception) -> bool:
@@ -1588,6 +1606,18 @@ def _exception_text(exc: Exception | None) -> str:
     if exc is None:
         return ""
     parts = [exc.__class__.__name__, str(exc)]
+    for attr in ("status_code", "code", "message", "body"):
+        value = getattr(exc, attr, None)
+        if value not in (None, ""):
+            parts.append(f"{attr}={value}")
+    response = getattr(exc, "response", None)
+    if response is not None:
+        response_text = getattr(response, "text", None)
+        if response_text:
+            parts.append(str(response_text))
+        response_url = getattr(response, "url", None)
+        if response_url:
+            parts.append(str(response_url))
     cause = getattr(exc, "__cause__", None)
     context = getattr(exc, "__context__", None)
     if cause is not None:
@@ -1595,6 +1625,31 @@ def _exception_text(exc: Exception | None) -> str:
     if context is not None and context is not cause:
         parts.append(str(context))
     return "\n".join(parts)
+
+
+def _exception_status_code(exc: Exception | None) -> int | None:
+    if exc is None:
+        return None
+    for attr in ("status_code", "code"):
+        value = getattr(exc, attr, None)
+        if isinstance(value, int):
+            return value
+        if isinstance(value, str) and value.isdigit():
+            return int(value)
+    response = getattr(exc, "response", None)
+    value = getattr(response, "status_code", None)
+    return value if isinstance(value, int) else None
+
+
+def _exception_type_chain(exc: Exception | None) -> str:
+    names: list[str] = []
+    current = exc
+    while current is not None:
+        names.append(current.__class__.__name__)
+        cause = getattr(current, "__cause__", None)
+        context = getattr(current, "__context__", None)
+        current = cause or (context if context is not cause else None)
+    return "\n".join(names)
 
 
 def _close_sync_stream(stream: Any) -> None:
