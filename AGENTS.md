@@ -41,7 +41,6 @@ Primary Language(s): Python, JavaScript (ES Modules)
 Do not combine these commands; run them individually:
 ```bash
 pip install -r requirements.txt
-pip install -r requirements2.txt
 ```
 - Start WebUI: python run_ui.py
 
@@ -241,7 +240,6 @@ If pip install fails, try running in a clean virtual environment:
 python -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
-pip install -r requirements2.txt
 ```
 
 ### WebSocket Connection Failures
