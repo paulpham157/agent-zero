@@ -73,6 +73,7 @@ const IMPLICIT_PRESET_SLOT_DEFAULTS = {
     kwargs: {},
   },
 };
+const PRESET_REPLACE_FIELDS = new Set(['kwargs']);
 
 function presetDefaultValuesEqual(value, defaultValue) {
   if (typeof defaultValue === 'number') return Number(value) === defaultValue;
@@ -116,6 +117,14 @@ export function mergeModelSlot(baseSlot, presetSlot, stripApiKey = true, slotKey
       result[key] = mergeModelSlot(result[key], value, false);
     } else {
       result[key] = clonePlain(value);
+    }
+  }
+  for (const key of PRESET_REPLACE_FIELDS) {
+    if (Object.prototype.hasOwnProperty.call(clean, key)) {
+      const value = clean[key];
+      result[key] = value && typeof value === 'object' && !Array.isArray(value) ? clonePlain(value) : {};
+    } else if (Object.prototype.hasOwnProperty.call(baseSlot || {}, key)) {
+      result[key] = {};
     }
   }
   return result;

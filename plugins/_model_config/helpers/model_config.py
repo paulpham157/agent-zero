@@ -16,6 +16,7 @@ PRESET_SLOT_CONFIG_SECTIONS = {
     "utility": "utility_model",
     "embedding": "embedding_model",
 }
+MODEL_SLOT_PRESET_REPLACE_FIELDS = {"kwargs"}
 IMPLICIT_PRESET_SLOT_DEFAULTS = {
     "utility": {
         "ctx_length": 128000,
@@ -283,6 +284,17 @@ def _deep_merge_dict(base: dict, override: dict) -> dict:
     return result
 
 
+def _replace_preset_model_slot_fields(base: dict, override: dict, result: dict) -> dict:
+    """Clear or replace provider-specific fields that must not leak across presets."""
+    for key in MODEL_SLOT_PRESET_REPLACE_FIELDS:
+        if key in override:
+            value = override.get(key)
+            result[key] = deepcopy(value) if isinstance(value, dict) else {}
+        elif key in base:
+            result[key] = {}
+    return result
+
+
 def _slot_has_identity(slot_config: dict) -> bool:
     return bool(slot_config.get("provider") or slot_config.get("name"))
 
@@ -342,7 +354,8 @@ def _merge_model_slot(
     )
     if not strip_api_key and not str(cleaned.get("api_key") or "").strip():
         cleaned.pop("api_key", None)
-    return _deep_merge_dict(base_slot if isinstance(base_slot, dict) else {}, cleaned)
+    base = base_slot if isinstance(base_slot, dict) else {}
+    return _replace_preset_model_slot_fields(base, cleaned, _deep_merge_dict(base, cleaned))
 
 
 def build_config_from_preset(
@@ -356,8 +369,8 @@ def build_config_from_preset(
 
     Presets are intentionally partial: omitted fields inherit from the current
     config, so selecting a preset does not reset tuned values such as context
-    windows, rate limits, or nested kwargs unless the preset explicitly defines
-    them.
+    windows or rate limits. Provider-specific kwargs are replaced when present
+    and cleared when omitted so stale params do not leak between providers.
     """
     config = (
         normalize_config_for_save(base_config)

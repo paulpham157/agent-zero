@@ -247,7 +247,7 @@ def test_project_save_copies_selected_preset_to_scoped_model_config(monkeypatch,
     assert "_model_config" not in project_json
 
 
-def test_preset_application_deep_merges_model_slots(monkeypatch, tmp_path):
+def test_preset_application_preserves_tuning_but_replaces_kwargs(monkeypatch, tmp_path):
     _prepare_a0_tree(monkeypatch, tmp_path)
 
     from plugins._model_config.helpers import model_config
@@ -296,19 +296,57 @@ def test_preset_application_deep_merges_model_slots(monkeypatch, tmp_path):
 
     assert config["chat_model"]["name"] == "claude-research"
     assert config["chat_model"]["ctx_length"] == 200000
-    assert config["chat_model"]["kwargs"] == {
-        "temperature": 0.2,
-        "routing": {"order": ["a", "b"], "priority": "quality"},
-    }
+    assert config["chat_model"]["kwargs"] == {"routing": {"priority": "quality"}}
     assert config["utility_model"]["name"] == "utility-research"
     assert config["utility_model"]["ctx_length"] == 200000
     assert config["utility_model"]["ctx_input"] == 0.4
-    assert config["utility_model"]["kwargs"] == {
-        "temperature": 0.1,
-        "routing": {"order": ["fast"], "timeout": 30},
-    }
+    assert config["utility_model"]["kwargs"] == {"routing": {"timeout": 30}}
     assert config["embedding_model"]["name"] == "text-embedding-3-large"
-    assert config["embedding_model"]["kwargs"] == {"device": "cpu", "batch_size": 16}
+    assert config["embedding_model"]["kwargs"] == {}
+
+
+def test_preset_application_clears_stale_kwargs_when_preset_omits_them(
+    monkeypatch,
+    tmp_path,
+):
+    _prepare_a0_tree(monkeypatch, tmp_path)
+
+    from plugins._model_config.helpers import model_config
+
+    base_config = {
+        "chat_model": {
+            "provider": "openrouter",
+            "name": "openai/gpt-5.4",
+            "ctx_length": 200000,
+            "kwargs": {"temperature": 0, "extra_headers": {"x-old": "true"}},
+        },
+        "utility_model": {
+            "provider": "openrouter",
+            "name": "openai/gpt-5.4-mini",
+            "ctx_length": 128000,
+            "kwargs": {"temperature": 0},
+        },
+    }
+    preset = {
+        "name": "Codex",
+        "chat": {
+            "provider": "codex_oauth",
+            "name": "gpt-5.1-codex",
+        },
+        "utility": {
+            "provider": "codex_oauth",
+            "name": "gpt-5.1-codex-mini",
+        },
+    }
+
+    config = model_config.build_config_from_preset(preset, base_config)
+
+    assert config["chat_model"]["name"] == "gpt-5.1-codex"
+    assert config["chat_model"]["ctx_length"] == 200000
+    assert config["chat_model"]["kwargs"] == {}
+    assert config["utility_model"]["name"] == "gpt-5.1-codex-mini"
+    assert config["utility_model"]["ctx_length"] == 128000
+    assert config["utility_model"]["kwargs"] == {}
 
 
 def test_preset_application_inherits_optional_slots(monkeypatch, tmp_path):
@@ -341,7 +379,10 @@ def test_preset_application_inherits_optional_slots(monkeypatch, tmp_path):
     assert config["embedding_model"] == base_config["embedding_model"]
 
 
-def test_legacy_utility_preset_defaults_do_not_override_tuned_config(monkeypatch, tmp_path):
+def test_legacy_utility_preset_defaults_preserve_tuning_but_clear_kwargs(
+    monkeypatch,
+    tmp_path,
+):
     _prepare_a0_tree(monkeypatch, tmp_path)
 
     from plugins._model_config.helpers import model_config
@@ -390,7 +431,7 @@ def test_legacy_utility_preset_defaults_do_not_override_tuned_config(monkeypatch
     assert utility["rl_requests"] == 12
     assert utility["rl_input"] == 34000
     assert utility["rl_output"] == 56000
-    assert utility["kwargs"] == {"temperature": 0.1}
+    assert utility["kwargs"] == {}
 
 
 def test_preset_override_preserves_configured_utility_context(monkeypatch, tmp_path):
