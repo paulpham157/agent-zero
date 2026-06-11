@@ -18,6 +18,7 @@
 
 - HTTP handlers must derive from `helpers.api.ApiHandler`; WebSocket handlers must derive from `helpers.ws.WsHandler`.
 - The request accepts optional `project_name`; when present, status resolves through the merged project-scoped MCP configuration.
+- `tool_count` reports enabled MCP tools only; tools disabled by a server `disabled_tools` list stay hidden from agent-facing status counts.
 - Update this file whenever request payloads, authentication or CSRF requirements, response shapes, route side effects, or WebSocket event contracts change.
 - `McpServersStatuss` is an `ApiHandler`.
 - `McpServersStatuss` defines `process(...)`.

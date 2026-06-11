@@ -8,17 +8,21 @@
 
 - `settings.html` and `settings-store.js` own the settings shell and state.
 - Subdirectories own settings areas such as agent, external, developer, MCP, backup, plugins, secrets, skills, tunnel, and A2A.
+- `mcp/client/` owns the global/project MCP server manager, server search, raw JSON editor surface, examples modal, server tool detail modal, MCP scanner modal, scan checks, and scan prompt assets.
 
 ## Local Contracts
 
 - Keep settings payloads synchronized with backend APIs and plugin settings contracts.
 - Do not store secrets in localStorage, URLs, or console output.
 - Preserve Store Gating and modal footer conventions in settings components.
+- MCP manager tool toggles write `disabled_tools` into the draft JSON and require Apply before changing the running MCP tool set.
 
 ## Work Guidance
 
 - Prefer subsection-local stores for complex settings areas.
 - Coordinate plugin settings UI changes with `webui/components/plugins/` and `plugins/AGENTS.md`.
+- Keep MCP scanner checks and prompt assets close to the MCP client modal so scanner behavior remains reviewable with the UI that invokes it.
+- Keep MCP manager search and toggle affordances consistent between global and project scope because both are rendered by the same client modal.
 
 ## Verification
 

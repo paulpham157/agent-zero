@@ -19,16 +19,35 @@
                             <span class="mcp-scope-pill" x-text="$store.mcpServersStore.scope === 'project' ? 'Project' : 'Global'"></span>
                         </div>
                         <p x-text="$store.mcpServersStore.scopeSubtitle"></p>
+
+                        <div class="mcp-view-controls">
+                            <div class="mcp-view-tabs">
+                                <button type="button" :class="{ active: $store.mcpServersStore.activeView === 'visual' }"
+                                    @click="$store.mcpServersStore.setActiveView('visual')">
+                                    <span class="material-symbols-outlined" aria-hidden="true">dashboard_customize</span>
+                                    <span>Manager</span>
+                                </button>
+                                <button type="button" :class="{ active: $store.mcpServersStore.activeView === 'raw' }"
+                                    @click="$store.mcpServersStore.setActiveView('raw')">
+                                    <span class="material-symbols-outlined" aria-hidden="true">data_object</span>
+                                    <span>Raw JSON</span>
+                                </button>
+                            </div>
+
+                            <label class="mcp-search" x-show="$store.mcpServersStore.activeView === 'visual'" style="display: none;">
+                                <span class="material-symbols-outlined" aria-hidden="true">search</span>
+                                <input type="search" x-model.debounce.150ms="$store.mcpServersStore.serverSearch" placeholder="Search MCP servers" />
+                                <button type="button" class="mcp-search-clear"
+                                    x-show="$store.mcpServersStore.serverSearchActive"
+                                    @click="$store.mcpServersStore.clearServerSearch()"
+                                    title="Clear search">
+                                    <span class="material-symbols-outlined" aria-hidden="true">close</span>
+                                </button>
+                            </label>
+                        </div>
                     </div>
 
                     <div class="mcp-manager-actions">
-                        <button type="button" class="button" title="Add MCP server" @click="$store.mcpServersStore.addOpen = !$store.mcpServersStore.addOpen">
-                            <span class="material-symbols-outlined" aria-hidden="true">add</span>
-                            <span>Add</span>
-                        </button>
-                        <button type="button" class="button" title="Examples" onclick="openModal('settings/mcp/client/example.html')">
-                            <span class="material-symbols-outlined" aria-hidden="true">library_books</span>
-                        </button>
                         <button type="button" class="button" title="Refresh status" @click="$store.mcpServersStore.loadStatus()">
                             <span class="material-symbols-outlined" aria-hidden="true">refresh</span>
                         </button>
@@ -39,50 +58,127 @@
                     </div>
                 </header>
 
-                <section class="mcp-add-panel" x-show="$store.mcpServersStore.addOpen" x-transition.opacity style="display: none;">
-                    <div class="mcp-add-header">
-                        <h3>Add MCP server</h3>
-                        <button type="button" class="mcp-icon-button" title="Clear form" @click="$store.mcpServersStore.resetForm()">
-                            <span class="material-symbols-outlined" aria-hidden="true">backspace</span>
-                        </button>
-                    </div>
+                <section x-show="$store.mcpServersStore.activeView === 'visual'" class="mcp-visual-panel">
+                    <section class="mcp-config-list" id="mcp-configured-servers">
+                        <div class="mcp-section-title">
+                            <h3>Configured servers</h3>
+                            <span x-text="$store.mcpServersStore.configuredServersCountLabel"></span>
+                        </div>
+                        <template x-if="$store.mcpServersStore.configuredServers.length === 0">
+                            <div class="mcp-empty">No MCP servers configured.</div>
+                        </template>
+                        <template x-if="$store.mcpServersStore.configuredServers.length > 0 && $store.mcpServersStore.filteredConfiguredServers.length === 0">
+                            <div class="mcp-empty">No configured MCP servers match this search.</div>
+                        </template>
+                        <template x-for="entry in $store.mcpServersStore.filteredConfiguredServers" :key="entry.name">
+                            <article class="mcp-config-card" :class="{ disabled: entry.config.disabled }">
+                                <div class="mcp-config-card-main">
+                                    <div>
+                                        <div class="mcp-config-name" x-text="entry.name"></div>
+                                        <div class="mcp-config-summary" x-text="$store.mcpServersStore.configSummary(entry.config)"></div>
+                                    </div>
+                                    <span class="mcp-config-mode" x-text="$store.mcpServersStore.configModeLabel(entry.config)"></span>
+                                </div>
+                                <div class="mcp-config-actions">
+                                    <button type="button" class="mcp-icon-button" title="Edit" @click="$store.mcpServersStore.editConfigServer(entry.name)">
+                                        <span class="material-symbols-outlined" aria-hidden="true">edit</span>
+                                    </button>
+                                    <div class="mcp-toggle-group">
+                                        <label class="toggle plugin-status-toggle mcp-status-toggle"
+                                            :title="entry.config.disabled ? 'Enable MCP server' : 'Disable MCP server'">
+                                            <input type="checkbox"
+                                                :checked="!entry.config.disabled"
+                                                @change="$store.mcpServersStore.toggleConfigServer(entry.name)"
+                                                @click.stop>
+                                            <span class="toggler"></span>
+                                        </label>
+                                        <span class="plugin-status-text" x-text="entry.config.disabled ? 'OFF' : 'ON'"></span>
+                                    </div>
+                                    <button type="button" class="mcp-icon-button danger" title="Remove" @click="$store.mcpServersStore.removeConfigServer(entry.name)">
+                                        <span class="material-symbols-outlined" aria-hidden="true">delete</span>
+                                    </button>
+                                </div>
+                            </article>
+                        </template>
+                    </section>
 
-                    <div class="mcp-segmented" role="tablist" aria-label="MCP server type">
-                        <button type="button" :class="{ active: $store.mcpServersStore.serverForm.mode === 'remote' }"
-                            @click="$store.mcpServersStore.setFormMode('remote')">Remote URL</button>
-                        <button type="button" :class="{ active: $store.mcpServersStore.serverForm.mode === 'local' }"
-                            @click="$store.mcpServersStore.setFormMode('local')">Local command</button>
-                    </div>
+                    <section class="mcp-status-section" id="mcp-servers-status">
+                        <div class="mcp-section-title">
+                            <h3>Servers status</h3>
+                            <span x-text="$store.mcpServersStore.visibleServersCountLabel"></span>
+                        </div>
 
-                    <div class="mcp-form-grid">
-                        <label class="mcp-field">
-                            <span>Name</span>
-                            <input type="text" x-model="$store.mcpServersStore.serverForm.name" placeholder="github" />
-                        </label>
+                        <div x-show="$store.mcpServersStore.loading" class="mcp-empty">
+                            Loading MCP server status...
+                        </div>
 
-                        <label class="mcp-field" x-show="$store.mcpServersStore.serverForm.mode === 'remote'">
-                            <span>Remote MCP server URL</span>
-                            <input type="url" x-model="$store.mcpServersStore.serverForm.url" placeholder="https://example.com/mcp" />
-                        </label>
+                        <div class="mcp-status-list" x-show="!$store.mcpServersStore.loading">
+                            <template x-for="server in $store.mcpServersStore.filteredServers" :key="server.scope + ':' + server.name">
+                                <article class="mcp-status-row" :class="$store.mcpServersStore.statusClass(server)">
+                                    <div class="mcp-status-main">
+                                        <span class="mcp-status-dot"></span>
+                                        <div>
+                                            <div class="mcp-status-name">
+                                                <span x-text="server.name"></span>
+                                                <span class="mcp-status-scope" x-text="server.scope || 'global'"></span>
+                                            </div>
+                                            <div class="mcp-status-meta">
+                                                <span x-text="$store.mcpServersStore.statusLabel(server)"></span>
+                                                <span x-show="server.type" x-text="server.type"></span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="mcp-status-actions">
+                                        <button type="button" class="button" x-show="server.tool_count > 0"
+                                            @click="$store.mcpServersStore.onToolCountClick(server.name)"
+                                            x-text="server.tool_count + ' tools'"></button>
+                                        <button type="button" class="button" x-show="server.has_log"
+                                            @click="$store.mcpServersStore.getServerLog(server.name)">Log</button>
+                                    </div>
+                                    <div class="mcp-status-error" x-show="server.error" x-text="server.error"></div>
+                                </article>
+                            </template>
 
-                        <label class="mcp-field" x-show="$store.mcpServersStore.serverForm.mode === 'local'" style="display: none;">
-                            <span>Command</span>
-                            <input type="text" x-model="$store.mcpServersStore.serverForm.command" placeholder="uvx" />
-                        </label>
+                            <div x-show="$store.mcpServersStore.servers.length === 0" class="mcp-empty">
+                                No servers.
+                            </div>
+                            <div x-show="$store.mcpServersStore.servers.length > 0 && $store.mcpServersStore.filteredServers.length === 0" class="mcp-empty">
+                                No visible MCP servers match this search.
+                            </div>
+                        </div>
+                    </section>
 
-                        <label class="mcp-field">
-                            <span>Description</span>
-                            <input type="text" x-model="$store.mcpServersStore.serverForm.description" placeholder="Optional" />
-                        </label>
-                    </div>
+                    <section class="mcp-add-panel" id="mcp-add-server">
+                        <div class="mcp-add-header">
+                            <h3>Add MCP server</h3>
+                            <button type="button" class="mcp-icon-button" title="Clear form" @click="$store.mcpServersStore.resetForm()">
+                                <span class="material-symbols-outlined" aria-hidden="true">backspace</span>
+                            </button>
+                        </div>
 
-                    <button type="button" class="mcp-advanced-toggle" @click="$store.mcpServersStore.advancedOpen = !$store.mcpServersStore.advancedOpen">
-                        <span class="material-symbols-outlined" :style="$store.mcpServersStore.advancedOpen ? 'transform:rotate(90deg)' : ''">chevron_right</span>
-                        <span>Advanced settings</span>
-                    </button>
+                        <div class="mcp-segmented" role="tablist" aria-label="MCP server type">
+                            <button type="button" :class="{ active: $store.mcpServersStore.serverForm.mode === 'local' }"
+                                @click="$store.mcpServersStore.setFormMode('local')">Command (uvx/npx)</button>
+                            <button type="button" :class="{ active: $store.mcpServersStore.serverForm.mode === 'remote' }"
+                                @click="$store.mcpServersStore.setFormMode('remote')">Remote URL</button>
+                        </div>
 
-                    <div class="mcp-advanced-body" x-show="$store.mcpServersStore.advancedOpen" x-transition.opacity style="display: none;">
                         <div class="mcp-form-grid">
+                            <label class="mcp-field">
+                                <span>Name</span>
+                                <input type="text" x-model="$store.mcpServersStore.serverForm.name" placeholder="github" />
+                            </label>
+
+                            <label class="mcp-field" x-show="$store.mcpServersStore.serverForm.mode === 'remote'">
+                                <span>Remote MCP server URL</span>
+                                <input type="url" x-model="$store.mcpServersStore.serverForm.url" placeholder="https://example.com/mcp" />
+                            </label>
+
+                            <label class="mcp-field" x-show="$store.mcpServersStore.serverForm.mode === 'local'" style="display: none;">
+                                <span>Command line</span>
+                                <input type="text" x-model="$store.mcpServersStore.serverForm.command" placeholder="npx -y @modelcontextprotocol/server-filesystem" />
+                            </label>
+
                             <label class="mcp-field" x-show="$store.mcpServersStore.serverForm.mode === 'remote'">
                                 <span>Transport</span>
                                 <select x-model="$store.mcpServersStore.serverForm.type">
@@ -105,163 +201,75 @@
                                 <span>Environment</span>
                                 <textarea x-model="$store.mcpServersStore.serverForm.envText" rows="4" placeholder="TOKEN=..."></textarea>
                             </label>
-
-                            <label class="mcp-field">
-                                <span>Startup timeout</span>
-                                <input type="number" min="0" x-model="$store.mcpServersStore.serverForm.init_timeout" />
-                            </label>
-
-                            <label class="mcp-field">
-                                <span>Tool timeout</span>
-                                <input type="number" min="0" x-model="$store.mcpServersStore.serverForm.tool_timeout" />
-                            </label>
                         </div>
 
-                        <div class="mcp-toggle-row">
-                            <label>
-                                <input type="checkbox" x-model="$store.mcpServersStore.serverForm.disabled" />
-                                <span>Disabled</span>
-                            </label>
-                            <label x-show="$store.mcpServersStore.serverForm.mode === 'remote'">
-                                <input type="checkbox" x-model="$store.mcpServersStore.serverForm.verify" />
-                                <span>Verify SSL</span>
-                            </label>
-                            <label x-show="$store.mcpServersStore.serverForm.mode === 'remote'">
-                                <input type="checkbox" x-model="$store.mcpServersStore.serverForm.allow_remote_network" />
-                                <span>Trust remote inspection</span>
-                            </label>
-                            <label x-show="$store.mcpServersStore.serverForm.mode === 'local'" style="display: none;">
-                                <input type="checkbox" x-model="$store.mcpServersStore.serverForm.allow_local_execution" />
-                                <span>Trust local inspection</span>
-                            </label>
-                        </div>
-                    </div>
-
-                    <div class="mcp-scan-result" x-show="$store.mcpServersStore.scanResult">
-                        <div class="mcp-scan-heading">
-                            <span class="material-symbols-outlined" aria-hidden="true"
-                                x-text="$store.mcpServersStore.scanResult?.risk_level === 'ok' ? 'verified' : ($store.mcpServersStore.scanResult?.risk_level === 'error' ? 'error' : 'warning')"></span>
-                            <span x-text="$store.mcpServersStore.scanRiskLabel"></span>
-                        </div>
-                        <div class="mcp-scan-warnings">
-                            <template x-for="warning in $store.mcpServersStore.scanWarnings" :key="warning.title + warning.message">
-                                <div class="mcp-scan-warning" :class="warning.level">
-                                    <strong x-text="warning.title"></strong>
-                                    <span x-text="warning.message"></span>
-                                </div>
-                            </template>
-                        </div>
-                    </div>
-
-                    <div class="mcp-add-actions">
-                        <button type="button" class="button" :disabled="$store.mcpServersStore.scanLoading" @click="$store.mcpServersStore.scanForm()">
-                            <span class="material-symbols-outlined" aria-hidden="true" x-text="$store.mcpServersStore.scanLoading ? 'progress_activity' : 'radar'"></span>
-                            <span x-text="$store.mcpServersStore.scanLoading ? 'Scanning' : 'Scan'"></span>
+                        <button type="button" class="mcp-advanced-toggle" @click="$store.mcpServersStore.advancedOpen = !$store.mcpServersStore.advancedOpen">
+                            <span class="material-symbols-outlined" :style="$store.mcpServersStore.advancedOpen ? 'transform:rotate(90deg)' : ''">chevron_right</span>
+                            <span>Advanced settings</span>
                         </button>
-                        <button type="button" class="button confirm" @click="$store.mcpServersStore.addServerFromForm()">
-                            <span class="material-symbols-outlined" aria-hidden="true">add_circle</span>
-                            <span>Add to config</span>
-                        </button>
-                    </div>
-                </section>
 
-                <div class="mcp-view-tabs">
-                    <button type="button" :class="{ active: $store.mcpServersStore.activeView === 'visual' }"
-                        @click="$store.mcpServersStore.setActiveView('visual')">
-                        <span class="material-symbols-outlined" aria-hidden="true">dashboard_customize</span>
-                        <span>Manager</span>
-                    </button>
-                    <button type="button" :class="{ active: $store.mcpServersStore.activeView === 'raw' }"
-                        @click="$store.mcpServersStore.setActiveView('raw')">
-                        <span class="material-symbols-outlined" aria-hidden="true">data_object</span>
-                        <span>Raw JSON</span>
-                    </button>
-                </div>
+                        <div class="mcp-advanced-body" x-show="$store.mcpServersStore.advancedOpen" x-transition.opacity style="display: none;">
+                            <div class="mcp-form-grid">
+                                <label class="mcp-field mcp-field-wide">
+                                    <span>Description</span>
+                                    <input type="text" x-model="$store.mcpServersStore.serverForm.description" placeholder="Optional" />
+                                </label>
 
-                <section x-show="$store.mcpServersStore.activeView === 'visual'" class="mcp-config-list">
-                    <div class="mcp-section-title">
-                        <h3>Configured servers</h3>
-                        <span x-text="$store.mcpServersStore.configuredServers.length + ' total'"></span>
-                    </div>
-                    <template x-if="$store.mcpServersStore.configuredServers.length === 0">
-                        <div class="mcp-empty">No MCP servers configured.</div>
-                    </template>
-                    <template x-for="entry in $store.mcpServersStore.configuredServers" :key="entry.name">
-                        <article class="mcp-config-card" :class="{ disabled: entry.config.disabled }">
-                            <div class="mcp-config-card-main">
-                                <div>
-                                    <div class="mcp-config-name" x-text="entry.name"></div>
-                                    <div class="mcp-config-summary" x-text="$store.mcpServersStore.configSummary(entry.config)"></div>
-                                </div>
-                                <span class="mcp-config-mode" x-text="$store.mcpServersStore.configModeLabel(entry.config)"></span>
+                                <label class="mcp-field">
+                                    <span>Startup timeout</span>
+                                    <input type="number" min="0" x-model="$store.mcpServersStore.serverForm.init_timeout" />
+                                </label>
+
+                                <label class="mcp-field">
+                                    <span>Tool timeout</span>
+                                    <input type="number" min="0" x-model="$store.mcpServersStore.serverForm.tool_timeout" />
+                                </label>
                             </div>
-                            <div class="mcp-config-actions">
-                                <button type="button" class="mcp-icon-button" title="Edit" @click="$store.mcpServersStore.editConfigServer(entry.name)">
-                                    <span class="material-symbols-outlined" aria-hidden="true">edit</span>
-                                </button>
-                                <button type="button" class="mcp-icon-button" title="Enable or disable" @click="$store.mcpServersStore.toggleConfigServer(entry.name)">
-                                    <span class="material-symbols-outlined" aria-hidden="true" x-text="entry.config.disabled ? 'toggle_off' : 'toggle_on'"></span>
-                                </button>
-                                <button type="button" class="mcp-icon-button danger" title="Remove" @click="$store.mcpServersStore.removeConfigServer(entry.name)">
-                                    <span class="material-symbols-outlined" aria-hidden="true">delete</span>
-                                </button>
+
+                            <div class="mcp-toggle-row">
+                                <label>
+                                    <input type="checkbox" x-model="$store.mcpServersStore.serverForm.disabled" />
+                                    <span>Disabled</span>
+                                </label>
+                                <label x-show="$store.mcpServersStore.serverForm.mode === 'remote'">
+                                    <input type="checkbox" x-model="$store.mcpServersStore.serverForm.verify" />
+                                    <span>Verify SSL</span>
+                                </label>
                             </div>
-                        </article>
-                    </template>
+                        </div>
+
+                        <div class="mcp-add-actions">
+                            <button type="button" class="button" @click="$store.mcpServersStore.openScanModal()">
+                                <span class="material-symbols-outlined" aria-hidden="true">radar</span>
+                                <span>Scan with Agent Zero</span>
+                            </button>
+                            <button type="button" class="button confirm" @click="$store.mcpServersStore.addServerFromForm()">
+                                <span class="material-symbols-outlined" aria-hidden="true">add_circle</span>
+                                <span>Add to config</span>
+                            </button>
+                        </div>
+                    </section>
                 </section>
 
                 <section x-show="$store.mcpServersStore.activeView === 'raw'" class="mcp-raw-panel" style="display: none;">
                     <div class="mcp-raw-toolbar">
                         <h3>MCP Servers Configuration JSON</h3>
-                        <button type="button" class="button" @click="$store.mcpServersStore.formatJson()">
-                            <span class="material-symbols-outlined" aria-hidden="true">format_indent_increase</span>
-                            <span>Reformat</span>
-                        </button>
-                    </div>
-                    <div id="mcp-servers-config-json"></div>
-                </section>
-
-                <section class="mcp-status-section" id="mcp-servers-status">
-                    <div class="mcp-section-title">
-                        <h3>Servers status</h3>
-                        <span x-text="$store.mcpServersStore.loading ? 'Loading' : ($store.mcpServersStore.servers.length + ' visible')"></span>
-                    </div>
-
-                    <div x-show="$store.mcpServersStore.loading" class="mcp-empty">
-                        Loading MCP server status...
-                    </div>
-
-                    <div class="mcp-status-list" x-show="!$store.mcpServersStore.loading">
-                        <template x-for="server in $store.mcpServersStore.servers" :key="server.scope + ':' + server.name">
-                            <article class="mcp-status-row" :class="$store.mcpServersStore.statusClass(server)">
-                                <div class="mcp-status-main">
-                                    <span class="mcp-status-dot"></span>
-                                    <div>
-                                        <div class="mcp-status-name">
-                                            <span x-text="server.name"></span>
-                                            <span class="mcp-status-scope" x-text="server.scope || 'global'"></span>
-                                        </div>
-                                        <div class="mcp-status-meta">
-                                            <span x-text="$store.mcpServersStore.statusLabel(server)"></span>
-                                            <span x-show="server.type" x-text="server.type"></span>
-                                        </div>
-                                    </div>
-                                </div>
-                                <div class="mcp-status-actions">
-                                    <button type="button" class="button" x-show="server.tool_count > 0"
-                                        @click="$store.mcpServersStore.onToolCountClick(server.name)"
-                                        x-text="server.tool_count + ' tools'"></button>
-                                    <button type="button" class="button" x-show="server.has_log"
-                                        @click="$store.mcpServersStore.getServerLog(server.name)">Log</button>
-                                </div>
-                                <div class="mcp-status-error" x-show="server.error" x-text="server.error"></div>
-                            </article>
-                        </template>
-
-                        <div x-show="$store.mcpServersStore.servers.length === 0" class="mcp-empty">
-                            No servers.
+                        <div class="mcp-raw-actions">
+                            <button type="button" class="button" onclick="openModal('settings/mcp/client/example.html')">Examples</button>
+                            <button type="button" class="button" @click="$store.mcpServersStore.formatJson()">
+                                <span class="material-symbols-outlined" aria-hidden="true">format_indent_increase</span>
+                                <span>Reformat</span>
+                            </button>
+                            <button type="button" class="button" title="Refresh status" @click="$store.mcpServersStore.loadStatus()">
+                                <span class="material-symbols-outlined" aria-hidden="true">refresh</span>
+                            </button>
+                            <button type="button" class="button confirm" :disabled="$store.mcpServersStore.applying" @click="$store.mcpServersStore.applyNow()">
+                                <span class="material-symbols-outlined" aria-hidden="true">check</span>
+                                <span x-text="$store.mcpServersStore.applying ? 'Applying' : 'Apply'"></span>
+                            </button>
                         </div>
                     </div>
+                    <div id="mcp-servers-config-json"></div>
                 </section>
             </div>
         </template>
@@ -294,6 +302,9 @@
         }
 
         .mcp-manager-heading {
+            display: flex;
+            flex-direction: column;
+            gap: 0.55rem;
             min-width: 0;
         }
 
@@ -349,6 +360,7 @@
         .mcp-config-actions,
         .mcp-status-actions,
         .mcp-toggle-row,
+        .mcp-raw-actions,
         .mcp-raw-toolbar {
             display: flex;
             flex-wrap: wrap;
@@ -413,6 +425,13 @@
             background: var(--color-input);
         }
 
+        .mcp-view-controls {
+            display: flex;
+            align-items: center;
+            gap: 0.6rem;
+            flex-wrap: wrap;
+        }
+
         .mcp-segmented button,
         .mcp-view-tabs button {
             display: inline-flex;
@@ -433,6 +452,49 @@
             color: var(--color-text);
         }
 
+        .mcp-search {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.35rem;
+            min-height: 2.1rem;
+            min-width: min(22rem, 100%);
+            padding: 0.25rem 0.45rem;
+            border: 1px solid var(--color-border);
+            border-radius: 7px;
+            background: var(--color-input);
+            color: var(--color-text-muted);
+        }
+
+        .mcp-search input {
+            width: 100%;
+            min-width: 8rem;
+            border: 0;
+            background: transparent;
+            color: var(--color-text);
+            outline: none;
+            padding: 0.2rem;
+        }
+
+        .mcp-search input::-webkit-search-cancel-button,
+        .mcp-search input::-webkit-search-decoration {
+            -webkit-appearance: none;
+            appearance: none;
+            display: none;
+        }
+
+        .mcp-search-clear {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 1.45rem;
+            height: 1.45rem;
+            border: 0;
+            border-radius: 5px;
+            background: transparent;
+            color: var(--color-text-muted);
+            cursor: pointer;
+        }
+
         .mcp-form-grid {
             display: grid;
             grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -444,6 +506,10 @@
             flex-direction: column;
             gap: 0.35rem;
             min-width: 0;
+        }
+
+        .mcp-field-wide {
+            grid-column: 1 / -1;
         }
 
         .mcp-field span {
@@ -546,6 +612,7 @@
             border-left-color: var(--color-error-text);
         }
 
+        .mcp-visual-panel,
         .mcp-config-list,
         .mcp-status-section,
         .mcp-raw-panel {
@@ -589,6 +656,41 @@
             overflow-wrap: anywhere;
         }
 
+        .mcp-toggle-group {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.45rem;
+            min-width: 5.2rem;
+        }
+
+        .mcp-status-toggle {
+            width: 48px;
+            height: 28px;
+            flex: 0 0 48px;
+        }
+
+        .mcp-status-toggle .toggler {
+            border-radius: 999px;
+        }
+
+        .mcp-status-toggle .toggler:before {
+            width: 20px;
+            height: 20px;
+            left: 4px;
+            bottom: 4px;
+        }
+
+        .mcp-status-toggle input:checked + .toggler:before {
+            transform: translateX(20px);
+        }
+
+        .mcp-toggle-group .plugin-status-text {
+            color: var(--color-text-muted);
+            font-size: 0.76rem;
+            font-weight: 700;
+            min-width: 1.7rem;
+        }
+
         .mcp-icon-button {
             display: inline-flex;
             align-items: center;
@@ -608,6 +710,10 @@
 
         .mcp-raw-toolbar {
             align-items: center;
+        }
+
+        .mcp-raw-actions {
+            justify-content: flex-end;
         }
 
         #mcp-servers-config-json {
@@ -694,6 +800,7 @@
             }
 
             .mcp-manager-actions,
+            .mcp-raw-actions,
             .mcp-status-actions {
                 justify-content: flex-start;
             }
@@ -705,6 +812,11 @@
             .mcp-view-tabs button {
                 flex: 1;
                 justify-content: center;
+            }
+
+            .mcp-view-controls,
+            .mcp-search {
+                width: 100%;
             }
         }
     </style>

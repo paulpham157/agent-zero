@@ -222,6 +222,60 @@ def test_mcp_status_marks_servers_with_errors_disconnected(mcp_handler_module):
     assert status[0]["has_log"] is True
 
 
+def test_mcp_disabled_tools_are_hidden_from_agent_paths_but_visible_in_detail(mcp_handler_module):
+    module, _tmp_path = mcp_handler_module
+
+    server = module.MCPServerLocal(
+        {
+            "name": "files",
+            "command": "npx",
+            "disabled_tools": ["write_file"],
+        }
+    )
+    client = getattr(server, "_MCPServerLocal__client")
+    client.tools = [
+        {
+            "name": "read_file",
+            "description": "Read a file",
+            "input_schema": {},
+        },
+        {
+            "name": "write_file",
+            "description": "Write a file",
+            "input_schema": {},
+        },
+    ]
+
+    config = module.MCPConfig(servers_list=[])
+    config.servers = [server]
+
+    assert [tool["name"] for tool in server.get_tools()] == ["read_file"]
+    assert server.has_tool("write_file") is False
+    assert config.has_tool("files.write_file") is False
+    assert config.get_servers_status()[0]["tool_count"] == 1
+    assert "files.write_file" not in config.get_tools_prompt()
+
+    detail_tools = config.get_server_detail("files")["tools"]
+    assert [(tool["name"], tool.get("disabled", False)) for tool in detail_tools] == [
+        ("read_file", False),
+        ("write_file", True),
+    ]
+
+    with pytest.raises(ValueError):
+        asyncio.run(server.call_tool("write_file", {}))
+
+    malformed_config = module.MCPConfig(
+        servers_list=[
+            {
+                "name": "malformed",
+                "command": "npx",
+                "disabled_tools": "write_file",
+            }
+        ]
+    )
+    assert malformed_config.servers[0].disabled_tools == []
+
+
 def test_mcp_client_call_tool_uses_server_tool_timeout(mcp_handler_module, monkeypatch):
     module, _tmp_path = mcp_handler_module
     session_timeouts = []

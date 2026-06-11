@@ -20,6 +20,7 @@
   - `get_error(self) -> str`
   - `get_log(self) -> str`
   - `get_tools(self) -> List[dict[str, Any]]`
+  - `get_all_tools(self) -> List[dict[str, Any]]`
   - `has_tool(self, tool_name: str) -> bool`
   - `async call_tool(self, tool_name: str, input_data: Dict[str, Any]) -> CallToolResult`
   - `update(self, config: dict[str, Any]) -> 'MCPServerRemote'`
@@ -28,6 +29,7 @@
   - `get_error(self) -> str`
   - `get_log(self) -> str`
   - `get_tools(self) -> List[dict[str, Any]]`
+  - `get_all_tools(self) -> List[dict[str, Any]]`
   - `has_tool(self, tool_name: str) -> bool`
   - `async call_tool(self, tool_name: str, input_data: Dict[str, Any]) -> CallToolResult`
   - `update(self, config: dict[str, Any]) -> 'MCPServerLocal'`
@@ -63,6 +65,7 @@
 - `_determine_server_type(config_dict: dict) -> str`: Determine the server type based on configuration, with backward compatibility.
 - `_is_streaming_http_type(server_type: str) -> bool`: Check if the server type is a streaming HTTP variant.
 - `_split_qualified_tool_name(tool_name: str) -> tuple[str, str]`: Split `server.tool` names while preserving dots inside MCP tool names.
+- `_normalize_disabled_tools(value: Any) -> list[str]`: Normalize the optional per-server disabled tool list.
 - `initialize_mcp(mcp_servers_config: str)`
 - Notable constants/configuration names: `DEFAULT_MCP_SERVERS_CONFIG`, `MCP_MEDIA_TOKENS_ESTIMATE`, `MAX_MCP_RESOURCE_TEXT_CHARS`, `T`.
 
@@ -76,6 +79,7 @@
 - Project-scoped MCP servers overlay global servers by normalized name. The resulting `MCPConfig` cache key is derived from both config strings so project instances refresh when either scope changes.
 - Server status and detail responses include `scope`, and MCP tools resolve through `MCPConfig.get_for_agent(agent)` before execution.
 - MCP tool names are qualified as `server_name.tool_name`; server names are normalized without dots, and the tool portion may contain dots.
+- Servers may define `disabled_tools` as a list of MCP tool names. Disabled tools are omitted from agent-facing prompts, status counts, `has_tool`, and calls, while detail views can still retrieve them through `get_all_tools()` with a `disabled` flag so users can re-enable them.
 - Server-specific `init_timeout` and `tool_timeout` override global MCP client timeout settings for list-tools and call-tool operations.
 - Server status marks initialized server objects with cached initialization errors as disconnected, even if the config object exists.
 - Observed side-effect areas: filesystem writes, network calls, WebSocket state, settings/state persistence, secret handling.

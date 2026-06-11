@@ -103,6 +103,12 @@ def _split_qualified_tool_name(tool_name: str) -> tuple[str, str]:
     return server_name_part, tool_name_part
 
 
+def _normalize_disabled_tools(value: Any) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    return [str(item).strip() for item in value if str(item).strip()]
+
+
 def initialize_mcp(mcp_servers_config: str):
     if not MCPConfig.get_instance().is_initialized():
         try:
@@ -450,6 +456,7 @@ class MCPServerRemote(BaseModel):
     tool_timeout: int = Field(default=0)
     verify: bool = Field(default=True, description="Verify SSL certificates")
     disabled: bool = Field(default=False)
+    disabled_tools: list[str] = Field(default_factory=list)
     scope: str = Field(default="global")
 
     __lock: ClassVar[threading.Lock] = PrivateAttr(default=threading.Lock())
@@ -469,12 +476,26 @@ class MCPServerRemote(BaseModel):
             return self.__client.get_log()  # type: ignore
 
     def get_tools(self) -> List[dict[str, Any]]:
-        """Get all tools from the server"""
+        """Get enabled tools from the server"""
         with self.__lock:
-            return self.__client.get_tools()  # type: ignore
+            tools = self.__client.get_tools()  # type: ignore
+            disabled = set(self.disabled_tools)
+            return [tool for tool in tools if tool.get("name") not in disabled]
+
+    def get_all_tools(self) -> List[dict[str, Any]]:
+        """Get all tools from the server and mark disabled tools for UI detail views."""
+        with self.__lock:
+            tools = self.__client.get_tools()  # type: ignore
+            disabled = set(self.disabled_tools)
+            return [
+                {**tool, "disabled": tool.get("name") in disabled}
+                for tool in tools
+            ]
 
     def has_tool(self, tool_name: str) -> bool:
         """Check if a tool is available"""
+        if tool_name in self.disabled_tools:
+            return False
         with self.__lock:
             return self.__client.has_tool(tool_name)  # type: ignore
 
@@ -485,6 +506,8 @@ class MCPServerRemote(BaseModel):
         client = self.__client
         if client is None:
             raise RuntimeError("MCP remote client is not initialized")
+        if tool_name in self.disabled_tools:
+            raise ValueError(f"Tool {tool_name} is disabled for server {self.name}.")
         return await client.call_tool(tool_name, input_data)
 
     def update(self, config: dict[str, Any]) -> "MCPServerRemote":
@@ -500,6 +523,7 @@ class MCPServerRemote(BaseModel):
                     "init_timeout",
                     "tool_timeout",
                     "disabled",
+                    "disabled_tools",
                     "verify",
                     "scope",
                 ]:
@@ -507,6 +531,8 @@ class MCPServerRemote(BaseModel):
                         value = normalize_name(value)
                     if key == "serverUrl":
                         key = "url"  # remap serverUrl to url
+                    if key == "disabled_tools":
+                        value = _normalize_disabled_tools(value)
 
                     setattr(self, key, value)
             return self
@@ -531,6 +557,7 @@ class MCPServerLocal(BaseModel):
     tool_timeout: int = Field(default=0)
     verify: bool = Field(default=True, description="Verify SSL certificates")
     disabled: bool = Field(default=False)
+    disabled_tools: list[str] = Field(default_factory=list)
     scope: str = Field(default="global")
 
     __lock: ClassVar[threading.Lock] = PrivateAttr(default=threading.Lock())
@@ -550,12 +577,26 @@ class MCPServerLocal(BaseModel):
             return self.__client.get_log()  # type: ignore
 
     def get_tools(self) -> List[dict[str, Any]]:
-        """Get all tools from the server"""
+        """Get enabled tools from the server"""
         with self.__lock:
-            return self.__client.get_tools()  # type: ignore
+            tools = self.__client.get_tools()  # type: ignore
+            disabled = set(self.disabled_tools)
+            return [tool for tool in tools if tool.get("name") not in disabled]
+
+    def get_all_tools(self) -> List[dict[str, Any]]:
+        """Get all tools from the server and mark disabled tools for UI detail views."""
+        with self.__lock:
+            tools = self.__client.get_tools()  # type: ignore
+            disabled = set(self.disabled_tools)
+            return [
+                {**tool, "disabled": tool.get("name") in disabled}
+                for tool in tools
+            ]
 
     def has_tool(self, tool_name: str) -> bool:
         """Check if a tool is available"""
+        if tool_name in self.disabled_tools:
+            return False
         with self.__lock:
             return self.__client.has_tool(tool_name)  # type: ignore
 
@@ -566,6 +607,8 @@ class MCPServerLocal(BaseModel):
         client = self.__client
         if client is None:
             raise RuntimeError("MCP local client is not initialized")
+        if tool_name in self.disabled_tools:
+            raise ValueError(f"Tool {tool_name} is disabled for server {self.name}.")
         return await client.call_tool(tool_name, input_data)
 
     def update(self, config: dict[str, Any]) -> "MCPServerLocal":
@@ -583,10 +626,13 @@ class MCPServerLocal(BaseModel):
                     "init_timeout",
                     "tool_timeout",
                     "disabled",
+                    "disabled_tools",
                     "scope",
                 ]:
                     if key == "name":
                         value = normalize_name(value)
+                    if key == "disabled_tools":
+                        value = _normalize_disabled_tools(value)
                     setattr(self, key, value)
             return self
 
@@ -852,6 +898,11 @@ class MCPConfig(BaseModel):
                 )
                 continue
 
+            server_item = dict(server_item)
+            server_item["disabled_tools"] = _normalize_disabled_tools(
+                server_item.get("disabled_tools")
+            )
+
             if server_item.get("disabled", False):
                 # get server name if available
                 server_name = server_item.get("name", "unnamed_server")
@@ -987,7 +1038,8 @@ class MCPConfig(BaseModel):
             for server in self.servers:
                 if server.name == server_name:
                     try:
-                        tools = server.get_tools()
+                        get_all_tools = getattr(server, "get_all_tools", None)
+                        tools = get_all_tools() if callable(get_all_tools) else server.get_tools()
                     except Exception:
                         tools = []
                     return {

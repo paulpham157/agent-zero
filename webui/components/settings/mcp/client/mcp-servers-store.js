@@ -1,8 +1,10 @@
 import { createStore } from "/js/AlpineStore.js";
+import { marked } from "/vendor/marked/marked.esm.js";
 import sleep from "/js/sleep.js";
 import * as API from "/js/api.js";
 import { openModal } from "/js/modals.js";
 import { store as settingsStore } from "/components/settings/settings-store.js";
+import { getUserTimezone } from "/js/time-utils.js";
 import {
   toastFrontendError,
   toastFrontendSuccess,
@@ -11,6 +13,44 @@ import {
 
 const EMPTY_CONFIG = '{\n  "mcpServers": {}\n}';
 const STATUS_INTERVAL_MS = 3000;
+const SCAN_ASSET_BASE = "/components/settings/mcp/client";
+const SCAN_POLL_INTERVAL_MS = 2000;
+const SCAN_MAX_POLL_MS = 10 * 60 * 1000;
+const SCAN_TITLE = "MCP Scanner";
+
+let scanChecksConfig = null;
+let scanPromptTemplate = null;
+let scanPollGeneration = 0;
+
+async function fetchText(url, label) {
+  const response = await fetch(url);
+  if (!response.ok) {
+    const body = await response.text().catch(() => "");
+    throw new Error(`Failed to load ${label}: ${response.status} ${response.statusText}${body ? ` - ${body}` : ""}`);
+  }
+  return response.text();
+}
+
+async function fetchJson(url, label) {
+  const response = await fetch(url);
+  if (!response.ok) {
+    const body = await response.text().catch(() => "");
+    throw new Error(`Failed to load ${label}: ${response.status} ${response.statusText}${body ? ` - ${body}` : ""}`);
+  }
+  return response.json();
+}
+
+async function loadScanChecks() {
+  if (scanChecksConfig) return scanChecksConfig;
+  scanChecksConfig = await fetchJson(`${SCAN_ASSET_BASE}/mcp-scan-checks.json`, "MCP scan checks");
+  return scanChecksConfig;
+}
+
+async function loadScanTemplate() {
+  if (scanPromptTemplate) return scanPromptTemplate;
+  scanPromptTemplate = await fetchText(`${SCAN_ASSET_BASE}/mcp-scan-prompt.md`, "MCP scan prompt");
+  return scanPromptTemplate;
+}
 
 function normalizeName(value) {
   return String(value || "mcp_server")
@@ -34,6 +74,12 @@ function parseJsonConfig(value) {
 
 function stringifyConfig(config) {
   return JSON.stringify(config || { mcpServers: {} }, null, 2);
+}
+
+function matchesSearchQuery(query, values) {
+  const normalized = String(query || "").trim().toLowerCase();
+  if (!normalized) return true;
+  return values.some((value) => String(value ?? "").toLowerCase().includes(normalized));
 }
 
 function parseKeyValueText(text) {
@@ -78,6 +124,61 @@ function formatArgsText(value) {
   return Array.isArray(value) ? value.join("\n") : "";
 }
 
+function splitCommandLine(text) {
+  const raw = String(text || "").trim();
+  if (!raw) return [];
+
+  const tokens = [];
+  let current = "";
+  let quote = "";
+  let escaping = false;
+
+  for (const char of raw) {
+    if (escaping) {
+      current += char;
+      escaping = false;
+      continue;
+    }
+    if (char === "\\") {
+      escaping = true;
+      continue;
+    }
+    if (quote) {
+      if (char === quote) quote = "";
+      else current += char;
+      continue;
+    }
+    if (char === "\"" || char === "'") {
+      quote = char;
+      continue;
+    }
+    if (/\s/u.test(char)) {
+      if (current) {
+        tokens.push(current);
+        current = "";
+      }
+      continue;
+    }
+    current += char;
+  }
+
+  if (escaping) current += "\\";
+  if (current) tokens.push(current);
+  return tokens;
+}
+
+function getLocalCommandParts(form) {
+  const commandLine = String(form.command || "").trim();
+  const explicitArgs = parseArgsText(form.argsText);
+  if (explicitArgs.length) return { command: commandLine, args: explicitArgs };
+
+  const parts = splitCommandLine(commandLine);
+  return {
+    command: parts[0] || commandLine,
+    args: parts.slice(1),
+  };
+}
+
 function deriveNameFromUrl(url) {
   try {
     const parsed = new URL(url);
@@ -88,9 +189,49 @@ function deriveNameFromUrl(url) {
   }
 }
 
+function deriveNameFromCommand(command, argsText) {
+  let args = [];
+  try {
+    args = parseArgsText(argsText);
+  } catch {}
+
+  const parts = args.length
+    ? [String(command || "").trim(), ...args]
+    : splitCommandLine(command);
+  const ignored = new Set(["npx", "uvx", "uv", "node", "python", "python3"]);
+  const candidate = [...parts]
+    .reverse()
+    .find((part) => part && !part.startsWith("-") && !ignored.has(part.toLowerCase()));
+  return normalizeName(candidate || parts[0] || "local_mcp");
+}
+
+function formatCriteria(ratings, criteria) {
+  return Object.entries(criteria || {})
+    .map(([level, desc]) => `- ${ratings[level]?.icon || level}: ${desc}`)
+    .join("\n");
+}
+
+function formatStatusLegend(ratings) {
+  return Object.values(ratings || {})
+    .map((rating) => `- ${rating.icon} ${rating.label}`)
+    .join("\n");
+}
+
+function formatRatingIcons(ratings) {
+  return Object.values(ratings || {}).map((rating) => rating.icon).join("/");
+}
+
+function createDefaultScanOptions() {
+  return {
+    inspectRuntime: true,
+    allowLocalExecution: false,
+    allowRemoteNetwork: false,
+  };
+}
+
 function createEmptyForm() {
   return {
-    mode: "remote",
+    mode: "local",
     name: "",
     description: "",
     url: "",
@@ -103,8 +244,6 @@ function createEmptyForm() {
     tool_timeout: "",
     verify: true,
     disabled: false,
-    allow_local_execution: false,
-    allow_remote_network: false,
   };
 }
 
@@ -116,10 +255,20 @@ const model = {
   statusCheck: false,
   serverLog: "",
   serverDetail: null,
+  serverSearch: "",
+  toolSearch: "",
   activeView: "visual",
-  addOpen: false,
   advancedOpen: false,
   serverForm: createEmptyForm(),
+  scanChecks: {},
+  scanChecksMeta: {},
+  scanOptions: createDefaultScanOptions(),
+  scanPrompt: "",
+  scanOutput: "",
+  scanCtxId: "",
+  scanTargetJson: "",
+  scanServer: null,
+  agentScanning: false,
   scanLoading: false,
   scanResult: null,
   scope: "global",
@@ -298,6 +447,70 @@ const model = {
     return [];
   },
 
+  get filteredConfiguredServers() {
+    return this.configuredServers.filter((entry) => matchesSearchQuery(this.serverSearch, [
+      entry.name,
+      this.configModeLabel(entry.config),
+      this.configSummary(entry.config),
+      entry.config?.description,
+    ]));
+  },
+
+  get filteredServers() {
+    return this.servers.filter((server) => matchesSearchQuery(this.serverSearch, [
+      server.name,
+      server.scope,
+      server.type,
+      server.description,
+      server.error,
+      this.statusLabel(server),
+    ]));
+  },
+
+  get serverSearchActive() {
+    return !!String(this.serverSearch || "").trim();
+  },
+
+  get configuredServersCountLabel() {
+    const total = this.configuredServers.length;
+    if (!this.serverSearchActive) return `${total} total`;
+    return `${this.filteredConfiguredServers.length} of ${total}`;
+  },
+
+  get visibleServersCountLabel() {
+    if (this.loading) return "Loading";
+    const total = this.servers.length;
+    if (!this.serverSearchActive) return `${total} visible`;
+    return `${this.filteredServers.length} of ${total}`;
+  },
+
+  clearServerSearch() {
+    this.serverSearch = "";
+  },
+
+  get serverDetailTools() {
+    return Array.isArray(this.serverDetail?.tools) ? this.serverDetail.tools : [];
+  },
+
+  get filteredServerDetailTools() {
+    return this.serverDetailTools.filter((tool) => matchesSearchQuery(this.toolSearch, [
+      tool.name,
+      tool.description,
+      JSON.stringify(tool.input_schema || {}),
+    ]));
+  },
+
+  get serverDetailToolsCountLabel() {
+    const total = this.serverDetailTools.length;
+    const query = String(this.toolSearch || "").trim();
+    if (!query) return `${total} tools`;
+    return `${this.filteredServerDetailTools.length} of ${total}`;
+  },
+
+  clearToolSearch() {
+    this.toolSearch = "";
+  },
+
   countServersInConfig(configText) {
     try {
       const config = parseJsonConfig(configText || EMPTY_CONFIG);
@@ -338,7 +551,7 @@ const model = {
 
   buildServerFromForm() {
     const form = this.serverForm;
-    const name = normalizeName(form.name || (form.mode === "remote" ? deriveNameFromUrl(form.url) : form.command));
+    const name = normalizeName(form.name || (form.mode === "remote" ? deriveNameFromUrl(form.url) : deriveNameFromCommand(form.command, form.argsText)));
     if (!name) throw new Error("Name is required");
 
     const server = {
@@ -366,10 +579,11 @@ const model = {
       if (Object.keys(headers).length) server.headers = headers;
     } else {
       if (!form.command.trim()) throw new Error("Local command is required");
+      const parts = getLocalCommandParts(form);
+      if (!parts.command) throw new Error("Local command is required");
       server.type = "stdio";
-      server.command = form.command.trim();
-      const args = parseArgsText(form.argsText);
-      if (args.length) server.args = args;
+      server.command = parts.command;
+      if (parts.args.length) server.args = parts.args;
       const env = parseKeyValueText(form.envText);
       if (Object.keys(env).length) server.env = env;
     }
@@ -377,32 +591,222 @@ const model = {
     return server;
   },
 
-  async scanForm() {
+  async ensureScanFramework() {
+    try {
+      const cfg = await loadScanChecks();
+      this.scanChecksMeta = cfg.checks || {};
+      if (Object.keys(this.scanChecks).length === 0) {
+        const checks = {};
+        for (const key of Object.keys(this.scanChecksMeta)) checks[key] = true;
+        this.scanChecks = checks;
+      }
+      return cfg;
+    } catch (error) {
+      console.error("Failed to load MCP scanner framework:", error);
+      void toastFrontendError(`Failed to load MCP scanner: ${error.message || error}`, SCAN_TITLE);
+      return null;
+    }
+  },
+
+  resetScanState() {
+    scanPollGeneration++;
+    this.scanOptions = createDefaultScanOptions();
+    this.scanPrompt = "";
+    this.scanOutput = "";
+    this.scanCtxId = "";
+    this.scanTargetJson = "";
+    this.scanServer = null;
+    this.agentScanning = false;
+    this.scanLoading = false;
+    this.scanResult = null;
+  },
+
+  prepareScanTarget() {
     let server;
     try {
       server = this.buildServerFromForm();
     } catch (error) {
-      void toastFrontendError(error.message || String(error), "MCP Scanner");
-      return;
+      void toastFrontendError(error.message || String(error), SCAN_TITLE);
+      return false;
     }
 
+    this.scanServer = server;
+    this.scanTargetJson = JSON.stringify(server, null, 2);
+    this.scanResult = null;
+    this.scanOutput = "";
+    this.scanCtxId = "";
+    return true;
+  },
+
+  async openScanModal() {
+    if (!this.prepareScanTarget()) return;
+    await this.ensureScanFramework();
+    await this.buildScanPrompt();
+    await openModal("settings/mcp/client/mcp-server-scan.html");
+  },
+
+  async onScanModalOpen() {
+    await this.ensureScanFramework();
+    if (!this.scanServer) this.prepareScanTarget();
+    await this.buildScanPrompt();
+  },
+
+  async buildScanPrompt() {
+    if (!this.scanServer) return;
+    try {
+      const [cfg, template] = await Promise.all([loadScanChecks(), loadScanTemplate()]);
+      const ratings = cfg.ratings || {};
+      const checks = cfg.checks || {};
+      const selected = Object.entries(this.scanChecks)
+        .filter(([, enabled]) => enabled)
+        .map(([key]) => checks[key])
+        .filter(Boolean);
+
+      const inspectionSummary = this.scanResult
+        ? JSON.stringify({
+          risk_level: this.scanResult.risk_level,
+          warnings: this.scanResult.warnings || [],
+          inspected_tools: this.scanResult.inspected_tools || [],
+        }, null, 2)
+        : "No deterministic config inspection has been run in this modal yet.";
+
+      let prompt = template;
+      prompt = prompt.replace(/\{\{SERVER_JSON\}\}/g, this.scanTargetJson || JSON.stringify(this.scanServer, null, 2));
+      prompt = prompt.replace(/\{\{CONFIG_SCOPE\}\}/g, this.scope === "project" && this.projectName ? `project: ${this.projectName}` : "global draft");
+      prompt = prompt.replace(/\{\{RUNTIME_INSPECTION\}\}/g, this.scanOptions.inspectRuntime ? "requested" : "not requested");
+      prompt = prompt.replace(/\{\{ALLOW_LOCAL_EXECUTION\}\}/g, this.scanOptions.allowLocalExecution ? "yes" : "no");
+      prompt = prompt.replace(/\{\{ALLOW_REMOTE_NETWORK\}\}/g, this.scanOptions.allowRemoteNetwork ? "yes" : "no");
+      prompt = prompt.replace(/\{\{INSPECTION_SUMMARY\}\}/g, inspectionSummary);
+      prompt = prompt.replace(
+        /\{\{SELECTED_CHECKS\}\}/g,
+        selected.length ? selected.map((check) => `- ${check.label}`).join("\n") : "- (no checks selected)",
+      );
+      prompt = prompt.replace(
+        /\{\{CHECK_DETAILS\}\}/g,
+        selected.length
+          ? selected.map((check) => `**${check.label}**: ${check.detail}\n${formatCriteria(ratings, check.criteria)}`).join("\n\n")
+          : "(no checks selected)",
+      );
+      prompt = prompt.replace(/\{\{STATUS_LEGEND\}\}/g, formatStatusLegend(ratings));
+      prompt = prompt.replace(/\{\{RATING_ICONS\}\}/g, formatRatingIcons(ratings));
+      prompt = prompt.replace(/\{\{RATING_PASS\}\}/g, ratings.pass?.icon || "PASS");
+      prompt = prompt.replace(/\{\{RATING_WARNING\}\}/g, ratings.warning?.icon || "WARN");
+      prompt = prompt.replace(/\{\{RATING_FAIL\}\}/g, ratings.fail?.icon || "FAIL");
+      this.scanPrompt = prompt;
+    } catch (error) {
+      console.error("Failed to build MCP scan prompt:", error);
+      void toastFrontendError(`Failed to build scan prompt: ${error.message || error}`, SCAN_TITLE);
+    }
+  },
+
+  async runConfigInspection() {
+    if (!this.scanServer && !this.prepareScanTarget()) return;
     this.scanLoading = true;
     this.scanResult = null;
     try {
       const response = await API.callJsonApi("mcp_server_scan", {
-        server,
-        inspect_runtime: true,
-        allow_local_execution: !!this.serverForm.allow_local_execution,
-        allow_remote_network: !!this.serverForm.allow_remote_network,
+        server: this.scanServer,
+        inspect_runtime: !!this.scanOptions.inspectRuntime,
+        allow_local_execution: !!this.scanOptions.allowLocalExecution,
+        allow_remote_network: !!this.scanOptions.allowRemoteNetwork,
       });
       if (!response?.success) throw new Error(response?.error || "Scan failed");
       this.scanResult = response;
+      await this.buildScanPrompt();
     } catch (error) {
       console.error("MCP scan failed:", error);
-      void toastFrontendError(`MCP scan failed: ${error.message || error}`, "MCP Scanner");
+      void toastFrontendError(`MCP scan failed: ${error.message || error}`, SCAN_TITLE);
     } finally {
       this.scanLoading = false;
     }
+  },
+
+  async copyScanPrompt() {
+    try {
+      await navigator.clipboard.writeText(this.scanPrompt || "");
+    } catch {
+      void toastFrontendError("Failed to copy the scan prompt", SCAN_TITLE);
+    }
+  },
+
+  async runAgentScan() {
+    if (this.agentScanning) return;
+    if (!this.scanServer && !this.prepareScanTarget()) return;
+    await this.buildScanPrompt();
+
+    const prompt = String(this.scanPrompt || "").trim();
+    if (!prompt) {
+      void toastFrontendError("Scan prompt is empty", SCAN_TITLE);
+      return;
+    }
+
+    const gen = ++scanPollGeneration;
+    this.scanOutput = "";
+
+    let ctxId = "";
+    try {
+      const resp = await API.callJsonApi("/chat_create", {});
+      if (!resp?.ok || !resp.ctxid) throw new Error(resp?.message || "Failed to create scan chat");
+      ctxId = resp.ctxid;
+      this.scanCtxId = ctxId;
+      await API.callJsonApi("/message_queue_add", { context: ctxId, text: prompt });
+      this.agentScanning = true;
+      await API.callJsonApi("/message_queue_send", { context: ctxId });
+      void this.pollAgentScan(gen, ctxId);
+    } catch (error) {
+      this.agentScanning = false;
+      console.error("MCP agent scan failed:", error);
+      void toastFrontendError(`Scan failed: ${error.message || error}`, SCAN_TITLE);
+    }
+  },
+
+  async pollAgentScan(gen, ctxId) {
+    let started = false;
+    const deadline = Date.now() + SCAN_MAX_POLL_MS;
+    while (gen === scanPollGeneration) {
+      if (Date.now() >= deadline) {
+        this.agentScanning = false;
+        void toastFrontendError("Scan timed out while waiting for Agent Zero", SCAN_TITLE);
+        return;
+      }
+      await sleep(SCAN_POLL_INTERVAL_MS);
+      try {
+        const snap = await API.callJsonApi("/poll", {
+          context: ctxId,
+          log_from: 0,
+          notifications_from: 0,
+          timezone: getUserTimezone(),
+        });
+
+        if (snap.logs?.length) {
+          const last = snap.logs
+            .filter((log) => log.type === "response" && log.no > 0)
+            .pop();
+          if (last) this.scanOutput = last.content || "";
+        }
+
+        if (snap.log_progress_active) started = true;
+        if (started && !snap.log_progress_active) {
+          this.agentScanning = false;
+          return;
+        }
+        if (snap.deselect_chat) return;
+      } catch (error) {
+        if (gen === scanPollGeneration) console.error("MCP scan poll error:", error);
+      }
+    }
+  },
+
+  openScanChatInNewWindow() {
+    if (!this.scanCtxId) return;
+    const url = new URL(window.location.href);
+    url.searchParams.set("ctxid", this.scanCtxId);
+    window.open(url.toString(), "_blank");
+  },
+
+  scanCleanup() {
+    scanPollGeneration++;
+    this.agentScanning = false;
   },
 
   addServerFromForm() {
@@ -426,9 +830,9 @@ const model = {
         config.mcpServers[server.name] = stored;
       }
       this.setEditorValue(stringifyConfig(config));
-      this.addOpen = false;
       this.resetForm();
       void toastFrontendSuccess("MCP server added to draft config", "MCP Servers");
+      requestAnimationFrame(() => globalThis.scrollModal?.("mcp-configured-servers"));
     } catch (error) {
       console.error("Failed to add MCP server:", error);
       void toastFrontendError(`Failed to add MCP server: ${error.message || error}`, "MCP Servers");
@@ -455,11 +859,10 @@ const model = {
       tool_timeout: cfg.tool_timeout || "",
       verify: cfg.verify !== false,
       disabled: !!cfg.disabled,
-      allow_local_execution: false,
-      allow_remote_network: false,
     };
-    this.addOpen = true;
+    this.activeView = "visual";
     this.scanResult = null;
+    requestAnimationFrame(() => globalThis.scrollModal?.("mcp-add-server"));
   },
 
   removeConfigServer(name) {
@@ -488,6 +891,78 @@ const model = {
       this.setEditorValue(stringifyConfig(config));
     } catch (error) {
       void toastFrontendError(`Failed to update MCP server: ${error.message || error}`, "MCP Servers");
+    }
+  },
+
+  getServerConfigRef(config, name) {
+    const normalized = normalizeName(name);
+    if (Array.isArray(config.mcpServers)) {
+      const server = config.mcpServers.find((item) => normalizeName(item?.name || "") === normalized);
+      return server ? { server } : null;
+    }
+    if (config.mcpServers && typeof config.mcpServers === "object") {
+      const key = Object.keys(config.mcpServers).find((serverName) => normalizeName(serverName) === normalized);
+      if (key) return { server: config.mcpServers[key] };
+    }
+    return null;
+  },
+
+  getDisabledToolsForServer(name) {
+    try {
+      const ref = this.getServerConfigRef(this.getConfigObject(), name);
+      const disabled = ref?.server?.disabled_tools;
+      return Array.isArray(disabled) ? disabled.map((toolName) => String(toolName)) : [];
+    } catch {
+      return [];
+    }
+  },
+
+  canConfigureServerTools(name) {
+    try {
+      return !!this.getServerConfigRef(this.getConfigObject(), name);
+    } catch {
+      return false;
+    }
+  },
+
+  isServerToolEnabled(serverName, toolName) {
+    const disabled = this.getDisabledToolsForServer(serverName);
+    return !disabled.includes(String(toolName || ""));
+  },
+
+  toggleServerTool(serverName, toolName, enabled) {
+    const normalizedTool = String(toolName || "").trim();
+    if (!serverName || !normalizedTool) return;
+
+    try {
+      const config = this.getConfigObject();
+      const ref = this.getServerConfigRef(config, serverName);
+      if (!ref?.server) {
+        void toastFrontendWarning("Add this inherited server to the current config before changing its tools.", "MCP Servers");
+        return;
+      }
+
+      const disabled = Array.isArray(ref.server.disabled_tools)
+        ? ref.server.disabled_tools.map((item) => String(item)).filter(Boolean)
+        : [];
+      const nextDisabled = new Set(disabled);
+      if (enabled) nextDisabled.delete(normalizedTool);
+      else nextDisabled.add(normalizedTool);
+
+      const disabledTools = [...nextDisabled].sort((a, b) => a.localeCompare(b));
+      if (disabledTools.length) ref.server.disabled_tools = disabledTools;
+      else delete ref.server.disabled_tools;
+
+      this.setEditorValue(stringifyConfig(config));
+      if (this.serverDetail?.name === serverName && Array.isArray(this.serverDetail.tools)) {
+        this.serverDetail.tools = this.serverDetail.tools.map((tool) => (
+          tool.name === normalizedTool
+            ? { ...tool, disabled: !enabled }
+            : tool
+        ));
+      }
+    } catch (error) {
+      void toastFrontendError(`Failed to update MCP tool: ${error.message || error}`, "MCP Servers");
     }
   },
 
@@ -563,6 +1038,7 @@ const model = {
     const resp = await API.callJsonApi("mcp_server_get_detail", payload);
     if (resp?.success) {
       this.serverDetail = resp.detail;
+      this.toolSearch = "";
       openModal("settings/mcp/client/mcp-server-tools.html");
     }
   },
@@ -604,6 +1080,10 @@ const model = {
     return "";
   },
 
+  get renderedScanOutput() {
+    return this.scanOutput ? marked.parse(this.scanOutput, { breaks: true }) : "";
+  },
+
   onClose() {
     try {
       this.setScopeConfigJson(this.getEditorValue());
@@ -616,9 +1096,12 @@ const model = {
     this.servers = [];
     this.loading = true;
     this.applying = false;
-    this.addOpen = false;
     this.activeView = "visual";
+    this.serverSearch = "";
+    this.toolSearch = "";
+    this.serverDetail = null;
     this.resetForm();
+    this.resetScanState();
     this.resetScope();
   },
 };
