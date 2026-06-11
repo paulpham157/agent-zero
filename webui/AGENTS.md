@@ -25,6 +25,7 @@
 - Component HTML loaded by the shared loader may include `<title>`, module scripts, body content, and scoped styles; modal content uses the same loader path.
 - Do not bypass WebSocket origin/auth/CSRF assumptions from frontend code.
 - Avoid editing vendored files unless intentionally updating the vendor asset.
+- Rubik (`--font-family-main`) is the default WebUI text and control font; use the code/mono font tokens only for code, logs, paths, and fixed-width data.
 
 ## Work Guidance
 
