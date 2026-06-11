@@ -94,7 +94,9 @@
                                         </label>
                                         <span class="plugin-status-text" x-text="entry.config.disabled ? 'OFF' : 'ON'"></span>
                                     </div>
-                                    <button type="button" class="mcp-icon-button danger" title="Remove" @click="$store.mcpServersStore.removeConfigServer(entry.name)">
+                                    <button type="button" class="mcp-icon-button" title="Remove"
+                                        :disabled="$store.mcpServersStore.applying"
+                                        @click="$confirmClick($event, () => $store.mcpServersStore.removeConfigServer(entry.name))">
                                         <span class="material-symbols-outlined" aria-hidden="true">delete</span>
                                     </button>
                                 </div>
@@ -704,8 +706,9 @@
             cursor: pointer;
         }
 
-        .mcp-icon-button.danger {
-            color: var(--color-error-text);
+        .mcp-icon-button:disabled {
+            opacity: 0.55;
+            cursor: not-allowed;
         }
 
         .mcp-raw-toolbar {

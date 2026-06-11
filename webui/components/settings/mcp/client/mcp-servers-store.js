@@ -865,15 +865,33 @@ const model = {
     requestAnimationFrame(() => globalThis.scrollModal?.("mcp-add-server"));
   },
 
-  removeConfigServer(name) {
+  async removeConfigServer(name) {
     try {
       const config = this.getConfigObject();
+      const normalized = normalizeName(name);
+      let removed = false;
+
       if (Array.isArray(config.mcpServers)) {
-        config.mcpServers = config.mcpServers.filter((server) => normalizeName(server?.name || "") !== normalizeName(name));
-      } else {
-        delete config.mcpServers[name];
+        const nextServers = config.mcpServers.filter((server) => normalizeName(server?.name || "") !== normalized);
+        removed = nextServers.length !== config.mcpServers.length;
+        config.mcpServers = nextServers;
+      } else if (config.mcpServers && typeof config.mcpServers === "object") {
+        const key = Object.keys(config.mcpServers).find((serverName) => normalizeName(serverName) === normalized);
+        if (key) {
+          delete config.mcpServers[key];
+          removed = true;
+        }
       }
+
+      if (!removed) {
+        void toastFrontendWarning("MCP server is no longer in this config.", "MCP Servers");
+        await this.loadStatus({ silent: true });
+        return;
+      }
+
       this.setEditorValue(stringifyConfig(config));
+      if (normalizeName(this.serverForm.name) === normalized) this.resetForm();
+      await this.applyNow({ successMessage: "MCP server removed" });
     } catch (error) {
       void toastFrontendError(`Failed to remove MCP server: ${error.message || error}`, "MCP Servers");
     }
@@ -995,7 +1013,7 @@ const model = {
     this.statusCheck = false;
   },
 
-  async applyNow() {
+  async applyNow(options = {}) {
     if (this.applying) return;
     try {
       const formatted = stringifyConfig(this.getConfigObject());
@@ -1012,9 +1030,13 @@ const model = {
       this.setScopeConfigJson(resp.mcp_servers || this.getEditorValue());
       this.servers = resp.status || [];
       this.servers.sort((a, b) => String(a.name || "").localeCompare(String(b.name || "")));
-      void toastFrontendSuccess("MCP servers applied", "MCP Servers");
+      if (options.successMessage !== false) {
+        void toastFrontendSuccess(options.successMessage || "MCP servers applied", "MCP Servers");
+      }
       await sleep(100);
-      if (globalThis.scrollModal) globalThis.scrollModal("mcp-servers-status");
+      if (options.scrollToStatus !== false && globalThis.scrollModal) {
+        globalThis.scrollModal("mcp-servers-status");
+      }
     } catch (error) {
       console.error("Failed to apply MCP servers:", error);
       void toastFrontendError(`Failed to apply MCP servers: ${error.message || error}`, "MCP Servers");

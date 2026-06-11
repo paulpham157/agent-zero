@@ -16,6 +16,7 @@
 - Do not store secrets in localStorage, URLs, or console output.
 - Preserve Store Gating and modal footer conventions in settings components.
 - MCP manager tool toggles write `disabled_tools` into the draft JSON and require Apply before changing the running MCP tool set.
+- Confirmed MCP server removals apply immediately and refresh server status; other MCP manager draft edits still require Apply.
 
 ## Work Guidance
 
