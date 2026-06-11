@@ -10,7 +10,13 @@ class TelegramDraftToolStart(Extension):
         if (tool_name or "").strip().lower() == "response":
             return
         context = self.agent.context
-        if not context.data.get(CTX_TG_BOT):
+        context_data = getattr(context, "data", None)
+        telegram_bot = (
+            context_data.get(CTX_TG_BOT)
+            if isinstance(context_data, dict)
+            else context.get_data(CTX_TG_BOT)
+        )
+        if not telegram_bot:
             return
 
         from plugins._telegram_integration.helpers import draft_stream
