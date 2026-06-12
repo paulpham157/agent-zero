@@ -49,6 +49,11 @@ DEFAULT_LITELLM_GLOBAL_KWARGS: dict[str, Any] = {
     "drop_params": True,
 }
 
+# LiteLLM documents drop_params as both a module-level switch and per-call kwarg.
+# Other entries in litellm_global_kwargs, such as timeout or additional_drop_params,
+# are kept as per-call kwargs instead of becoming arbitrary module attributes.
+LITELLM_MODULE_GLOBAL_KEYS = frozenset({"drop_params"})
+
 
 def _normalize_litellm_kwargs(values: dict[str, Any]) -> dict[str, Any]:
     # Normalize .env/UI-style scalar strings into native types for LiteLLM.
@@ -100,6 +105,8 @@ def turn_off_logging():
 def set_litellm_params():
     global_kwargs = get_litellm_global_kwargs()
     for key, value in global_kwargs.items():
+        if key not in LITELLM_MODULE_GLOBAL_KEYS:
+            continue
         setattr(litellm, key, value)
     return global_kwargs
 
@@ -958,12 +965,6 @@ def _merge_provider_defaults(
         key = get_api_key(original_provider)
         if key and key not in ("None", "NA"):
             kwargs["api_key"] = key
-
-    # Merge LiteLLM global kwargs. Framework defaults are merged first, then
-    # configured global kwargs override those defaults; explicit provider/model
-    # kwargs still keep priority via setdefault.
-    for k, v in get_litellm_global_kwargs().items():
-        kwargs.setdefault(k, v)
 
     return provider_name, kwargs
 

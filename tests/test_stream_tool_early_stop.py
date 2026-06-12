@@ -94,30 +94,83 @@ def test_litellm_global_kwargs_merge_defaults_and_config(monkeypatch):
     monkeypatch.setattr(
         models.settings,
         "get_settings",
-        lambda: {"litellm_global_kwargs": {"drop_params": "false", "timeout": "30"}},
+        lambda: {
+            "litellm_global_kwargs": {
+                "drop_params": "false",
+                "timeout": "30",
+                "additional_drop_params": ["response_format"],
+            }
+        },
     )
 
     assert models._merge_litellm_call_kwargs({}) == {
         "drop_params": False,
         "timeout": 30,
+        "additional_drop_params": ["response_format"],
     }
 
     original_drop_params = getattr(models.litellm, "drop_params", None)
     had_timeout = hasattr(models.litellm, "timeout")
     original_timeout = getattr(models.litellm, "timeout", None)
+    had_additional_drop_params = hasattr(models.litellm, "additional_drop_params")
+    original_additional_drop_params = getattr(
+        models.litellm, "additional_drop_params", None
+    )
     try:
         assert models.set_litellm_params() == {
             "drop_params": False,
             "timeout": 30,
+            "additional_drop_params": ["response_format"],
         }
         assert models.litellm.drop_params is False
-        assert models.litellm.timeout == 30
+        if had_timeout:
+            assert models.litellm.timeout == original_timeout
+        else:
+            assert not hasattr(models.litellm, "timeout")
+        if had_additional_drop_params:
+            assert (
+                models.litellm.additional_drop_params
+                == original_additional_drop_params
+            )
+        else:
+            assert not hasattr(models.litellm, "additional_drop_params")
     finally:
         setattr(models.litellm, "drop_params", original_drop_params)
         if had_timeout:
             setattr(models.litellm, "timeout", original_timeout)
         elif hasattr(models.litellm, "timeout"):
             delattr(models.litellm, "timeout")
+        if had_additional_drop_params:
+            setattr(
+                models.litellm,
+                "additional_drop_params",
+                original_additional_drop_params,
+            )
+        elif hasattr(models.litellm, "additional_drop_params"):
+            delattr(models.litellm, "additional_drop_params")
+
+
+def test_provider_defaults_do_not_freeze_litellm_global_kwargs(monkeypatch):
+    monkeypatch.setattr(models, "get_provider_config", lambda *args, **kwargs: None)
+    monkeypatch.setattr(models, "get_api_key", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(
+        models.settings,
+        "get_settings",
+        lambda: {"litellm_global_kwargs": {"drop_params": "true"}},
+    )
+
+    _, provider_kwargs = models._merge_provider_defaults("chat", "openai", {})
+
+    assert "drop_params" not in provider_kwargs
+    assert models._merge_litellm_call_kwargs(provider_kwargs)["drop_params"] is True
+
+    monkeypatch.setattr(
+        models.settings,
+        "get_settings",
+        lambda: {"litellm_global_kwargs": {"drop_params": "false"}},
+    )
+
+    assert models._merge_litellm_call_kwargs(provider_kwargs)["drop_params"] is False
 
 
 @pytest.mark.asyncio
