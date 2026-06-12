@@ -353,8 +353,10 @@ def test_tool_prompts_prevent_top_level_multi_tool():
         encoding="utf-8"
     )
 
-    assert "There is no top-level `multi` or batch tool" in tools_prompt
+    assert "Do not invent top-level `multi` or generic batch tools" in tools_prompt
+    assert "listed wrapper for independent concurrent calls is `parallel`" in tools_prompt
     assert "never an action name such as `read`, `write`, `terminal`, or `multi`" in communication_prompt
+    assert "independent operations concurrently" in communication_prompt
     assert 'Never use `tool_name: "multi"`' in browser_prompt
 
 

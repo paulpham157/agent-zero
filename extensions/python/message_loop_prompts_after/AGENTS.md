@@ -6,7 +6,7 @@
 
 ## Ownership
 
-- Ordered Python files own current datetime, skill recall/load context, agent info, and workdir extras injection.
+- Ordered Python files own current datetime, skill recall/load context, agent info, parallel job status, and workdir extras injection.
 
 ## Local Contracts
 

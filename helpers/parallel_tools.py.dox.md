@@ -1,0 +1,53 @@
+# parallel_tools.py DOX
+
+## Purpose
+
+- Own the shared runtime for parallel tool-call jobs.
+- Normalize wrapped tool-call payloads, start background jobs, await or cancel jobs, and render prompt extras for active parallel work.
+- Keep this file-level DOX profile synchronized with `parallel_tools.py` because this directory is intentionally flat.
+
+## Ownership
+
+- `parallel_tools.py` owns the runtime implementation.
+- `parallel_tools.py.dox.md` owns durable notes about responsibilities, contracts, side effects, and verification for that implementation.
+- Public concepts:
+- `NormalizedToolCall`
+- `ParallelJob`
+- `start_parallel_jobs(...)`
+- `await_parallel_jobs(...)`
+- `cancel_parallel_jobs(...)`
+- `build_parallel_jobs_extras(...)`
+- `format_parallel_results(...)`
+
+## Runtime Contracts
+
+- Helper modules own reusable framework APIs and must preserve public callers unless all callers, tests, and docs are updated together.
+- Wrapped tool-call items must use the same shape as normal tool calls: a tool name plus arguments.
+- `call_subordinate` jobs run in isolated child chat contexts tagged with parent-chat metadata; they must not be added to the scheduler task list.
+- Direct tool jobs run in isolated background contexts and are blocked from recursively invoking `parallel`.
+- Parent-visible child log items are created for each wrapped call so the WebUI can inspect concurrent children separately while the wrapper result remains model-history-only.
+- Child tool logs mirror normal tool-call visible args; job ids remain available through wrapper results and prompt extras rather than visible process-step args.
+- Job IDs are stable handles for later await, collect, or cancel operations.
+- Prompt extras must stay bounded and expose only job IDs, tool names, status, and compact result/error summaries.
+
+## Key Concepts
+
+- The parent context stores in-flight jobs under a private data key; collected terminal jobs are removed from that registry.
+- `wait=True` starts jobs and awaits them before returning; `wait=False` returns job IDs immediately.
+- `collect` returns already-finished job results without waiting; `await` waits for requested job IDs.
+- Canceled jobs should be marked terminal and should stop their background `DeferredTask` when cancellation is possible.
+
+## Work Guidance
+
+- Keep normalization compatible with provider tool-call envelopes and direct JSON objects.
+- Avoid importing heavy runtime modules at import time unless startup behavior is verified.
+- Coordinate argument, output, or status changes with `tools/parallel.py`, prompt instructions, and tests.
+
+## Verification
+
+- Run targeted tests for normalization, recursion guard, prompt extras, and tool result formatting.
+- Run a live Agent Zero chat when changing parallel execution, child chat metadata, or subordinate task behavior.
+
+## Child DOX Index
+
+No child DOX files.

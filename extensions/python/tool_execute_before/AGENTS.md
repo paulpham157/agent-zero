@@ -6,7 +6,7 @@
 
 ## Ownership
 
-- Ordered Python files own prior tool-output replacement and secret unmasking before execution.
+- Ordered Python files own prior tool-output replacement, parallel recursion guards, and secret unmasking before execution.
 
 ## Local Contracts
 

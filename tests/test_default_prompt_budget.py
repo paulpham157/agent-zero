@@ -50,10 +50,12 @@ async def test_default_agent0_prompt_budget_and_guardrails():
     # surface plus skill metadata. Keep the guardrail close to the observed
     # budget so prompt creep remains visible without pretending this surface is
     # a tiny single-tool prompt.
-    assert tokens.approximate_tokens(system_text) <= 10500
+    assert tokens.approximate_tokens(system_text) <= 12000
     assert "`tool_name` must be one listed tool name" in system_text
     assert "- tool_args: key value pairs tool arguments" in system_text
     assert '"tool_name": "call_subordinate"' in system_text
+    assert '"tool_name": "parallel"' in system_text
+    assert "Each `tool_calls` item is a normal tool request object" in system_text
     assert '"reset": true' in system_text
     assert '"tool_name": "text_editor"' in system_text
     assert '"action": "read"' in system_text
