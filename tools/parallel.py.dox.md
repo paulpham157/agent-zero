@@ -21,6 +21,7 @@
 - Tool modules must define `helpers.tool.Tool` subclasses and return `helpers.tool.Response` from `execute(...)`.
 - Wrapped items use the same schema as normal tool calls: a tool name plus arguments.
 - The tool is intended for independent calls only; dependent operations remain sequential.
+- Independent calls should share one batch even when they use different tools; split only for dependencies, ordering, shared mutable state, or parent-context state/tool-availability changes.
 - `action="start"` starts calls and optionally waits according to `wait`.
 - `action="await"` waits for requested job IDs.
 - `action="collect"` returns completed job results without waiting.
@@ -31,6 +32,7 @@
 ## Key Concepts
 
 - `tool_calls`, `calls`, and `items` are accepted aliases for the wrapped call list.
+- Wrapped call items can use the same `tool_name`/`tool_args` shape as top-level agent replies; extra planning fields are ignored by normalization.
 - `job_ids` can be supplied as a string or list when awaiting, collecting, or canceling existing jobs.
 - The response is compact JSON intended for the model to read and continue with.
 - Visible child rows are emitted by `helpers/parallel_tools.py` before each background job starts.

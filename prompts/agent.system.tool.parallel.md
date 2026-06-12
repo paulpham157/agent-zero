@@ -1,10 +1,12 @@
 ### parallel
 run independent tool calls concurrently, or await/cancel background parallel jobs.
 
-Use only for independent work. Each `tool_calls` item is a normal tool request object: `{ "tool_name": "...", "tool_args": { ... } }`.
+Use only for independent work. Each `tool_calls` item is a normal tool request object using the same `tool_name` and `tool_args` shape as a top-level reply: `{ "tool_name": "...", "tool_args": { ... } }`.
+Only `tool_name` and `tool_args` are used; if an item is copied from a full reply object, planning fields like `thoughts` or `headline` are ignored.
+Batch all independent calls that are ready now into one `tool_calls` list, even when they use different tools. Do not split by tool type.
 
 Rules:
-- do not use for one simple call, dependent steps, ordered steps, or shared mutable state
+- do not use for one simple call, dependent steps, ordered steps, shared mutable state, or state/tool-availability changes that must happen in the parent context
 - never nest `parallel`
 - `call_subordinate` inside `parallel` starts an isolated child chat under the parent chat, not a scheduler task
 - use `wait: false` only when you will collect results later with `job_ids`
@@ -18,8 +20,8 @@ Start and wait:
   "tool_name": "parallel",
   "tool_args": {
     "tool_calls": [
-      {"tool_name": "call_subordinate", "tool_args": {"message": "Research option A.", "reset": true}},
-      {"tool_name": "call_subordinate", "tool_args": {"message": "Research option B.", "reset": true}}
+      {"tool_name": "call_subordinate", "tool_args": {"message": "Review option A and return key risks.", "reset": true}},
+      {"tool_name": "search_engine", "tool_args": {"query": "official API changelog release notes"}}
     ],
     "wait": true
   }
