@@ -11,6 +11,7 @@ Rules:
 - `call_subordinate` inside `parallel` starts an isolated child chat under the parent chat, not a scheduler task
 - use `wait: false` only when you will collect results later with `job_ids`
 - if extras list running or ready parallel jobs, collect them before final synthesis
+- `timeout` only limits how long this call waits; running jobs continue and can be awaited again by `job_ids`
 
 Args: `tool_calls`, `job_ids`, `wait` default `true`, `action` as `start|await|collect|cancel`, `timeout`.
 

@@ -23,10 +23,10 @@
 - The tool is intended for independent calls only; dependent operations remain sequential.
 - Independent calls should share one batch even when they use different tools; split only for dependencies, ordering, shared mutable state, or parent-context state/tool-availability changes.
 - `action="start"` starts calls and optionally waits according to `wait`.
-- `action="await"` waits for requested job IDs.
+- `action="await"` waits for requested job IDs until completion or `timeout`; timeout returns running job handles without canceling them.
 - `action="collect"` returns completed job results without waiting.
 - `action="cancel"` requests cancellation for requested job IDs.
-- Recursive use of `parallel` from inside a parallel worker is blocked before execution.
+- Recursive use of `parallel` from inside a direct background tool worker is blocked before execution; subordinate child chats started by `call_subordinate` can use normal child-chat tools, including `parallel`.
 - The wrapper tool does not create its own visible process-step log; each wrapped child call owns the visible log row, and the wrapper result is recorded only in model history.
 
 ## Key Concepts
