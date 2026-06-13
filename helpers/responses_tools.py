@@ -65,6 +65,8 @@ def _local_tool_prompts(agent: Any) -> list[tuple[str, str]]:
         tool_name = _tool_name_from_prompt_basename(basename)
         if not tool_name:
             continue
+        if not _include_local_tool_prompt(agent, tool_name):
+            continue
         try:
             prompt = agent.read_prompt(basename)
         except Exception:
@@ -74,6 +76,17 @@ def _local_tool_prompts(agent: Any) -> list[tuple[str, str]]:
                 prompt = ""
         result.append((tool_name, prompt))
     return result
+
+
+def _include_local_tool_prompt(agent: Any, tool_name: str) -> bool:
+    try:
+        from plugins._a0_connector.helpers.remote_tool_prompts import (
+            should_include_remote_tool_prompt,
+        )
+    except Exception:
+        return True
+
+    return should_include_remote_tool_prompt(agent, tool_name)
 
 
 def _mcp_tools(agent: Any) -> list[tuple[str, dict[str, Any]]]:
