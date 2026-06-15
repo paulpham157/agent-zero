@@ -459,6 +459,7 @@ class ChatCompletionsTransport:
         chat_kwargs = dict(kwargs)
         _drop_internal_transport_kwargs(chat_kwargs)
         if not _has_tools(chat_kwargs.get("tools")):
+            chat_kwargs.pop("tools", None)
             chat_kwargs.pop("tool_choice", None)
             chat_kwargs.pop("parallel_tool_calls", None)
         if _is_openai_prompt_cache_provider(model, chat_kwargs):
@@ -1538,6 +1539,8 @@ def _is_responses_not_supported_error(exc: Exception) -> bool:
             "unsupportedparamserror",
             "does not support parameters",
             "no 'tools' defined while 'tool_choice' is specified",
+            "tools` must not be an empty array",
+            "tools must not be an empty array",
         )
     )
 

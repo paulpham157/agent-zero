@@ -86,6 +86,15 @@ chat:
     kwargs:
       api_base: "http://host.docker.internal:1234/v1"
       api_key: "lm-studio"
+  llama_cpp:
+    name: llama.cpp
+    litellm_provider: hosted_vllm
+    models_list:
+      endpoint_url: "/v1/models"
+      default_base: "http://host.docker.internal:8080"
+    kwargs:
+      api_base: "http://host.docker.internal:8080/v1"
+      api_key: "llama-cpp"
   mistral:
     name: Mistral AI
     litellm_provider: mistral
@@ -167,6 +176,15 @@ chat:
       api_base: https://api.venice.ai/api/v1
       venice_parameters:
         include_venice_system_prompt: false
+  vllm:
+    name: vLLM
+    litellm_provider: hosted_vllm
+    models_list:
+      endpoint_url: "/v1/models"
+      default_base: "http://host.docker.internal:8000"
+    kwargs:
+      api_base: "http://host.docker.internal:8000/v1"
+      api_key: "vllm"
   xai:
     name: xAI
     litellm_provider: xai
@@ -203,6 +221,12 @@ embedding:
     kwargs:
       api_base: "http://host.docker.internal:1234/v1"
       api_key: "lm-studio"
+  llama_cpp:
+    name: llama.cpp
+    litellm_provider: hosted_vllm
+    kwargs:
+      api_base: "http://host.docker.internal:8080/v1"
+      api_key: "llama-cpp"
   mistral:
     name: Mistral AI
     litellm_provider: mistral
@@ -250,6 +274,12 @@ embedding:
       endpoint_url: "https://api.venice.ai/api/v1/models"
     kwargs:
       api_base: https://api.venice.ai/api/v1
+  vllm:
+    name: vLLM
+    litellm_provider: hosted_vllm
+    kwargs:
+      api_base: "http://host.docker.internal:8000/v1"
+      api_key: "vllm"
   other:
     name: Other OpenAI compatible
     litellm_provider: openai
