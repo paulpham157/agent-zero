@@ -13,6 +13,7 @@
 ## Local Contracts
 
 - Build local function tools from enabled `agent.system.tool.*.md` prompt files.
+- Local prompt-derived function names prefer explicit `"tool_name"` examples, then the first prompt heading, and only fall back to the prompt filename when the prompt declares no callable name.
 - Preserve original Agent Zero tool names through the native Responses name map.
 - Keep MCP tool schemas merged after local prompt-derived tools.
 - Connector remote tools are advertised only when `_a0_connector` runtime metadata says the matching connected CLI capability is currently available.
