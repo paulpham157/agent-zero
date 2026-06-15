@@ -22,10 +22,13 @@
 ## Work Guidance
 
 - Coordinate tool, helper, and panel changes so browser state shown in the UI matches tool behavior.
+- Keep `prompts/agent.system.tool.browser.md` as a compact callable contract; move detailed browser workflows into `skills/browser-automation/SKILL.md`.
+- Keep fragile form guidance progressively disclosed through `skills/browser-form-workflows/SKILL.md`, linked from the browser prompt through `browser-automation`.
 
 ## Verification
 
 - Smoke-test browser launch, navigation, DOM capture, and WebUI viewer after runtime changes.
+- Run browser prompt/skill regression tests after changing browser prompt or Browser plugin skills.
 
 ## Child DOX Index
 

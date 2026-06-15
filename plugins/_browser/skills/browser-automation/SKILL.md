@@ -5,7 +5,9 @@ description: Use for complex Agent Zero browser automation, including multi-tab 
 
 # Browser Tool
 
-Use the `browser` tool for rendered pages, forms, logins, downloads, JavaScript-heavy sites, screenshots, and visual inspection. Prefer `search_engine` or `document_query` for plain text research.
+Use this skill after the compact `browser` tool prompt points you here. It is the progressive-disclosure workflow guide for rendered pages, multi-step browser work, logins, downloads, JavaScript-heavy sites, screenshots, host/container browser mode, and visual inspection. Prefer `search_engine` or `document_query` for plain text research.
+
+For fragile forms, load `browser-form-workflows` with `skills_tool:load` before acting when selects, checkboxes, radios, file uploads, contenteditable fields, validation, or final submission state are central to the task.
 
 ## Core Workflow
 
@@ -14,6 +16,7 @@ Use the `browser` tool for rendered pages, forms, logins, downloads, JavaScript-
 3. Interact with refs using `click`, `type`, `submit`, `scroll`, etc.
 4. Use `navigate` on an existing `browser_id` for serial browsing.
 5. Keep only a small working tab set; close pages when finished.
+6. If the user asks for an existing tab, page title, or already-open URL, call `list` first, match by `title` or `currentUrl`, then use `set_active` or `navigate` on that `browser_id` instead of opening a new tab.
 
 ## Modes
 
@@ -39,7 +42,7 @@ Screenshot args include `quality`, `full_page`, and optional `path`. Without `pa
 - `select_option` works for native selects and detectable ARIA listbox/combobox controls.
 - `set_checked` works for checkbox, radio, switch, and toggle-like refs.
 - `upload_file` works for file input refs or associated labels; verify the file exists in the active browser environment.
-- For fragile forms, load skill `browser-form-workflows`.
+- For fragile forms, call `skills_tool` with `action: "load"` and `skill_name: "browser-form-workflows"`, then follow that form-specific workflow before filling or submitting.
 
 ## Pointer And Keyboard
 

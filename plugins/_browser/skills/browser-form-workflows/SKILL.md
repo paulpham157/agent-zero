@@ -5,7 +5,7 @@ description: Use for complex Agent Zero Browser form workflows involving selects
 
 # Browser Forms
 
-Use this skill for complex Browser form workflows where the page state may depend on selects, checkboxes, radios, file uploads, contenteditable fields, validation, or visual confirmation.
+Use this skill as the form-specific extension of `browser-automation`. Load it after, or alongside, `browser-automation` when the page state may depend on selects, checkboxes, radios, file uploads, contenteditable fields, validation, or visual confirmation.
 
 Start with `browser:content` to capture current refs, then use `browser:detail` on ambiguous fields before acting. Prefer ref-based form actions before coordinates.
 

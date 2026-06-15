@@ -896,6 +896,8 @@ def test_browser_tool_does_not_auto_open_canvas_policy_is_documented():
     prompt = (
         PROJECT_ROOT / "plugins" / "_browser" / "prompts" / "agent.system.tool.browser.md"
     ).read_text(encoding="utf-8")
+    from helpers import tokens
+
     config = (PROJECT_ROOT / "plugins" / "_browser" / "default_config.yaml").read_text(
         encoding="utf-8"
     )
@@ -912,21 +914,33 @@ def test_browser_tool_does_not_auto_open_canvas_policy_is_documented():
     assert "set_checked" in prompt
     assert "upload_file" in prompt
     assert "browser-form-workflows" in prompt
+    assert "first load `browser-automation` with `skills_tool:load`" in prompt
+    assert "`browser-automation` links to `browser-form-workflows`" in prompt
     assert "does not automatically load screenshots" in prompt
     assert "chrome://inspect/#remote-debugging" in prompt
+    assert tokens.approximate_tokens(prompt) <= 650
     assert "already open" in config
     assert "already-open Browser surface" in config_html
     assert "chrome://inspect/#remote-debugging" in config_html
 
 
-def test_browser_forms_skill_is_plugin_owned_and_discoverable():
+def test_browser_skills_are_plugin_owned_and_progressively_linked():
+    automation_path = (
+        PROJECT_ROOT / "plugins" / "_browser" / "skills" / "browser-automation" / "SKILL.md"
+    )
     skill_path = PROJECT_ROOT / "plugins" / "_browser" / "skills" / "browser-form-workflows" / "SKILL.md"
+    assert automation_path.exists()
     assert skill_path.exists()
+    automation = automation_path.read_text(encoding="utf-8")
     skill = skill_path.read_text(encoding="utf-8")
     assert skill.startswith("---\n")
     frontmatter = skill.split("---", 2)[1]
     assert "name: browser-form-workflows" in frontmatter
     assert "description:" in frontmatter
+    assert "progressive-disclosure workflow guide" in automation
+    assert "`browser-form-workflows` with `skills_tool:load`" in automation
+    assert 'skill_name: "browser-form-workflows"' in automation
+    assert "form-specific extension of `browser-automation`" in skill
     assert "select_option" in skill
     assert "set_checked" in skill
     assert "upload_file" in skill
