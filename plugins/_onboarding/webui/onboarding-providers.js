@@ -25,7 +25,7 @@ export const MORE_CLOUD_PROVIDER_IDS = [
   "other",
 ];
 
-export const LOCAL_PROVIDER_IDS = ["ollama", "lm_studio", "other"];
+export const LOCAL_PROVIDER_IDS = ["ollama", "lm_studio", "omlx", "other"];
 
 export const ONBOARDING_PROVIDER_OVERRIDES = {
   a0_venice: {
@@ -171,6 +171,15 @@ export const ONBOARDING_PROVIDER_OVERRIDES = {
     api_key_mode: "required",
     model_list_autoload: true,
     short_description: "Ollama cloud models through a hosted endpoint.",
+  },
+  omlx: {
+    logo: "/plugins/_onboarding/webui/assets/provider-logos/omlx.svg",
+    setup_url: "https://omlx.ai/",
+    docs_url: "https://github.com/jundot/omlx#readme",
+    default_api_base: "http://host.docker.internal:8000/v1",
+    api_key_mode: "none",
+    model_list_autoload: true,
+    short_description: "Apple Silicon local inference with MLX.",
   },
   openai: {
     logo: "https://openai.com/favicon.ico",

@@ -65,11 +65,16 @@ def test_onboarding_provider_grid_names_are_present_in_metadata():
     assert 'docs_url: "https://docs.venice.ai/guides/getting-started/generating-api-key"' in provider_ui
     assert 'docs_url: "https://docs.tokenfactory.nebius.com/api-reference/introduction"' in provider_ui
     assert 'docs_url: "https://lmstudio.ai/docs/developer/core/authentication"' in provider_ui
+    assert 'logo: "/plugins/_onboarding/webui/assets/provider-logos/omlx.svg"' in provider_ui
+    assert 'docs_url: "https://github.com/jundot/omlx#readme"' in provider_ui
+    assert 'default_api_base: "http://host.docker.internal:8000/v1"' in provider_ui
     assert 'docs_url: ""' in provider_ui
     assert "api_key_mode: none" in model_metadata
     assert "api_key_mode: optional" in model_metadata
     assert "Ollama Cloud" in provider_yaml
     assert "https://ollama.com/v1" in provider_yaml
+    assert "oMLX" in provider_yaml
+    assert "http://host.docker.internal:8000/v1" in provider_yaml
     assert "Nebius Token Factory" in provider_yaml
     assert "https://api.tokenfactory.nebius.com/v1" in provider_yaml
     assert not (PROJECT_ROOT / "plugins/_model_config/conf/model_providers.yaml").exists()
@@ -87,6 +92,7 @@ def test_onboarding_provider_grid_names_are_present_in_metadata():
         "Z.AI",
         "Mistral AI",
         "Azure OpenAI",
+        "oMLX",
     ]:
         assert name in provider_yaml + provider_ui
 
@@ -117,8 +123,11 @@ def test_onboarding_provider_grid_names_are_present_in_metadata():
         "cometapi.ico",
         "github-copilot.svg",
         "zai-logo.svg",
+        "omlx.svg",
     ]:
         assert logo in provider_ui
+
+    assert (PROJECT_ROOT / "plugins/_onboarding/webui/assets/provider-logos/omlx.svg").exists()
 
 
 def test_nebius_provider_config_uses_openai_compatible_token_factory_endpoint():

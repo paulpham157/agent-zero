@@ -179,7 +179,7 @@ class ModelSearch(ApiHandler):
         elif provider == "azure":
             if has_key:
                 headers["api-key"] = api_key
-        elif provider not in ("ollama", "lm_studio"):
+        elif provider not in ("ollama", "lm_studio", "omlx"):
             if has_key:
                 headers["Authorization"] = f"Bearer {api_key}"
 

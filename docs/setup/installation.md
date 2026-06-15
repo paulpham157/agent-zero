@@ -438,6 +438,7 @@ Use the naming format required by your selected provider:
 | OpenAI | Model name only | `claude-sonnet-4-5` |
 | OpenRouter | Provider prefix mostly required | `anthropic/claude-sonnet-4-5` |
 | Ollama | Model name only | `gpt-oss:20b` |
+| oMLX | API-visible model name from `/v1/models` | `Qwen3-0.6B-4bit` |
 
 > [!TIP]
 > If you see "Invalid model ID," verify the provider and naming format on the provider website, or search the web for "<name-of-ai-model> model naming".
@@ -458,6 +459,48 @@ Use the naming format required by your selected provider:
 
 - Reasoning can increase cost and latency. Some models perform better **without** reasoning.
 - If a model supports it, disable reasoning via provider-specific parameters (e.g., Venice `disable_thinking=true`).
+
+---
+
+## Installing and Using oMLX (Apple Silicon Local Models)
+
+oMLX is a local inference server for Apple Silicon Macs. It serves MLX models through an OpenAI-compatible API and supports chat, embeddings, and model listing endpoints.
+
+> [!NOTE]
+> oMLX requires Apple Silicon and macOS 15+. On 16 GB machines, start with small quantized MLX models.
+
+### macOS oMLX Installation
+
+**Using Homebrew:**
+
+```bash
+brew tap jundot/omlx https://github.com/jundot/omlx
+brew install omlx
+omlx start
+```
+
+**Using the macOS App:**
+
+Download the oMLX app from the [official website](https://omlx.ai/) and follow the welcome flow to choose a model directory, start the server, and download or discover models.
+
+By default, oMLX serves its OpenAI-compatible API at `http://localhost:8000/v1`.
+
+To run a foreground server with oMLX's paged SSD cache enabled:
+
+```bash
+omlx serve --model-dir ~/.omlx/models --paged-ssd-cache-dir ~/.omlx/cache
+```
+
+### Configuring oMLX in Agent Zero
+
+1. Start oMLX and make sure at least one model is available in the oMLX dashboard or model directory.
+2. In Agent Zero Settings, choose **oMLX** as the Chat model, Utility model, or Embedding model provider.
+3. Use the model name shown by oMLX's model list or dashboard.
+4. Agent Zero includes Docker-friendly defaults for oMLX on the host at `http://host.docker.internal:8000/v1`. Override the API base URL only if your oMLX server runs somewhere else.
+5. Click `Save` to confirm your settings.
+
+> [!NOTE]
+> If Agent Zero runs in Docker and oMLX runs on the Mac host, ensure port **8000** is reachable from the container. The shipped Docker Compose file maps `host.docker.internal` to the host gateway for Linux Docker. Docker Desktop for macOS provides this hostname automatically.
 
 ---
 
