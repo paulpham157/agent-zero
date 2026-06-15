@@ -276,3 +276,69 @@ def test_provider_key_modes_for_local_and_ollama_cloud():
     assert model_config.provider_requires_api_key("lm_studio") is False
     assert model_config.provider_requires_api_key("other") is False
     assert model_config.provider_requires_api_key("ollama_cloud") is True
+
+
+def test_local_provider_defaults_are_docker_friendly():
+    import yaml
+
+    provider_path = PROJECT_ROOT / "conf" / "model_providers.yaml"
+    provider_config = yaml.safe_load(provider_path.read_text(encoding="utf-8"))
+
+    assert provider_config["chat"]["lm_studio"]["kwargs"]["api_base"] == (
+        "http://host.docker.internal:1234/v1"
+    )
+    assert provider_config["chat"]["lm_studio"]["kwargs"]["api_key"] == "lm-studio"
+    assert provider_config["chat"]["lm_studio"]["models_list"]["default_base"] == (
+        "http://host.docker.internal:1234"
+    )
+    assert provider_config["chat"]["ollama"]["kwargs"]["api_base"] == (
+        "http://host.docker.internal:11434"
+    )
+    assert provider_config["chat"]["ollama"]["models_list"]["default_base"] == (
+        "http://host.docker.internal:11434"
+    )
+    assert provider_config["embedding"]["lm_studio"]["kwargs"]["api_base"] == (
+        "http://host.docker.internal:1234/v1"
+    )
+    assert provider_config["embedding"]["lm_studio"]["kwargs"]["api_key"] == "lm-studio"
+    assert provider_config["embedding"]["ollama"]["kwargs"]["api_base"] == (
+        "http://host.docker.internal:11434"
+    )
+
+
+def test_local_provider_runtime_defaults_and_overrides(monkeypatch):
+    monkeypatch.setattr(models, "get_api_key", lambda provider: "None")
+
+    lm_chat = models.get_chat_model("lm_studio", "local-chat-model")
+    assert lm_chat.model_name == "lm_studio/local-chat-model"
+    assert lm_chat.kwargs["api_base"] == "http://host.docker.internal:1234/v1"
+    assert lm_chat.kwargs["api_key"] == "lm-studio"
+
+    lm_embedding = models.get_embedding_model("lm_studio", "nomic-embed-text")
+    assert lm_embedding.model_name == "lm_studio/nomic-embed-text"
+    assert lm_embedding.kwargs["api_base"] == "http://host.docker.internal:1234/v1"
+    assert lm_embedding.kwargs["api_key"] == "lm-studio"
+
+    custom_lm_embedding = models.get_embedding_model(
+        "lm_studio",
+        "nomic-embed-text",
+        api_base="http://127.0.0.1:1234/v1",
+        api_key="real-local-key",
+    )
+    assert custom_lm_embedding.kwargs["api_base"] == "http://127.0.0.1:1234/v1"
+    assert custom_lm_embedding.kwargs["api_key"] == "real-local-key"
+
+    ollama_embedding = models.get_embedding_model("ollama", "nomic-embed-text")
+    assert ollama_embedding.model_name == "ollama/nomic-embed-text"
+    assert ollama_embedding.kwargs["api_base"] == "http://host.docker.internal:11434"
+    assert "api_key" not in ollama_embedding.kwargs
+
+
+def test_docker_compose_maps_host_docker_internal_for_local_models():
+    import yaml
+
+    compose_path = PROJECT_ROOT / "docker" / "run" / "docker-compose.yml"
+    compose = yaml.safe_load(compose_path.read_text(encoding="utf-8"))
+    service = compose["services"]["agent-zero"]
+
+    assert "host.docker.internal:host-gateway" in service["extra_hosts"]

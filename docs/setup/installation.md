@@ -527,13 +527,13 @@ Replace `<model-name>` with the name of the model you want to use. For example: 
 1. Once you've downloaded your model(s), select it in the Settings page of the GUI.
 2. Within the Chat model, Utility model, or Embedding model section, choose **Ollama** as provider.
 3. Write your model code as expected by Ollama, in the format `llama3.2` or `qwen2.5:7b`
-4. Provide your API base URL to your Ollama API endpoint, usually `http://host.docker.internal:11434`
+4. Agent Zero includes Docker-friendly defaults for Ollama on the host at `http://host.docker.internal:11434`. Override the API base URL only if your Ollama server runs somewhere else.
 5. Click `Save` to confirm your settings.
 
 ![ollama](../res/setup/settings/4-local-models.png)
 
 > [!NOTE]
-> If Agent Zero runs in Docker and Ollama runs on the host, ensure port **11434** is reachable from the container. If both services are in the same Docker network, you can use `http://<container_name>:11434` instead of `host.docker.internal`.
+> If Agent Zero runs in Docker and Ollama runs on the host, ensure port **11434** is reachable from the container. The shipped Docker Compose file maps `host.docker.internal` to the host gateway for Linux Docker. If both services are in the same Docker network, you can use `http://<container_name>:11434` instead of `host.docker.internal`.
 
 ### Managing Downloaded Models
 
