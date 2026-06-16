@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 from pathlib import Path
 from typing import List
 
@@ -111,7 +112,7 @@ class SkillsTool(Tool):
                 skill_name = self._normalize_skill_name(
                     str(kwargs.get("skill_name") or self.args.get("skill_name") or "")
                 )
-                return Response(message=self._load(skill_name), break_loop=False)
+                return self._load(skill_name)
             if action == "read_file":
                 skill_name = self._normalize_skill_name(
                     str(kwargs.get("skill_name") or self.args.get("skill_name") or "")
@@ -185,11 +186,14 @@ class SkillsTool(Tool):
         )
         return "\n".join(lines)
 
-    def _load(self, skill_name: str) -> str:
+    def _load(self, skill_name: str) -> Response:
         skill_name = self._normalize_skill_name(skill_name)
 
         if not skill_name:
-            return "Error: 'skill_name' is required for action=load."
+            return Response(
+                message="Error: 'skill_name' is required for action=load.",
+                break_loop=False,
+            )
 
         # Verify skill exists
         skill = skills_helper.find_skill(
@@ -198,9 +202,29 @@ class SkillsTool(Tool):
             agent=self.agent,
         )
         if not skill:
-            return f"Error: skill not found: {skill_name!r}. Try skills_tool action=list or action=search."
+            return Response(
+                message=(
+                    f"Error: skill not found: {skill_name!r}. "
+                    "Try skills_tool action=list or action=search."
+                ),
+                break_loop=False,
+            )
 
-        # Store skill name for fresh loading each turn
+        skill_data = skills_helper.load_skill_for_agent(
+            skill_name=skill.name,
+            agent=self.agent,
+        )
+        revision = self._skill_revision(skill_data)
+        metadata = {
+            "name": skill.name,
+            "path": str(skill.path),
+            "revision": revision,
+            "source": "skills_tool:load",
+            "content_included": True,
+        }
+
+        # Keep the old ledger for UI/backwards compatibility. The skill body now
+        # lives in normal tool-result history, not in per-turn prompt extras.
         if not self.agent.data.get(DATA_NAME_LOADED_SKILLS):
             self.agent.data[DATA_NAME_LOADED_SKILLS] = []
         loaded = self.agent.data[DATA_NAME_LOADED_SKILLS]
@@ -209,7 +233,52 @@ class SkillsTool(Tool):
         loaded.append(skill.name)
         self.agent.data[DATA_NAME_LOADED_SKILLS] = loaded[-max_loaded_skills():]
 
-        return f"Loaded skill '{skill.name}' into EXTRAS."
+        if self._visible_skill_revision_loaded(skill.name, revision):
+            return Response(
+                message=(
+                    f"Skill '{skill.name}' is already loaded in visible "
+                    "chat history for this revision."
+                ),
+                break_loop=False,
+                additional={
+                    "skill_instructions": {
+                        **metadata,
+                        "content_included": False,
+                        "already_loaded": True,
+                    }
+                },
+            )
+
+        return Response(
+            message=skill_data,
+            break_loop=False,
+            additional={"skill_instructions": metadata},
+        )
+
+    @staticmethod
+    def _skill_revision(skill_data: str) -> str:
+        return hashlib.sha256(skill_data.encode("utf-8")).hexdigest()[:16]
+
+    def _visible_skill_revision_loaded(self, skill_name: str, revision: str) -> bool:
+        history_obj = getattr(self.agent, "history", None)
+        output = getattr(history_obj, "output", None)
+        if not callable(output):
+            return False
+
+        for message in output():
+            if not isinstance(message, dict):
+                continue
+            content = message.get("content")
+            if not isinstance(content, dict):
+                continue
+            meta = content.get("skill_instructions")
+            if not isinstance(meta, dict):
+                continue
+            if not meta.get("content_included"):
+                continue
+            if meta.get("name") == skill_name and meta.get("revision") == revision:
+                return True
+        return False
 
     def _read_file(self, skill_name: str, file_path: str) -> str:
         if not skill_name:

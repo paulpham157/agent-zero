@@ -38,6 +38,7 @@ class _FakeAgent:
     def __init__(self) -> None:
         self.data = {}
         self.context = types.SimpleNamespace(id="ctx")
+        self.history = types.SimpleNamespace(output=lambda: [])
 
     def read_prompt(self, _name: str, **kwargs) -> str:
         return f"deleted {kwargs.get('memory_count', 0)}"
@@ -74,6 +75,9 @@ def _load_skills_tool(monkeypatch, skill_root: Path):
     skills_stub.list_skills = lambda *args, **kwargs: [fake_skill]
     skills_stub.search_skills = lambda *args, **kwargs: [fake_skill]
     skills_stub.find_skill = lambda *args, **kwargs: fake_skill
+    skills_stub.load_skill_for_agent = (
+        lambda *args, **kwargs: "Skill: browser-form-workflows\n\nInstructions:\nUse labels before typing."
+    )
     monkeypatch.setitem(sys.modules, "helpers.skills", skills_stub)
 
     print_style_stub = types.ModuleType("helpers.print_style")
@@ -144,6 +148,102 @@ def test_skills_tool_accepts_action_alias_for_search(monkeypatch, tmp_path: Path
     response = asyncio.run(tool.execute(**tool.args))
 
     assert "browser-form-workflows" in response.message
+
+
+def test_skills_tool_load_appends_skill_instructions_as_tool_result(
+    monkeypatch, tmp_path: Path
+):
+    module = _load_skills_tool(monkeypatch, tmp_path)
+    agent = _FakeAgent()
+    tool = module.SkillsTool(
+        agent,
+        "skills_tool",
+        None,
+        {"action": "load", "skill_name": "browser-form-workflows"},
+        "",
+        None,
+    )
+
+    response = asyncio.run(tool.execute(**tool.args))
+
+    assert "Skill: browser-form-workflows" in response.message
+    assert response.additional["skill_instructions"]["name"] == "browser-form-workflows"
+    assert response.additional["skill_instructions"]["content_included"] is True
+    assert agent.data["loaded_skills"] == ["browser-form-workflows"]
+
+
+def test_skills_tool_load_omits_duplicate_visible_skill_revision(
+    monkeypatch, tmp_path: Path
+):
+    module = _load_skills_tool(monkeypatch, tmp_path)
+    agent = _FakeAgent()
+    tool = module.SkillsTool(
+        agent,
+        "skills_tool",
+        None,
+        {"action": "load", "skill_name": "browser-form-workflows"},
+        "",
+        None,
+    )
+    first = asyncio.run(tool.execute(**tool.args))
+    loaded_message = {
+        "ai": False,
+        "content": {"skill_instructions": first.additional["skill_instructions"]},
+    }
+    agent.history = types.SimpleNamespace(output=lambda: [loaded_message])
+
+    second = asyncio.run(tool.execute(**tool.args))
+
+    assert "already loaded in visible chat history" in second.message
+    assert "Instructions:\nUse labels before typing." not in second.message
+    assert second.additional["skill_instructions"]["content_included"] is False
+    assert second.additional["skill_instructions"]["already_loaded"] is True
+    assert agent.data["loaded_skills"] == ["browser-form-workflows"]
+
+
+def test_skills_tool_load_reloads_when_prior_skill_is_not_model_visible(
+    monkeypatch, tmp_path: Path
+):
+    module = _load_skills_tool(monkeypatch, tmp_path)
+    agent = _FakeAgent()
+    tool = module.SkillsTool(
+        agent,
+        "skills_tool",
+        None,
+        {"action": "load", "skill_name": "browser-form-workflows"},
+        "",
+        None,
+    )
+    first = asyncio.run(tool.execute(**tool.args))
+    hidden_message = types.SimpleNamespace(
+        summary="",
+        content={"skill_instructions": first.additional["skill_instructions"]},
+    )
+    agent.history = types.SimpleNamespace(
+        all_messages=lambda: [hidden_message],
+        output=lambda: [
+            {
+                "ai": False,
+                "content": "Earlier history was summarized and no skill body is visible.",
+            }
+        ],
+    )
+
+    second = asyncio.run(tool.execute(**tool.args))
+
+    assert "Skill: browser-form-workflows" in second.message
+    assert second.additional["skill_instructions"]["content_included"] is True
+
+
+def test_loaded_skills_extension_no_longer_reinjects_skill_bodies():
+    project_root = Path(__file__).resolve().parents[1]
+    extension = (
+        project_root
+        / "extensions/python/message_loop_prompts_after/_65_include_loaded_skills.py"
+    ).read_text(encoding="utf-8")
+
+    assert 'extras["loaded_skills"]' not in extension
+    assert "load_skill_for_agent" not in extension
 
 
 def test_skills_tool_read_file_action_reads_inside_skill_dir(

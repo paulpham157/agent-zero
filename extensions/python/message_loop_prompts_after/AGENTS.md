@@ -13,6 +13,7 @@
 - Keep injected content bounded and clearly attributed.
 - Preserve ordering where later prompt extras depend on earlier recall or load results.
 - Do not expose secrets or private files from workdir extras.
+- Explicitly loaded skill instructions belong in normal tool-result history; this hook may recall candidate skills, but must not reinject loaded skill bodies through prompt extras every turn.
 
 ## Work Guidance
 

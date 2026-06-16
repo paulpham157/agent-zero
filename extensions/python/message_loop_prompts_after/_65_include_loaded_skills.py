@@ -9,30 +9,17 @@ class IncludeLoadedSkills(Extension):
         if not self.agent:
             return
 
-        extras = loop_data.extras_persistent
-
-        # Get loaded skills names
+        loop_data.extras_persistent.pop("loaded_skills", None)
         skill_names = self.agent.data.get(DATA_NAME_LOADED_SKILLS)
         if not skill_names:
             return
 
-        # load skill text here
-        content = ""
+        # `skills_tool load` now appends full skill instructions as a normal
+        # tool-result history message. Keep this legacy ledger pruned, but do
+        # not reinject loaded skills through prompt extras every turn.
         visible_skill_names = []
         for skill_name in skill_names:
             if not skills.find_skill(skill_name, agent=self.agent):
                 continue
             visible_skill_names.append(skill_name)
-            skill_data = skills.load_skill_for_agent(skill_name=skill_name, agent=self.agent)
-            content += "\n\n" + skill_data
         self.agent.data[DATA_NAME_LOADED_SKILLS] = visible_skill_names
-        content = content.strip()
-        if not content:
-            return
-
-
-        # Inject into extras
-        extras["loaded_skills"] = self.agent.read_prompt(
-            "agent.system.skills.loaded.md",
-            skills=content,
-        )
