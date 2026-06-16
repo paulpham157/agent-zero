@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import hashlib
 from pathlib import Path
 from typing import List
 
@@ -214,7 +213,7 @@ class SkillsTool(Tool):
             skill_name=skill.name,
             agent=self.agent,
         )
-        revision = self._skill_revision(skill_data)
+        revision = skills_helper.skill_revision(skill_data)
         metadata = {
             "name": skill.name,
             "path": str(skill.path),
@@ -254,10 +253,6 @@ class SkillsTool(Tool):
             break_loop=False,
             additional={"skill_instructions": metadata},
         )
-
-    @staticmethod
-    def _skill_revision(skill_data: str) -> str:
-        return hashlib.sha256(skill_data.encode("utf-8")).hexdigest()[:16]
 
     def _visible_skill_revision_loaded(self, skill_name: str, revision: str) -> bool:
         history_obj = getattr(self.agent, "history", None)

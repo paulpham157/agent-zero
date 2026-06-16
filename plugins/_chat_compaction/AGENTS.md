@@ -18,6 +18,7 @@
 - Preserve chat history integrity and persistence after compaction.
 - Keep generated summaries bounded by configured model and token limits.
 - Do not discard original context data unless the compaction flow explicitly owns that behavior.
+- Preserve loaded skill name/revision metadata in summaries without copying full skill bodies.
 
 ## Work Guidance
 

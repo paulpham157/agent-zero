@@ -78,6 +78,7 @@ def _load_skills_tool(monkeypatch, skill_root: Path):
     skills_stub.load_skill_for_agent = (
         lambda *args, **kwargs: "Skill: browser-form-workflows\n\nInstructions:\nUse labels before typing."
     )
+    skills_stub.skill_revision = lambda skill_data: "rev1"
     monkeypatch.setitem(sys.modules, "helpers.skills", skills_stub)
 
     print_style_stub = types.ModuleType("helpers.print_style")
@@ -88,6 +89,65 @@ def _load_skills_tool(monkeypatch, skill_root: Path):
 
     sys.modules.pop("tools.skills_tool", None)
     return importlib.import_module("tools.skills_tool")
+
+
+class _FakeExtension:
+    def __init__(self, agent=None):
+        self.agent = agent
+
+
+class _FakeLoadedSkillAgent:
+    def __init__(self) -> None:
+        self.data = {"loaded_skills": ["browser-form-workflows"]}
+        self.added_tool_results = []
+
+    def hist_add_tool_result(self, tool_name: str, tool_result: str, **kwargs):
+        content = {"tool_name": tool_name, "tool_result": tool_result, **kwargs}
+        self.added_tool_results.append(content)
+        return types.SimpleNamespace(
+            output=lambda: [{"ai": False, "content": content}]
+        )
+
+
+def _load_loaded_skills_extension(monkeypatch, skill_root: Path):
+    extension_stub = types.ModuleType("helpers.extension")
+    extension_stub.Extension = _FakeExtension
+    monkeypatch.setitem(sys.modules, "helpers.extension", extension_stub)
+
+    agent_stub = types.ModuleType("agent")
+    agent_stub.LoopData = lambda **kwargs: types.SimpleNamespace(**kwargs)
+    monkeypatch.setitem(sys.modules, "agent", agent_stub)
+
+    skills_stub = types.ModuleType("helpers.skills")
+    fake_skill = _FakeSkill(
+        name="browser-form-workflows",
+        description="Use for complex browser forms.",
+        path=skill_root,
+        tags=[],
+    )
+    skills_stub.find_skill = lambda *args, **kwargs: fake_skill
+    skills_stub.load_skill_for_agent = (
+        lambda *args, **kwargs: "Skill: browser-form-workflows\n\nInstructions:\nUse labels before typing."
+    )
+    skills_stub.skill_revision = lambda skill_data: "rev1"
+    monkeypatch.setitem(sys.modules, "helpers.skills", skills_stub)
+
+    tokens_stub = types.ModuleType("helpers.tokens")
+    tokens_stub.approximate_tokens = lambda text: len(str(text).split())
+    monkeypatch.setitem(sys.modules, "helpers.tokens", tokens_stub)
+
+    import helpers
+
+    monkeypatch.setattr(helpers, "skills", skills_stub, raising=False)
+    monkeypatch.setattr(helpers, "tokens", tokens_stub, raising=False)
+
+    skills_tool_stub = types.ModuleType("tools.skills_tool")
+    skills_tool_stub.DATA_NAME_LOADED_SKILLS = "loaded_skills"
+    monkeypatch.setitem(sys.modules, "tools.skills_tool", skills_tool_stub)
+
+    module_name = "extensions.python.message_loop_prompts_after._65_include_loaded_skills"
+    sys.modules.pop(module_name, None)
+    return importlib.import_module(module_name)
 
 
 def _load_computer_use_remote_tool(monkeypatch):
@@ -235,15 +295,75 @@ def test_skills_tool_load_reloads_when_prior_skill_is_not_model_visible(
     assert second.additional["skill_instructions"]["content_included"] is True
 
 
-def test_loaded_skills_extension_no_longer_reinjects_skill_bodies():
-    project_root = Path(__file__).resolve().parents[1]
-    extension = (
-        project_root
-        / "extensions/python/message_loop_prompts_after/_65_include_loaded_skills.py"
-    ).read_text(encoding="utf-8")
+def test_loaded_skills_extension_reattaches_missing_body_after_compaction(
+    monkeypatch, tmp_path: Path
+):
+    module = _load_loaded_skills_extension(monkeypatch, tmp_path)
+    agent = _FakeLoadedSkillAgent()
+    loop_data = types.SimpleNamespace(
+        extras_persistent={"loaded_skills": "legacy"},
+        history_output=[
+            {
+                "ai": False,
+                "content": "Earlier history was summarized and no skill body is visible.",
+            }
+        ],
+    )
 
-    assert 'extras["loaded_skills"]' not in extension
-    assert "load_skill_for_agent" not in extension
+    asyncio.run(module.IncludeLoadedSkills(agent).execute(loop_data))
+
+    assert "loaded_skills" not in loop_data.extras_persistent
+    assert len(agent.added_tool_results) == 1
+    added = agent.added_tool_results[0]
+    assert added["tool_name"] == "skills_tool"
+    assert "Skill: browser-form-workflows" in added["tool_result"]
+    assert added["skill_instructions"] == {
+        "name": "browser-form-workflows",
+        "path": str(tmp_path),
+        "revision": "rev1",
+        "source": "skills_tool:reattach",
+        "content_included": True,
+    }
+    assert loop_data.history_output[-1]["content"] == added
+
+
+def test_loaded_skills_extension_does_not_reattach_visible_revision(
+    monkeypatch, tmp_path: Path
+):
+    module = _load_loaded_skills_extension(monkeypatch, tmp_path)
+    agent = _FakeLoadedSkillAgent()
+    loop_data = types.SimpleNamespace(
+        extras_persistent={},
+        history_output=[
+            {
+                "ai": False,
+                "content": {
+                    "skill_instructions": {
+                        "name": "browser-form-workflows",
+                        "revision": "rev1",
+                        "content_included": True,
+                    }
+                },
+            }
+        ],
+    )
+
+    asyncio.run(module.IncludeLoadedSkills(agent).execute(loop_data))
+
+    assert agent.added_tool_results == []
+
+
+def test_loaded_skills_extension_keeps_reattachments_under_budget(
+    monkeypatch, tmp_path: Path
+):
+    module = _load_loaded_skills_extension(monkeypatch, tmp_path)
+    monkeypatch.setattr(module, "SKILL_REATTACHMENT_TOKEN_BUDGET", 1)
+    agent = _FakeLoadedSkillAgent()
+    loop_data = types.SimpleNamespace(extras_persistent={}, history_output=[])
+
+    asyncio.run(module.IncludeLoadedSkills(agent).execute(loop_data))
+
+    assert agent.added_tool_results == []
 
 
 def test_skills_tool_read_file_action_reads_inside_skill_dir(
