@@ -21,6 +21,9 @@
   execution metadata enables `code_execution_remote`, and supported enabled
   Computer Use that does not need re-arming enables `computer_use_remote`.
 - Do not bypass WebSocket authentication or leak connector session data.
+- File operation results may arrive as chunked JSON/base64
+  `connector_file_op_result` frames; resolve the pending file operation only
+  after all chunks for the `op_id` are assembled.
 
 ## Work Guidance
 
