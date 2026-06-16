@@ -934,9 +934,17 @@ def test_browser_skills_are_plugin_owned_and_progressively_linked():
     automation = automation_path.read_text(encoding="utf-8")
     skill = skill_path.read_text(encoding="utf-8")
     assert skill.startswith("---\n")
+    automation_frontmatter = automation.split("---", 2)[1]
     frontmatter = skill.split("---", 2)[1]
+    assert "name: browser-automation" in automation_frontmatter
+    assert "triggers:" in automation_frontmatter
+    assert "browser screenshot" in automation_frontmatter
+    assert "host browser" in automation_frontmatter
     assert "name: browser-form-workflows" in frontmatter
     assert "description:" in frontmatter
+    assert "triggers:" in frontmatter
+    assert "fill web form" in frontmatter
+    assert "file upload" in frontmatter
     assert "progressive-disclosure workflow guide" in automation
     assert "`browser-form-workflows` with `skills_tool:load`" in automation
     assert 'skill_name: "browser-form-workflows"' in automation

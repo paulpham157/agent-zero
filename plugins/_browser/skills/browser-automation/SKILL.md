@@ -1,6 +1,23 @@
 ---
 name: browser-automation
 description: Use for complex Agent Zero browser automation, including multi-tab browsing, screenshots, forms, uploads, raw pointer/keyboard actions, host-vs-container browser mode, and visual verification workflows.
+triggers:
+  - "browser automation"
+  - "web automation"
+  - "open website"
+  - "open URL"
+  - "navigate browser"
+  - "interact with web page"
+  - "JavaScript page"
+  - "browser screenshot"
+  - "screenshot webpage"
+  - "visual verification"
+  - "multi-tab browsing"
+  - "download file from website"
+  - "upload file in browser"
+  - "host browser"
+  - "local browser"
+  - "my browser"
 ---
 
 # Browser Tool
