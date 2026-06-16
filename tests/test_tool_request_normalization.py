@@ -93,3 +93,4 @@ def test_parallel_prompt_encourages_mixed_independent_batches() -> None:
     assert "planning fields like `thoughts` or `headline` are ignored" in prompt
     assert "even when they use different tools" in prompt
     assert "Do not split by tool type" in prompt
+    assert "Never include `document_query`" in prompt

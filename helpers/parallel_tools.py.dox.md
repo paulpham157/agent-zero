@@ -24,6 +24,7 @@
 - Helper modules own reusable framework APIs and must preserve public callers unless all callers, tests, and docs are updated together.
 - Wrapped tool-call items must use the same shape as normal tool calls: a tool name plus arguments.
 - Normalization accepts full agent-reply-shaped objects when `tool_name` and `tool_args` are present; non-contract planning fields such as `thoughts` or `headline` are ignored.
+- Normalization rejects `document_query` inside `parallel` because document parsing and Q&A fan out into heavier worker/model paths that must run sequentially.
 - `call_subordinate` jobs run in isolated child chat contexts tagged with parent-chat metadata; they must not be added to the scheduler task list and may use normal child-chat tools, including `parallel`.
 - Direct tool jobs run in isolated background contexts and are blocked from recursively invoking `parallel`.
 - Parent-visible child log items are created for each wrapped call so the WebUI can inspect concurrent children separately while the wrapper result remains model-history-only.

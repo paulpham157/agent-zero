@@ -110,6 +110,18 @@ def test_normalize_parallel_tool_calls_rejects_nested_parallel() -> None:
         )
 
 
+def test_normalize_parallel_tool_calls_rejects_document_query() -> None:
+    with pytest.raises(ValueError, match="document_query.*parallel"):
+        parallel_tools.normalize_parallel_tool_calls(
+            [
+                {
+                    "tool_name": "document_query",
+                    "tool_args": {"document": "/tmp/report.pdf"},
+                }
+            ]
+        )
+
+
 @pytest.mark.asyncio
 async def test_parallel_jobs_extras_lists_running_and_ready_jobs() -> None:
     agent = _FakeAgent()

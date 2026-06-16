@@ -8,6 +8,7 @@ Batch all independent calls that are ready now into one `tool_calls` list, even 
 Rules:
 - do not use for one simple call, dependent steps, ordered steps, shared mutable state, or state/tool-availability changes that must happen in the parent context
 - never nest `parallel`
+- Never include `document_query` in `tool_calls`; it is too heavy for parallel workers, so call it sequentially.
 - `call_subordinate` inside `parallel` starts an isolated child chat under the parent chat, not a scheduler task
 - use `wait: false` only when you will collect results later with `job_ids`
 - if extras list running or ready parallel jobs, collect them before final synthesis

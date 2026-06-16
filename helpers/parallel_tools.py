@@ -31,6 +31,7 @@ CHILD_PARALLEL_TOOL_NAME_KEY = "parallel_tool_name"
 DEFAULT_MAX_CALLS = 8
 DEFAULT_TIMEOUT_SECONDS = 300
 POLL_INTERVAL_SECONDS = 0.5
+DISALLOWED_PARALLEL_TOOLS = {"document_query"}
 
 TERMINAL_STATES = {"success", "error", "cancelled", "timeout"}
 JobState = Literal["pending", "running", "success", "error", "cancelled", "timeout"]
@@ -93,6 +94,10 @@ def normalize_parallel_tool_calls(raw_calls: Any) -> list[NormalizedToolCall]:
 
         if tool_name == "parallel":
             raise ValueError("`parallel` cannot be nested inside another `parallel` call.")
+        if tool_name in DISALLOWED_PARALLEL_TOOLS:
+            raise ValueError(
+                f"`{tool_name}` cannot be used inside `parallel`; call it sequentially."
+            )
 
         calls.append(
             NormalizedToolCall(
