@@ -30,7 +30,7 @@ For fragile forms, load `browser-form-workflows` with `skills_tool:load` before 
 
 1. `open` creates a browser tab and returns a `browser_id`.
 2. `content` returns readable markdown plus typed refs like `[link 3]`, `[button 6]`, `[input text 8]`.
-3. Interact with refs using `click`, `type`, `submit`, `scroll`, etc.
+3. Interact with refs using `click`, `type`, `submit`, `scroll`, etc.; iframe/shadow targets may return frame-chain metadata in action results.
 4. Use `navigate` on an existing `browser_id` for serial browsing.
 5. Keep only a small working tab set; close pages when finished.
 6. If the user asks for an existing tab, page title, or already-open URL, call `list` first, match by `title` or `currentUrl`, then use `set_active` or `navigate` on that `browser_id` instead of opening a new tab.
@@ -63,8 +63,9 @@ Screenshot args include `quality`, `full_page`, and optional `path`. Without `pa
 
 ## Pointer And Keyboard
 
-- `hover`, `double_click`, `right_click`, and `drag` accept refs or viewport coordinates.
-- Coordinates are Chromium viewport CSS pixels and match screenshots.
+- Prefer refs/selectors and DOM/CDP actions over viewport coordinates.
+- `hover`, `double_click`, `right_click`, and `drag` accept refs or viewport coordinates when no reliable ref exists.
+- Coordinates are Chromium viewport CSS pixels and match screenshots; treat them as visual fallback, not the default interaction path.
 - `key_chord` presses keys in order and releases in reverse.
 - `clipboard` actions are copy, cut, or paste.
 - `set_viewport` resizes the page viewport.

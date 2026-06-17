@@ -11,7 +11,7 @@ Actions: tabs `open`, `list`, `state`, `set_active`, `navigate`, `back`, `forwar
 
 Rules:
 - If the user asks for an existing tab, page title, or already-open URL, call `list` first, match by `title` or `currentUrl`, then use `set_active` or `navigate` on that `browser_id`.
-- Use refs from the latest `content`; same-page controls may use `selector`.
+- Prefer DOM/CDP actions: use refs from the latest `content`, including frame-chain refs, or same-page `selector`; use coordinates only when refs/selectors are unavailable or the user explicitly asks for visual manual control.
 - Screenshots are explicit only; the browser does not automatically load screenshots. Call `vision_load` with the returned `vision_load.tool_args.paths` value before reasoning visually.
 - Keep the tab set small; close pages after extracting what you need.
 - `multi` is only a browser action: use `tool_name: "browser"` with `tool_args.action: "multi"`. Never use `tool_name: "multi"`.
