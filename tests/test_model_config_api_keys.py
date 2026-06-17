@@ -430,6 +430,70 @@ def test_local_provider_runtime_defaults_and_overrides(monkeypatch):
     assert custom_vllm_chat.kwargs["api_key"] == "real-local-key"
 
 
+def test_embedding_config_repairs_sentence_transformer_aliases(monkeypatch):
+    from plugins._model_config.helpers import model_config
+
+    cases = [
+        (
+            {"provider": "", "name": "sentence-transformers/all-MiniLM-L6-v2"},
+            ("huggingface", "sentence-transformers/all-MiniLM-L6-v2"),
+        ),
+        (
+            {"provider": "openai", "name": "sentence-transformers/all-MiniLM-L6-v2"},
+            ("huggingface", "sentence-transformers/all-MiniLM-L6-v2"),
+        ),
+        (
+            {
+                "provider": "other",
+                "name": "huggingface/sentence-transformers/all-MiniLM-L6-v2",
+            },
+            ("huggingface", "sentence-transformers/all-MiniLM-L6-v2"),
+        ),
+        (
+            {"provider": "huggingface", "name": "all-MiniLM-L6-v2"},
+            ("huggingface", "sentence-transformers/all-MiniLM-L6-v2"),
+        ),
+    ]
+
+    for raw_embedding, expected in cases:
+        monkeypatch.setattr(
+            model_config,
+            "get_config",
+            lambda *args, raw_embedding=raw_embedding, **kwargs: {
+                "embedding_model": raw_embedding
+            },
+        )
+        cfg = model_config.get_embedding_model_config_object()
+
+        assert (cfg.provider, cfg.name) == expected
+
+    monkeypatch.setattr(
+        model_config,
+        "get_config",
+        lambda *args, **kwargs: {
+            "embedding_model": {
+                "provider": "openai",
+                "name": "text-embedding-3-small",
+            }
+        },
+    )
+    cfg = model_config.get_embedding_model_config_object()
+
+    assert (cfg.provider, cfg.name) == ("openai", "text-embedding-3-small")
+
+    monkeypatch.setattr(
+        model_config,
+        "get_config",
+        lambda *args, **kwargs: {
+            "embedding_model": {
+                "provider": "openai",
+                "name": "sentence-transformers/all-MiniLM-L6-v2",
+            }
+        },
+    )
+    assert model_config.get_missing_api_key_providers() == []
+
+
 def test_docker_compose_maps_host_docker_internal_for_local_models():
     import yaml
 
