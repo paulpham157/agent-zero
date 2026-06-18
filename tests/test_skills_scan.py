@@ -126,6 +126,12 @@ def test_settings_skills_scan_section_and_prompt_assets_are_present():
     assert "section-skills-scan" in settings_store
     assert "settings/skills/scan.html" in skills_settings
     assert "settings/skills/import.html" in skills_settings
+    assert settings_store.index("section-skills-import") < settings_store.index(
+        "section-skills-scan"
+    )
+    assert skills_settings.index("section-skills-import") < skills_settings.index(
+        "section-skills-scan"
+    )
     assert "scanSelectedFile()" in import_template
     assert "snyk-agent-scan@latest --json --no-bootstrap" in scan_prompt
     assert "E004" in scan_checks_text
@@ -133,3 +139,77 @@ def test_settings_skills_scan_section_and_prompt_assets_are_present():
     assert "W008" in scan_checks_text
     assert "W011" in scan_checks_text
     assert "W012" in scan_checks_text
+
+
+def test_list_and_import_skills_filters_are_project_only():
+    list_template = (
+        PROJECT_ROOT
+        / "webui"
+        / "components"
+        / "settings"
+        / "skills"
+        / "list.html"
+    ).read_text(encoding="utf-8")
+    list_store = (
+        PROJECT_ROOT
+        / "webui"
+        / "components"
+        / "settings"
+        / "skills"
+        / "skills-list-store.js"
+    ).read_text(encoding="utf-8")
+    import_template = (
+        PROJECT_ROOT
+        / "webui"
+        / "components"
+        / "settings"
+        / "skills"
+        / "import.html"
+    ).read_text(encoding="utf-8")
+    import_store = (
+        PROJECT_ROOT
+        / "webui"
+        / "components"
+        / "settings"
+        / "skills"
+        / "skills-import-store.js"
+    ).read_text(encoding="utf-8")
+
+    assert "Agent profile" not in list_template
+    assert "agentProfile" not in list_store
+    assert "agent_profile" not in list_store
+    assert "Project" in list_template
+    assert "project_name" in list_store
+    assert "Limit to agent profile" not in import_template
+    assert "agentProfile" not in import_store
+    assert "agent_profile" not in import_store
+    assert "Limit to project" in import_template
+    assert "project_name" in import_store
+
+
+def test_list_skills_has_mcp_style_search():
+    list_template = (
+        PROJECT_ROOT
+        / "webui"
+        / "components"
+        / "settings"
+        / "skills"
+        / "list.html"
+    ).read_text(encoding="utf-8")
+    list_store = (
+        PROJECT_ROOT
+        / "webui"
+        / "components"
+        / "settings"
+        / "skills"
+        / "skills-list-store.js"
+    ).read_text(encoding="utf-8")
+
+    assert 'type="search"' in list_template
+    assert "placeholder=\"Search skills\"" in list_template
+    assert "skills-search-clear" in list_template
+    assert "filteredSkills" in list_template
+    assert "No skills match this search." in list_template
+    assert "skillSearch" in list_store
+    assert "matchesSearchQuery" in list_store
+    assert "clearSkillSearch()" in list_store

@@ -19,9 +19,7 @@ const model = {
   namespace: "",
   conflict: "skip", // skip|overwrite|rename
   projectKey: "", // selected project key, empty means All
-  agentProfileKey: "", // selected agent profile key, empty means All
   projects: [], // available projects options [{key,label}]
-  agentProfiles: [], // available agent profile options [{key,label}]
 
   preview: null,
   result: null,
@@ -29,7 +27,6 @@ const model = {
   init() {
     this.resetState();
     this.loadProjects();
-    this.loadAgentProfiles();
   },
 
   resetState() {
@@ -46,7 +43,6 @@ const model = {
     this.namespace = "";
     this.conflict = "skip";
     this.projectKey = "";
-    this.agentProfileKey = "";
   },
 
   async loadProjects() {
@@ -56,16 +52,6 @@ const model = {
     } catch (e) {
       console.error("Failed to load projects:", e);
       this.projects = [];
-    }
-  },
-
-  async loadAgentProfiles() {
-    try {
-      const data = await api.callJsonApi("/agents", { action: "list" });
-      this.agentProfiles = data.ok ? (data.data || []) : [];
-    } catch (e) {
-      console.error("Failed to load agent profiles:", e);
-      this.agentProfiles = [];
     }
   },
 
@@ -100,9 +86,6 @@ const model = {
       formData.append("project_name", this.projectKey);
     }
 
-    if (this.agentProfileKey) {
-      formData.append("agent_profile", this.agentProfileKey);
-    }
     return formData;
   },
 
