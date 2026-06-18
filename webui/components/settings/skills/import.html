@@ -67,6 +67,8 @@
                     </label>
 
                     <div class="buttons">
+                        <button class="btn slim" @click="$store.skillsImportStore.scanSelectedFile()"
+                            :disabled="$store.skillsImportStore.loading || $store.skillsScanStore?.preparingUpload">Scan Skills</button>
                         <button class="btn slim" @click="$store.skillsImportStore.previewImport()"
                             :disabled="$store.skillsImportStore.loading">Preview</button>
                         <button class="btn slim primary" @click="$store.skillsImportStore.performImport()"

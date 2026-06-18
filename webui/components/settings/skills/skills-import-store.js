@@ -1,5 +1,6 @@
 import { createStore } from "/js/AlpineStore.js";
 import * as api from "/js/api.js";
+import { store as skillsScanStore } from "/components/settings/skills/skills-scan-store.js";
 
 function sanitizeNamespace(text) {
   if (!text) return "";
@@ -139,6 +140,17 @@ const model = {
     }
   },
 
+  async scanSelectedFile() {
+    if (!this.skillsFile) {
+      this.error = "Please select a skills .zip file first";
+      return;
+    }
+
+    await skillsScanStore.openForUploadedFile(this.skillsFile, {
+      namespace: sanitizeNamespace(this.namespace),
+    });
+  },
+
   async performImport() {
     if (!this.skillsFile) {
       this.error = "Please select a skills .zip file first";
@@ -181,4 +193,3 @@ const model = {
 
 const store = createStore("skillsImportStore", model);
 export { store };
-
