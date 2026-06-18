@@ -30,7 +30,6 @@
 - `delete_skill(skill_path: str) -> None`: Delete a skill directory.
 - `find_skill(skill_name: str, agent: Agent | None=..., include_content: bool=..., include_hidden: bool=...) -> Optional[Skill]`
 - `load_skill_for_agent(skill_name: str, agent: Agent | None=...) -> str`: Load skill and format it as a complete string for agent context.
-- `skill_revision(skill_data: str) -> str`
 - `_get_skill_files(skill_dir: Path) -> str`: Get file tree for skill directory.
 - `search_skills(query: str, limit: int=..., agent: Agent | None=..., include_hidden: bool=...) -> List[Skill]`
 - `validate_skill(skill: Skill) -> List[str]`
@@ -53,11 +52,11 @@
 - Helper modules own reusable framework APIs and must preserve public callers unless all callers, tests, and docs are updated together.
 - Update this file whenever public functions, classes, persistence behavior, path/security assumptions, side effects, or cross-module contracts change.
 - Observed side-effect areas: filesystem reads, filesystem deletion, plugin state, settings/state persistence, secret handling.
-- Imported dependency areas include: `__future__`, `dataclasses`, `hashlib`, `helpers`, `os`, `pathlib`, `re`, `typing`.
+- Imported dependency areas include: `__future__`, `dataclasses`, `helpers`, `os`, `pathlib`, `re`, `typing`.
 
 ## Key Concepts
 
-- Important called helpers/classes observed in the source: `dataclass`, `re.compile`, `field`, `Path`, `root.rglob`, `results.sort`, `re.sub`, `path.read_text`, `text.splitlines`, `join.strip`, `parse_frontmatter`, `frontmatter_text.splitlines`, `_parse_frontmatter_fallback`, `split_frontmatter`, `str.strip`, `_coerce_list`, `Skill`, `get_skill_roots`, `_filter_hidden_skills`, `files.get_abs_path`, `hashlib.sha256`.
+- Important called helpers/classes observed in the source: `dataclass`, `re.compile`, `field`, `Path`, `root.rglob`, `results.sort`, `re.sub`, `path.read_text`, `text.splitlines`, `join.strip`, `parse_frontmatter`, `frontmatter_text.splitlines`, `_parse_frontmatter_fallback`, `split_frontmatter`, `str.strip`, `_coerce_list`, `Skill`, `get_skill_roots`, `_filter_hidden_skills`, `files.get_abs_path`.
 - Keep request/response, tool, or helper semantics documented here at the same time as source changes.
 
 ## Work Guidance

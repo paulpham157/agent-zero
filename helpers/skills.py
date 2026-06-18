@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import hashlib
 import os
 import re
 from dataclasses import dataclass, field
@@ -450,10 +449,6 @@ def load_skill_for_agent(
         lines.append("No additional files found.")
 
     return "\n".join(lines)
-
-
-def skill_revision(skill_data: str) -> str:
-    return hashlib.sha256(skill_data.encode("utf-8")).hexdigest()[:16]
 
 
 def _get_skill_files(skill_dir: Path) -> str:

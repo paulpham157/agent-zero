@@ -25,15 +25,12 @@
 - Update this file whenever tool arguments, output shape, `break_loop` behavior, intervention handling, prompt instructions, or side effects change.
 - `SkillsTool` is a `Tool`.
 - `SkillsTool` defines `execute(...)`.
-- `load` returns the full formatted skill instructions as the tool result so the instructions are appended once through normal message history instead of being reinjected through prompt extras.
-- `load` includes a `skill_instructions` metadata sidecar in the tool-result content with skill name, path, revision, source, and whether full content was included.
-- Duplicate `load` calls may omit the full body only when the same skill revision is still present in model-visible `history.output()` content.
-- Observed side-effect areas: filesystem reads, filesystem deletion, settings/state persistence, chat history content.
+- Observed side-effect areas: filesystem reads, filesystem deletion, settings/state persistence.
 - Imported dependency areas include: `__future__`, `helpers`, `helpers.print_style`, `helpers.tool`, `pathlib`, `typing`.
 
 ## Key Concepts
 
-- Important called helpers/classes observed in the source: `str.strip.lower.replace`, `skill_name.strip`, `super.get_log_object`, `self._normalize_skill_name`, `self.get_log_object`, `skills_helper.list_skills`, `join`, `skills_helper.search_skills`, `skills_helper.find_skill`, `skills_helper.load_skill_for_agent`, `skills_helper.skill_revision`, `skill.path.resolve`, `Path`, `resolved.read_text`, `skill_name.startswith`, `skill_name.endswith`, `self._current_action`, `self.agent.context.log.log`, `Response`, `strip`, `loaded.remove`, `target.is_absolute`.
+- Important called helpers/classes observed in the source: `str.strip.lower.replace`, `skill_name.strip`, `super.get_log_object`, `self._normalize_skill_name`, `self.get_log_object`, `skills_helper.list_skills`, `join`, `skills_helper.search_skills`, `skills_helper.find_skill`, `skill.path.resolve`, `Path`, `resolved.read_text`, `skill_name.startswith`, `skill_name.endswith`, `self._current_action`, `self.agent.context.log.log`, `Response`, `strip`, `loaded.remove`, `target.is_absolute`.
 - Keep request/response, tool, or helper semantics documented here at the same time as source changes.
 
 ## Work Guidance
