@@ -42,6 +42,7 @@
 - Imported dependency areas include: `agent`, `collections`, `datetime`, `helpers`, `helpers.localization`, `helpers.log`, `initialize`, `json`, `typing`, `uuid`.
 - Serialized chats store `agent_profile` both at the context level for the main chat and on each serialized agent so subordinate profiles survive server restart.
 - Deserialization must rebuild each agent with its serialized profile when present, falling back to the context profile for older chat files.
+- Chat loading skips directories that do not contain `chat.json`; malformed existing chat files still report load errors.
 
 ## Key Concepts
 

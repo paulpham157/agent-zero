@@ -570,6 +570,7 @@ async def _remove_context(context_id: str | None) -> None:
     if not context_id:
         return
     from agent import AgentContext
+    from helpers import persist_chat
 
     context = AgentContext.get(context_id)
     if context:
@@ -578,6 +579,7 @@ async def _remove_context(context_id: str | None) -> None:
         except Exception:
             pass
         AgentContext.remove(context_id)
+    persist_chat.remove_chat(context_id)
 
 
 def _log_parallel_child_started(agent: "Agent", job: ParallelJob) -> None:

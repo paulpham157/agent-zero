@@ -71,7 +71,9 @@ def load_tmp_chats():
     folders = files.list_files(CHATS_FOLDER, "*")
     json_files = []
     for folder_name in folders:
-        json_files.append(_get_chat_file_path(folder_name))
+        chat_file = _get_chat_file_path(folder_name)
+        if files.exists(chat_file):
+            json_files.append(chat_file)
 
     ctxids = []
     for file in json_files:

@@ -263,6 +263,19 @@ async def test_parallel_cancel_still_stops_and_removes_running_jobs() -> None:
 
 
 @pytest.mark.asyncio
+async def test_parallel_remove_context_deletes_persisted_worker_chat(monkeypatch) -> None:
+    removed = []
+
+    from helpers import persist_chat
+
+    monkeypatch.setattr(persist_chat, "remove_chat", removed.append)
+
+    await parallel_tools._remove_context("missing-worker")
+
+    assert removed == ["missing-worker"]
+
+
+@pytest.mark.asyncio
 async def test_parallel_recursion_guard_allows_subordinate_children_but_blocks_tool_workers() -> None:
     from extensions.python.tool_execute_before._20_block_parallel_recursion import (
         BlockParallelRecursion,
