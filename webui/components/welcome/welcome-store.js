@@ -1,5 +1,4 @@
 import { createStore } from "/js/AlpineStore.js";
-import { getContext } from "/index.js";
 import { store as chatsStore } from "/components/sidebar/chats/chats-store.js";
 import { store as memoryStore } from "/plugins/_memory/webui/memory-dashboard-store.js";
 import { store as projectsStore } from "/components/projects/projects-store.js";
@@ -143,8 +142,13 @@ const model = {
 
   get sortedBanners() {
     return [...this.banners]
+      .filter((b) => b.id !== "system-resources")
       .filter((b) => b.type !== "hero" && b.type !== "feature")
       .sort((a, b) => (b.priority || 0) - (a.priority || 0));
+  },
+
+  get systemResourceBanner() {
+    return this.banners.find((b) => b.id === "system-resources") || null;
   },
 
   /**

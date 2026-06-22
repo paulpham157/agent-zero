@@ -154,6 +154,10 @@ const model = {
     return this.cards.filter((card) => card.type === "hero" && card.placement === "after-features");
   },
 
+  get oauthAccountCards() {
+    return this.bottomHeroCards.filter((card) => card.id === "discovery-oauth-accounts");
+  },
+
   get heroCards() {
     return [...this.topHeroCards, ...this.bottomHeroCards];
   },

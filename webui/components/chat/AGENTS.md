@@ -17,6 +17,8 @@
 - Preserve Store Gating for all store-backed chat components.
 - Use shared API, WebSocket, notification, and attachment helpers where available.
 - Do not bypass CSRF or WebSocket state-sync expectations.
+- The shared composer can be mounted on the Welcome screen with no selected chat; sending from that state must create and select a chat context before dispatch.
+- Composer text uses the main UI font by default and switches to the code font while the caret is inside an open triple-backtick fenced block.
 
 ## Work Guidance
 

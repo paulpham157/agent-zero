@@ -26,6 +26,7 @@
 - Do not bypass WebSocket origin/auth/CSRF assumptions from frontend code.
 - Avoid editing vendored files unless intentionally updating the vendor asset.
 - Rubik (`--font-family-main`) is the default WebUI text and control font; use the code/mono font tokens only for code, logs, paths, and fixed-width data.
+- Hover, focus, and active border treatments should follow existing neutral border/background patterns; avoid hard-coded blue border highlights unless matching an established specialized surface.
 
 ## Work Guidance
 

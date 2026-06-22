@@ -166,7 +166,7 @@ def test_oauth_model_wrappers_do_not_add_box_borders_or_lateral_padding():
     assert "'is-codex'" not in config_html
 
 
-def test_connected_codex_welcome_card_renders_usage_limit_bars():
+def test_oauth_discovery_card_renders_in_welcome_account_panel():
     discovery_cards = (
         PROJECT_ROOT
         / "plugins/_discovery/extensions/python/banners/10_discovery_cards.py"
@@ -186,8 +186,11 @@ def test_connected_codex_welcome_card_renders_usage_limit_bars():
     assert '"icon": "account_circle"' not in discovery_cards
     assert "usage_windows" in discovery_cards
     assert "account_chips" in discovery_cards
+    assert "discovery-account-card" in welcome_cards
     assert "discovery-account-chip" in welcome_cards
-    assert 'x-show="card.thumbnail || card.icon"' in welcome_cards
-    assert "discovery-usage" in welcome_cards
-    assert "discovery-usage-bar" in welcome_cards
-    assert "formatRemainingPercent(window)" in welcome_cards + discovery_store
+    assert "discovery-account-usage" in welcome_cards
+    assert "formatRemainingPercent(window)" in welcome_cards
+    assert "formatRemainingPercent(window)" in discovery_store
+    assert "usageWidth(window)" in discovery_store
+    assert "oauthAccountCards" in discovery_store
+    assert 'card.id === "discovery-oauth-accounts"' in discovery_store

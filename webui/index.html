@@ -96,8 +96,12 @@
             <x-component path="chat/top-section/chat-top.html"></x-component>
 
             <!-- Welcome Screen Component -->
-            <div x-data x-show="$store.welcomeStore && $store.welcomeStore.isVisible">
-                <x-component path="welcome/welcome-screen.html"></x-component>
+            <div x-data>
+                <template x-if="$store.welcomeStore && $store.welcomeStore.isVisible">
+                    <div class="welcome-host">
+                        <x-component path="welcome/welcome-screen.html"></x-component>
+                    </div>
+                </template>
             </div>
             <!-- Message History (actual messages) -->
             <div id="chat-area-wrapper" x-data x-show="!$store.welcomeStore || !$store.welcomeStore.isVisible">
@@ -135,11 +139,15 @@
                 <button class="toast__close">Close</button>
             </div>
             <!-- Chat Input Area -->
-            <div x-show="!$store.welcomeStore || !$store.welcomeStore.isVisible">
-                <!-- Progress Bar -->
-                <x-component path="chat/input/progress.html"></x-component>
-                <!-- Input Section -->
-                <x-component path="chat/input/chat-bar.html"></x-component>
+            <div x-data>
+                <template x-if="!$store.welcomeStore || !$store.welcomeStore.isVisible">
+                    <div>
+                        <!-- Progress Bar -->
+                        <x-component path="chat/input/progress.html"></x-component>
+                        <!-- Input Section -->
+                        <x-component path="chat/input/chat-bar.html"></x-component>
+                    </div>
+                </template>
             </div>
         </div>
         <x-component path="canvas/right-canvas.html"></x-component>

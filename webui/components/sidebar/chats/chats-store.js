@@ -210,12 +210,13 @@ const model = {
       if (response.ok) {
         await this.selectChat(response.ctxid);
         document.dispatchEvent(new CustomEvent("chat-created", { detail: { ctxid: response.ctxid } }));
-        return;
+        return response.ctxid;
       }
 
     } catch (e) {
       toastFetchError("Error creating new chat", e);
     }
+    return null;
   },
 
   deselectChat(){

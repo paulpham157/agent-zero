@@ -14,6 +14,7 @@ import { store as chatTopStore } from "/components/chat/top-section/chat-top-sto
 import { store as _tooltipsStore } from "/components/tooltips/tooltip-store.js";
 import { store as messageQueueStore } from "/components/chat/message-queue/message-queue-store.js";
 import { store as syncStore } from "/components/sync/sync-store.js"
+import { store as welcomeStore } from "/components/welcome/welcome-store.js";
 import { getUserHour12, getUserTimezone } from "/js/time-utils.js";
 
 globalThis.fetchApi = api.fetchApi; // TODO - backward compatibility for non-modular scripts, remove once refactored to alpine
@@ -58,7 +59,7 @@ export async function sendMessage() {
 
     if (message || hasAttachments) {
       // Check if agent is busy - queue instead of sending
-      if (chatsStore.selectedContext.running || messageQueueStore.hasQueue) {
+      if (chatsStore.selectedContext?.running || messageQueueStore.hasQueue) {
         const success = messageQueueStore.addToQueue(message, attachmentsWithUrls);
         // no await for the queue
         // if (success) {
@@ -231,12 +232,7 @@ globalThis.loadKnowledge = async function () {
 };
 
 function adjustTextareaHeight() {
-  const chatInputEl = document.getElementById("chat-input");
-  if (chatInputEl) {
-    if (!inputStore.message) chatInputEl.value = "";
-    chatInputEl.style.height = "auto";
-    chatInputEl.style.height = chatInputEl.scrollHeight + "px";
-  }
+  inputStore.adjustTextareaHeight();
 }
 
 export const sendJsonData = async function (url, data) {
@@ -593,7 +589,7 @@ export const deselectChat = function () {
   sessionStorage.removeItem("lastSelectedTask");
 
   // Clear the chat history
-  chatHistory.innerHTML = "";
+  if (chatHistory) chatHistory.innerHTML = "";
 };
 globalThis.deselectChat = deselectChat;
 

@@ -19,14 +19,6 @@
                                  @click="$store.discoveryStore.executeCta(card.cta_action)"
                                  @keydown.enter.prevent="$store.discoveryStore.executeCta(card.cta_action)"
                                  @keydown.space.prevent="$store.discoveryStore.executeCta(card.cta_action)">
-                            <button class="discovery-dismiss discovery-dismiss-small"
-                                    type="button"
-                                    x-show="card.dismissible"
-                                    @click.stop="$store.discoveryStore.dismissCard(card.id)"
-                                    :aria-label="`Dismiss ${card.title}`"
-                                    title="Dismiss">
-                                <span class="material-symbols-outlined">close</span>
-                            </button>
 
                             <div class="discovery-feature-head">
                                 <div class="discovery-feature-thumb">
@@ -39,8 +31,6 @@
                                 </div>
                                 <h4 class="discovery-feature-title" x-text="card.title"></h4>
                             </div>
-
-                            <p class="discovery-feature-desc" x-text="card.description"></p>
 
                             <button class="btn btn primary"
                                     type="button"
@@ -281,6 +271,7 @@
             gap: 0.62rem;
             width: 100%;
             min-width: 0;
+            margin-bottom: 1rem;
         }
 
         .discovery-feature-thumb {
@@ -575,6 +566,7 @@
             .discovery-feature-head {
                 grid-column: 1;
                 min-width: 0;
+                margin-bottom: 0;
             }
 
             .discovery-feature-thumb {
