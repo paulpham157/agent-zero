@@ -648,7 +648,7 @@ def _apply_settings(previous: Settings | None, browser_timezone: str | None = No
                 )
 
             task2 = defer.DeferredTask().start_task(
-                update_mcp_settings, config.mcp_servers
+                update_mcp_settings, _settings["mcp_servers"]
             )  # TODO overkill, replace with background task
 
         # update token in mcp server
