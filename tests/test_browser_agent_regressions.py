@@ -803,7 +803,7 @@ def test_browser_entry_points_prefer_canvas_and_modal_dock_handoff():
         assert "Alpine.store" not in js
 
 
-def test_browser_and_desktop_surface_buttons_remember_latest_window_mode():
+def test_surface_buttons_keep_modal_and_canvas_entry_points_separate():
     canvas_store = (PROJECT_ROOT / "webui" / "components" / "canvas" / "right-canvas-store.js").read_text(
         encoding="utf-8"
     )
@@ -852,8 +852,8 @@ def test_browser_and_desktop_surface_buttons_remember_latest_window_mode():
     assert "this.mountedSurfaces = {}" not in open_modal_block
     assert "failed to close before modal open" not in open_modal_block
 
-    assert '@click="$store.rightCanvas.openLatest(surface.id)"' in canvas_html
-    assert '@click="$store.rightCanvas.open(surface.id)"' in canvas_html
+    assert '@click="$store.rightCanvas.openLatest(surface.id)"' not in canvas_html
+    assert canvas_html.count('@click="$store.rightCanvas.open(surface.id)"') == 2
 
     assert "recordMode(metadata.surfaceId, SURFACE_MODE_FLOATING)" in surfaces_js
     assert "configureModalSurfaceSwitcher" in surfaces_js

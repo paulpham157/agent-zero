@@ -14,6 +14,7 @@
 
 - Keep registered surfaces compatible with WebUI extension hooks.
 - Preserve responsive layout and avoid overlapping the chat/sidebar shells.
+- Right-canvas rail and tab buttons are explicit canvas entry points; they must open surfaces in the canvas even when the same surface was last used as a floating modal.
 
 ## Work Guidance
 
