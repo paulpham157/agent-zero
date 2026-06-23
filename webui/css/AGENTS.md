@@ -19,6 +19,7 @@
 - Avoid broad selectors that unexpectedly restyle plugin UI or unrelated components.
 - Keep layout rules responsive and verify text does not overflow fixed controls.
 - Shared modal buttons use `btn btn-ok` for positive actions and `btn btn-cancel` for dismissive or negative actions.
+- Shared compact text actions use `.text-button`; component-local styles may adjust layout or sizing but must not be the only definition of the primitive.
 - Modal footer action order is positive action first, dismissive or negative action second.
 - Modal footers use `.modal-footer` plus `data-modal-footer`; do not redefine `.btn`, `.modal-footer`, `.modal-inner`, or `.modal-scroll` inside components.
 - Shared modal sizing keeps `.modal-inner` centered with `width: 90%`, `max-width: 960px`, and `max-height: 90vh`.
