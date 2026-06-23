@@ -14,6 +14,7 @@
 ## Local Contracts
 
 - Preserve global, project, agent, and chat override resolution order.
+- Project Settings `llm` payloads are owned here through the generic `helpers.projects` project extension-data hooks; keep project helper code agnostic to `_model_config` paths, presets, and inheritance rules.
 - Keep provider metadata and API-key checks safe around secrets.
 - Coordinate OAuth-backed providers with `_oauth` instead of hardcoding provider-specific auth here.
 - Applying a model preset may inherit durable tuning such as context windows and rate limits, but must replace or clear per-slot `kwargs` so provider-specific extra params never leak across model providers.

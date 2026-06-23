@@ -99,6 +99,76 @@ def get_config(agent=None, project_name=None, agent_profile=None):
     ) or {}
 
 
+def has_project_config(project_name: str) -> bool:
+    path = plugins.determine_plugin_asset_path(
+        "_model_config", project_name, "", plugins.CONFIG_FILE_NAME
+    )
+    return files.exists(path)
+
+
+def load_project_llm_data(project_name: str) -> dict:
+    """Build the model-settings payload shown in Project Settings."""
+    project_config_exists = has_project_config(project_name)
+    config = normalize_config_for_save(get_config(project_name=project_name) or {})
+    return {
+        "config": config,
+        "config_scope": "project" if project_config_exists else "inherited",
+        "has_project_config": project_config_exists,
+        "selected_preset": {
+            "scope": "current",
+            "project_name": project_name,
+            "name": "Current config",
+        },
+        "presets": get_combined_presets(project_name),
+        "global_presets": get_presets(),
+        "project_presets": get_project_presets(project_name),
+    }
+
+
+def save_project_llm_settings(project_name: str, llm_data: object) -> None:
+    """Persist Project Settings model data without freezing inherited globals."""
+    if not isinstance(llm_data, dict):
+        return
+
+    project_config_exists = has_project_config(project_name)
+    project_presets = llm_data.get("project_presets")
+    presets_path = _get_presets_path(project_name)
+    if isinstance(project_presets, list) and (
+        project_presets or files.exists(presets_path)
+    ):
+        save_presets(project_presets, project_name=project_name)
+
+    config_to_save = None
+    selected_preset = llm_data.get("selected_preset")
+    if isinstance(selected_preset, dict) and selected_preset.get("scope") in {
+        PRESET_SCOPE_GLOBAL,
+        PRESET_SCOPE_PROJECT,
+    }:
+        preset = resolve_preset_selection(selected_preset, project_name=project_name)
+        if preset:
+            base_config = get_config(project_name=project_name) or {}
+            config_to_save = build_config_from_preset(preset, base_config)
+
+    config = llm_data.get("config")
+    config_scope = str(llm_data.get("config_scope") or "")
+    config_is_inherited = config_scope == "inherited" and not project_config_exists
+    should_save_config = (
+        project_config_exists
+        or config_scope == "project"
+        or not config_scope
+    )
+    if (
+        config_to_save is None
+        and isinstance(config, dict)
+        and should_save_config
+        and not config_is_inherited
+    ):
+        config_to_save = normalize_config_for_save(config)
+
+    if config_to_save is not None:
+        plugins.save_plugin_config("_model_config", project_name, "", config_to_save)
+
+
 def _load_presets_from_path(path: str) -> list | None:
     if files.exists(path):
         data = yaml_helper.loads(files.read_file(path))

@@ -1,7 +1,7 @@
 import os
 from typing import Literal, NotRequired, TypedDict, TYPE_CHECKING, cast
 
-from helpers import files, dirty_json, persist_chat, file_tree
+from helpers import files, dirty_json, persist_chat, file_tree, extension
 from helpers.print_style import PrintStyle
 
 
@@ -62,6 +62,12 @@ class EditProjectData(BasicProjectData):
     git_status: GitStatusData
 
 
+ProjectExtendedData = dict[str, object]
+_PROJECT_CORE_EDIT_KEYS = frozenset(BasicProjectData.__annotations__) | frozenset(
+    EditProjectData.__annotations__
+)
+_PROJECT_TRANSIENT_INPUT_KEYS = frozenset({"git_token"})
+
 
 def get_projects_parent_folder():
     return files.get_abs_path(PROJECTS_PARENT_DIR)
@@ -94,7 +100,7 @@ def delete_project(name: str):
 
 
 def create_project(name: str, data: BasicProjectData):
-    llm_data = data.get("llm") if isinstance(data, dict) else None
+    extended_data = _project_extended_data_for_save(data)
     mcp_servers = data.get("mcp_servers") if isinstance(data, dict) else None
     abs_path = files.create_dir_safe(
         files.get_abs_path(PROJECTS_PARENT_DIR, name), rename_format="{name}_{number}"
@@ -103,7 +109,7 @@ def create_project(name: str, data: BasicProjectData):
     data = _normalizeBasicData(data)
     save_project_header(name, data)
     save_project_mcp_servers(name, mcp_servers or DEFAULT_MCP_SERVERS_CONFIG)
-    save_project_llm_settings(name, llm_data)
+    save_project_extended_data(name, extended_data)
     return name
 
 
@@ -111,7 +117,7 @@ def clone_git_project(name: str, git_url: str, git_token: str, data: BasicProjec
     """Clone a git repository as a new A0 project. Token is used only for cloning via http header."""
     from helpers import git
 
-    llm_data = data.get("llm") if isinstance(data, dict) else None
+    extended_data = _project_extended_data_for_save(data)
     mcp_servers = data.get("mcp_servers") if isinstance(data, dict) else None
     
     abs_path = files.create_dir_safe(
@@ -142,7 +148,7 @@ def clone_git_project(name: str, git_url: str, git_token: str, data: BasicProjec
 
         if mcp_servers:
             save_project_mcp_servers(actual_name, mcp_servers)
-        save_project_llm_settings(actual_name, llm_data)
+        save_project_extended_data(actual_name, extended_data)
         
         return actual_name
     except Exception as e:
@@ -242,7 +248,7 @@ def _basic_data_to_edit_data(data: BasicProjectData) -> EditProjectData:
 
 
 def update_project(name: str, data: EditProjectData):
-    llm_data = data.get("llm") if isinstance(data, dict) else None
+    extended_data = _project_extended_data_for_save(data)
 
     # merge with current state
     current = load_edit_project_data(name)
@@ -258,7 +264,7 @@ def update_project(name: str, data: EditProjectData):
     save_project_secrets(name, current["secrets"])
     save_project_mcp_servers(name, current["mcp_servers"])
     save_project_subagents(name, current["subagents"])
-    save_project_llm_settings(name, llm_data)
+    save_project_extended_data(name, extended_data)
 
     reactivate_project_in_chats(name)
     return name
@@ -298,7 +304,7 @@ def load_edit_project_data(name: str) -> EditProjectData:
         },
     )
     data = _normalizeEditData(data)
-    data["llm"] = load_project_llm_data(name)  # type: ignore[typeddict-unknown-key]
+    _merge_project_extended_data(data, load_project_extended_data(name))
     return data
 
 
@@ -312,53 +318,42 @@ def save_project_header(name: str, data: BasicProjectData):
     files.write_file(abs_path, header)
 
 
-def load_project_llm_data(name: str) -> dict:
-    from plugins._model_config.helpers import model_config
+@extension.extensible
+def load_project_extended_data(name: str) -> ProjectExtendedData:
+    return {}
 
-    config = model_config.normalize_config_for_save(
-        model_config.get_config(project_name=name) or {}
-    )
+
+@extension.extensible
+def save_project_extended_data(name: str, project_data: ProjectExtendedData):
+    return None
+
+
+def _project_extended_data_for_save(data: object) -> ProjectExtendedData:
+    if not isinstance(data, dict):
+        return {}
     return {
-        "config": config,
-        "selected_preset": {
-            "scope": "current",
-            "project_name": name,
-            "name": "Current config",
-        },
-        "presets": model_config.get_combined_presets(name),
-        "global_presets": model_config.get_presets(),
-        "project_presets": model_config.get_project_presets(name),
+        str(key): value
+        for key, value in data.items()
+        if str(key) not in _PROJECT_CORE_EDIT_KEYS
+        and str(key) not in _PROJECT_TRANSIENT_INPUT_KEYS
     }
 
 
-def save_project_llm_settings(name: str, llm_data: object):
-    if not isinstance(llm_data, dict):
+def _merge_project_extended_data(
+    data: EditProjectData,
+    extended_data: object,
+) -> None:
+    if not isinstance(extended_data, dict):
         return
 
-    from helpers import plugins
-    from plugins._model_config.helpers import model_config
+    conflicts = sorted(str(key) for key in extended_data if key in _PROJECT_CORE_EDIT_KEYS)
+    if conflicts:
+        raise ValueError(
+            "Project extension data cannot overwrite core project fields: "
+            + ", ".join(conflicts)
+        )
 
-    project_presets = llm_data.get("project_presets")
-    if isinstance(project_presets, list):
-        model_config.save_presets(project_presets, project_name=name)
-
-    config_to_save = None
-    selected_preset = llm_data.get("selected_preset")
-    if isinstance(selected_preset, dict) and selected_preset.get("scope") in {
-        "global",
-        "project",
-    }:
-        preset = model_config.resolve_preset_selection(selected_preset, project_name=name)
-        if preset:
-            base_config = model_config.get_config(project_name=name) or {}
-            config_to_save = model_config.build_config_from_preset(preset, base_config)
-
-    config = llm_data.get("config")
-    if config_to_save is None and isinstance(config, dict):
-        config_to_save = model_config.normalize_config_for_save(config)
-
-    if config_to_save is not None:
-        plugins.save_plugin_config("_model_config", name, "", config_to_save)
+    data.update(extended_data)  # type: ignore[typeddict-item]
 
 
 def load_project_mcp_servers(name: str) -> str:

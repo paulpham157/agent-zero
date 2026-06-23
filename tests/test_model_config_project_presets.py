@@ -48,6 +48,21 @@ sys.modules.setdefault("watchdog.observers", watchdog.observers)
 sys.modules.setdefault("watchdog.events", watchdog.events)
 
 
+def _copy_extension_fixture(plugin_dir: Path, relative_path: str) -> None:
+    source = PROJECT_ROOT / "plugins" / "_model_config" / relative_path
+    target = plugin_dir / relative_path
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(source.read_text(encoding="utf-8"), encoding="utf-8")
+
+
+def _clear_runtime_caches():
+    from helpers import cache, modules
+
+    cache.clear("*(extensions)*")
+    cache.clear("*(plugins)*")
+    modules.purge_namespace("usr.plugins")
+
+
 def _prepare_a0_tree(monkeypatch, tmp_path: Path):
     from helpers import files, plugins
 
@@ -91,7 +106,140 @@ embedding_model:
 """.lstrip(),
         encoding="utf-8",
     )
+    _copy_extension_fixture(
+        plugin_dir,
+        "extensions/python/_functions/helpers/projects/load_project_extended_data/end/_10_model_config.py",
+    )
+    _copy_extension_fixture(
+        plugin_dir,
+        "extensions/python/_functions/helpers/projects/save_project_extended_data/start/_10_model_config.py",
+    )
+    (tmp_path / "usr" / "plugins").mkdir(parents=True)
     (tmp_path / "usr" / "projects").mkdir(parents=True)
+    _clear_runtime_caches()
+
+
+def _add_project_extra_plugin(tmp_path: Path):
+    plugin_dir = tmp_path / "plugins" / "_project_extra"
+    plugin_dir.mkdir(parents=True)
+    (plugin_dir / "plugin.yaml").write_text(
+        "name: _project_extra\n",
+        encoding="utf-8",
+    )
+    load_ext = (
+        plugin_dir
+        / "extensions"
+        / "python"
+        / "_functions"
+        / "helpers"
+        / "projects"
+        / "load_project_extended_data"
+        / "end"
+        / "_20_project_extra.py"
+    )
+    load_ext.parent.mkdir(parents=True, exist_ok=True)
+    load_ext.write_text(
+        """
+from helpers.extension import Extension
+
+
+class ProjectExtraLoader(Extension):
+    def execute(self, data: dict = {}, **kwargs):
+        result = data.get("result")
+        if not isinstance(result, dict):
+            result = {}
+            data["result"] = result
+        args = data.get("args") or ()
+        project_name = args[0] if args else data.get("kwargs", {}).get("name", "")
+        result["extra"] = {"loaded_for": str(project_name or ""), "enabled": True}
+""".lstrip(),
+        encoding="utf-8",
+    )
+    save_ext = (
+        plugin_dir
+        / "extensions"
+        / "python"
+        / "_functions"
+        / "helpers"
+        / "projects"
+        / "save_project_extended_data"
+        / "start"
+        / "_20_project_extra.py"
+    )
+    save_ext.parent.mkdir(parents=True, exist_ok=True)
+    save_ext.write_text(
+        """
+import json
+from helpers import files
+from helpers.extension import Extension
+
+
+class ProjectExtraSaver(Extension):
+    def execute(self, data: dict = {}, **kwargs):
+        args = data.get("args") or ()
+        call_kwargs = data.get("kwargs") or {}
+        project_name = args[0] if args else call_kwargs.get("name", "")
+        project_data = args[1] if len(args) > 1 else call_kwargs.get("project_data")
+        if not isinstance(project_data, dict) or "extra" not in project_data:
+            return
+        forbidden = {"title", "mcp_servers", "git_token"} & set(project_data)
+        if forbidden:
+            raise AssertionError(f"core/transient keys leaked to extension save: {sorted(forbidden)}")
+        path = files.get_abs_path(
+            "usr",
+            "projects",
+            str(project_name or ""),
+            ".a0proj",
+            "extra_saved.json",
+        )
+        files.write_file(
+            path,
+            json.dumps(
+                {"project": str(project_name or ""), "extra": project_data["extra"]},
+                sort_keys=True,
+            ),
+        )
+""".lstrip(),
+        encoding="utf-8",
+    )
+    _clear_runtime_caches()
+
+
+def _add_project_conflict_plugin(tmp_path: Path):
+    plugin_dir = tmp_path / "plugins" / "_project_conflict"
+    plugin_dir.mkdir(parents=True)
+    (plugin_dir / "plugin.yaml").write_text(
+        "name: _project_conflict\n",
+        encoding="utf-8",
+    )
+    load_ext = (
+        plugin_dir
+        / "extensions"
+        / "python"
+        / "_functions"
+        / "helpers"
+        / "projects"
+        / "load_project_extended_data"
+        / "end"
+        / "_30_project_conflict.py"
+    )
+    load_ext.parent.mkdir(parents=True, exist_ok=True)
+    load_ext.write_text(
+        """
+from helpers.extension import Extension
+
+
+class ProjectConflictLoader(Extension):
+    def execute(self, data: dict = {}, **kwargs):
+        result = data.get("result")
+        if not isinstance(result, dict):
+            result = {}
+            data["result"] = result
+        result["title"] = "Plugin-owned title"
+""".lstrip(),
+        encoding="utf-8",
+    )
+    _clear_runtime_caches()
 
 
 def test_global_presets_keep_legacy_default_and_save_behavior(monkeypatch, tmp_path):
@@ -245,6 +393,149 @@ def test_project_save_copies_selected_preset_to_scoped_model_config(monkeypatch,
     ).read_text(encoding="utf-8")
     assert "llm" not in project_json
     assert "_model_config" not in project_json
+
+
+def test_project_save_does_not_freeze_inherited_global_model_config(
+    monkeypatch,
+    tmp_path,
+):
+    _prepare_a0_tree(monkeypatch, tmp_path)
+
+    from helpers import plugins, projects
+
+    projects.create_project("demo", {"title": "Demo"})
+    config_path = (
+        tmp_path
+        / "usr"
+        / "projects"
+        / "demo"
+        / ".a0proj"
+        / "plugins"
+        / "_model_config"
+        / "config.json"
+    )
+
+    project_data = projects.load_edit_project_data("demo")
+    assert project_data["llm"]["config_scope"] == "inherited"
+    assert project_data["llm"]["has_project_config"] is False
+
+    projects.update_project("demo", project_data)
+
+    assert not config_path.exists()
+
+    plugins.save_plugin_config(
+        "_model_config",
+        "",
+        "",
+        {
+            "chat_model": {"provider": "openrouter", "name": "new-global-chat"},
+            "utility_model": {"provider": "openrouter", "name": "new-global-utility"},
+            "embedding_model": {
+                "provider": "huggingface",
+                "name": "new-global-embedding",
+            },
+        },
+    )
+
+    reloaded_data = projects.load_edit_project_data("demo")
+    assert reloaded_data["llm"]["config_scope"] == "inherited"
+    assert reloaded_data["llm"]["config"]["chat_model"]["name"] == "new-global-chat"
+
+
+def test_project_save_updates_existing_scoped_model_config(monkeypatch, tmp_path):
+    _prepare_a0_tree(monkeypatch, tmp_path)
+
+    from helpers import plugins, projects
+
+    projects.create_project("demo", {"title": "Demo"})
+    plugins.save_plugin_config(
+        "_model_config",
+        "demo",
+        "",
+        {
+            "chat_model": {"provider": "openrouter", "name": "project-chat"},
+            "utility_model": {"provider": "openrouter", "name": "project-utility"},
+            "embedding_model": {"provider": "huggingface", "name": "project-embedding"},
+        },
+    )
+
+    project_data = projects.load_edit_project_data("demo")
+    assert project_data["llm"]["config_scope"] == "project"
+    project_data["llm"]["config"]["chat_model"]["name"] = "project-chat-updated"
+
+    projects.update_project("demo", project_data)
+
+    config_path = (
+        tmp_path
+        / "usr"
+        / "projects"
+        / "demo"
+        / ".a0proj"
+        / "plugins"
+        / "_model_config"
+        / "config.json"
+    )
+    config = json.loads(config_path.read_text(encoding="utf-8"))
+    assert config["chat_model"]["name"] == "project-chat-updated"
+
+
+def test_project_extended_data_supports_multiple_plugin_sections(
+    monkeypatch,
+    tmp_path,
+):
+    _prepare_a0_tree(monkeypatch, tmp_path)
+    _add_project_extra_plugin(tmp_path)
+
+    from helpers import projects
+
+    projects.create_project(
+        "demo",
+        {
+            "title": "Demo",
+            "git_token": "secret-token",
+            "extra": {"enabled": False, "note": "created"},
+        },
+    )
+
+    saved_path = (
+        tmp_path
+        / "usr"
+        / "projects"
+        / "demo"
+        / ".a0proj"
+        / "extra_saved.json"
+    )
+    assert json.loads(saved_path.read_text(encoding="utf-8")) == {
+        "project": "demo",
+        "extra": {"enabled": False, "note": "created"},
+    }
+
+    project_data = projects.load_edit_project_data("demo")
+    assert project_data["llm"]["config_scope"] == "inherited"
+    assert project_data["extra"] == {"loaded_for": "demo", "enabled": True}
+
+    project_data["extra"] = {"enabled": True, "note": "updated"}
+    projects.update_project("demo", project_data)
+
+    assert json.loads(saved_path.read_text(encoding="utf-8")) == {
+        "project": "demo",
+        "extra": {"enabled": True, "note": "updated"},
+    }
+
+
+def test_project_extended_data_cannot_overwrite_core_fields(monkeypatch, tmp_path):
+    _prepare_a0_tree(monkeypatch, tmp_path)
+    _add_project_conflict_plugin(tmp_path)
+
+    from helpers import projects
+
+    projects.create_project("demo", {"title": "Demo"})
+
+    with pytest.raises(
+        ValueError,
+        match="Project extension data cannot overwrite core project fields: title",
+    ):
+        projects.load_edit_project_data("demo")
 
 
 def test_preset_application_preserves_tuning_but_replaces_kwargs(monkeypatch, tmp_path):

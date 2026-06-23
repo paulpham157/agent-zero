@@ -34,8 +34,10 @@
 - `load_basic_project_data(name: str) -> BasicProjectData`
 - `load_edit_project_data(name: str) -> EditProjectData`
 - `save_project_header(name: str, data: BasicProjectData)`
-- `load_project_llm_data(name: str) -> dict`
-- `save_project_llm_settings(name: str, llm_data: object)`
+- `load_project_extended_data(name: str) -> ProjectExtendedData`
+- `save_project_extended_data(name: str, project_data: ProjectExtendedData)`
+- `_project_extended_data_for_save(data: object) -> ProjectExtendedData`
+- `_merge_project_extended_data(data: EditProjectData, extended_data: object) -> None`
 - `load_project_mcp_servers(name: str) -> str`
 - `save_project_mcp_servers(name: str, mcp_servers: str)`
 - `get_active_projects_list()`
@@ -57,6 +59,9 @@
 - Helper modules own reusable framework APIs and must preserve public callers unless all callers, tests, and docs are updated together.
 - Update this file whenever public functions, classes, persistence behavior, path/security assumptions, side effects, or cross-module contracts change.
 - Per-project MCP server configuration is persisted as `.a0proj/mcp_servers.json`, exposed through `load_edit_project_data(...)`, and saved during project create/clone/update flows.
+- Additional project-edit payload sections are delegated through extensible `load_project_extended_data(...)` and `save_project_extended_data(...)`; the project helper must stay storage-agnostic and plugin-specific config rules belong to the owning plugin.
+- Project extension data may add named top-level sections such as `llm`, but it must not overwrite core project fields owned by `EditProjectData`.
+- Project extension save payloads exclude core project fields and transient inputs such as `git_token`; plugins needing core metadata should load it by project name.
 - Project metadata setup creates and repairs `.a0proj/instructions`, `.a0proj/knowledge`, and `.a0proj/skills` so settings surfaces can open those folders consistently.
 - Project MCP config uses the same JSON string shape as global MCP settings: an object with `mcpServers`.
 - Project MCP load/save paths validate project names as simple folder basenames before touching `.a0proj/mcp_servers.json`.
@@ -65,7 +70,7 @@
 
 ## Key Concepts
 
-- Important called helpers/classes observed in the source: `files.get_abs_path`, `files.delete_dir`, `deactivate_project_in_chats`, `files.create_dir_safe`, `create_project_meta_folders`, `_normalizeBasicData`, `save_project_header`, `save_project_mcp_servers`, `load_project_mcp_servers`, `save_project_llm_settings`, `files.basename`, `dirty_json.parse`, `FileStructureInjectionSettings`, `cast`, `_normalizeEditData`, `load_edit_project_data`, `_edit_data_to_basic_data`, `save_project_variables`, `save_project_secrets`, `save_project_subagents`, `reactivate_project_in_chats`, `load_basic_project_data`.
+- Important called helpers/classes observed in the source: `files.get_abs_path`, `files.delete_dir`, `deactivate_project_in_chats`, `files.create_dir_safe`, `create_project_meta_folders`, `_normalizeBasicData`, `save_project_header`, `save_project_mcp_servers`, `load_project_mcp_servers`, `save_project_extended_data`, `load_project_extended_data`, `_project_extended_data_for_save`, `_merge_project_extended_data`, `_PROJECT_CORE_EDIT_KEYS`, `_PROJECT_TRANSIENT_INPUT_KEYS`, `extension.extensible`, `files.basename`, `dirty_json.parse`, `FileStructureInjectionSettings`, `cast`, `_normalizeEditData`, `load_edit_project_data`, `_edit_data_to_basic_data`, `save_project_variables`, `save_project_secrets`, `save_project_subagents`, `reactivate_project_in_chats`, `load_basic_project_data`.
 - Keep request/response, tool, or helper semantics documented here at the same time as source changes.
 
 ## Work Guidance
