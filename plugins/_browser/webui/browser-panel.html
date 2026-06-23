@@ -1278,6 +1278,23 @@
     }
 
     @container (max-width: 460px) {
+      .browser-toolbar {
+        grid-template-columns: minmax(0, 1fr);
+        grid-template-areas:
+          "nav"
+          "address";
+        align-items: stretch;
+        gap: 7px;
+      }
+
+      .browser-navigation {
+        justify-content: flex-start;
+      }
+
+      .browser-address-form {
+        width: 100%;
+      }
+
       .browser-meta-top {
         grid-template-columns: minmax(0, 1fr);
       }

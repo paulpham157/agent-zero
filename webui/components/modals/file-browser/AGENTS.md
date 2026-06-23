@@ -19,6 +19,7 @@
 - Empty mounted startup states must self-heal to the `$WORK_DIR` default instead of rendering a blank path and empty list.
 - Keep the file list readable in narrow canvas/modal containers by hiding the Modified date column before sacrificing the Name or Size columns.
 - Keep New file and New folder controls icon-only across canvas and modal modes while preserving accessible labels.
+- Keep narrow mobile controls compact: Up shares the path row, and New file/New folder share the search row.
 - Preserve surface actions that route supported files to Browser, Desktop, or Editor.
 
 ## Work Guidance

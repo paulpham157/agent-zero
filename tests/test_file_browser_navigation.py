@@ -74,6 +74,10 @@ def test_file_browser_compact_controls_and_narrow_layout_contract() -> None:
     assert ".btn-new-item" in html
     assert "width: 2.8rem;" in html
     assert "height: 2.8rem;" in html
+    assert ".path-navigator {\n      align-items: center;\n      flex-direction: row;" in html
+    assert ".file-browser-toolbar {\n      align-items: center;\n      flex-direction: row;" in html
+    assert ".file-search-shell {\n      flex: 1 1 auto;\n      min-width: 0;\n      width: auto;" in html
+    assert ".path-navigator .nav-button-label {\n        display: none;" in html
 
     assert "container: file-browser / inline-size;" in html
     assert "@container file-browser (max-width: 620px)" in html

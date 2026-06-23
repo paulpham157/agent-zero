@@ -1354,6 +1354,17 @@ def test_browser_panel_exposes_agent_friendly_address_input():
     assert 'class="browser-address" aria-label="Browser address" name="browser_address"' in panel
 
 
+def test_browser_panel_gives_address_bar_full_mobile_row():
+    panel = (
+        PROJECT_ROOT / "plugins" / "_browser" / "webui" / "browser-panel.html"
+    ).read_text(encoding="utf-8")
+
+    assert "@container (max-width: 460px)" in panel
+    assert ".browser-toolbar {\n        grid-template-columns: minmax(0, 1fr);" in panel
+    assert '          "nav"\n          "address";' in panel
+    assert ".browser-address-form {\n        width: 100%;" in panel
+
+
 def test_browser_runtime_requires_current_content_helper_for_modifier_clicks():
     runtime = (
         PROJECT_ROOT / "plugins" / "_browser" / "helpers" / "runtime.py"
