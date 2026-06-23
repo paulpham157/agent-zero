@@ -2,8 +2,12 @@ import { createStore } from "/js/AlpineStore.js";
 import { callJsonApi, fetchApi } from "/js/api.js";
 import { formatDateTime } from "/js/time-utils.js";
 import { store as fileEditorStore } from "/components/modals/file-editor/file-editor-store.js";
-import { openLatest as openLatestSurface } from "/js/surfaces.js";
+import {
+  openLatest as openLatestSurface,
+  setupFloatingSurfaceModalChrome,
+} from "/js/surfaces.js";
 
+const FILE_BROWSER_MODAL_PATH = "modals/file-browser/file-browser.html";
 const FILE_BROWSER_LAST_DIRECTORY_STORAGE_KEY = "fileBrowser.lastDirectory";
 const DEFAULT_REMEMBER_LAST_DIRECTORY = true;
 const MARKDOWN_EXTENSIONS = new Set(["md", "markdown", "mdown"]);
@@ -61,6 +65,8 @@ const model = {
   history: [], // navigation stack
   initialPath: "", // Store path for open() call
   closePromise: null,
+  isSurfaceHandoff: false,
+  surfaceHandoffPath: "",
   error: null,
   pathInput: "",
   pathError: "",
@@ -68,6 +74,8 @@ const model = {
   rememberLastDirectory: DEFAULT_REMEMBER_LAST_DIRECTORY,
   settingsLoadPromise: null,
   settingsUpdatedHandler: null,
+  _floatingCleanup: null,
+  _mountedDefaultLoadTimer: null,
   renameTarget: null,
   renameName: "",
   renameMode: "rename",
@@ -92,43 +100,36 @@ const model = {
     document.addEventListener("settings-updated", this.settingsUpdatedHandler);
   },
 
+  onMount(element = null, options = {}) {
+    this._floatingCleanup?.();
+    this._floatingCleanup = null;
+    const mode = options?.mode === "canvas" ? "canvas" : "modal";
+    if (mode === "modal") {
+      this.setupFloatingModal(element);
+    } else {
+      this.scheduleMountedDefaultLoad();
+    }
+  },
+
+  onUnmount() {
+    this._floatingCleanup?.();
+    this._floatingCleanup = null;
+    this.cancelMountedDefaultLoad();
+  },
+
   // --- Public API (called from button/link) --------------------------------
   async open(path = "") {
     if (this.isLoading) return; // Prevent double-open
-    this.isLoading = true;
-    this.error = null;
-    this.history = [];
-    this.searchQuery = "";
-    this.isBulkBusy = false;
-    this.pathError = "";
-    this.isPathSubmitting = false;
+    this.resetOpenState();
 
     try {
       // Open modal FIRST (immediate UI feedback)
-      this.closePromise = window.openModal(
-        "modals/file-browser/file-browser.html"
-      );
-
-      await this.loadDirectoryPreference();
-      const explicitPath = this.normalizeOpeningPath(path || this.initialPath);
-      const rememberedPath = !explicitPath ? this.getRememberedDirectory() : "";
-      path = explicitPath || rememberedPath || "$WORK_DIR";
-      this.browser.currentPath = path;
-      this.syncPathInput();
-
-      // Fetch files
-      const loaded = await this.fetchFiles(this.browser.currentPath, {
-        preserveOnError: Boolean(rememberedPath && path === rememberedPath),
-        suppressErrorToast: Boolean(rememberedPath && path === rememberedPath),
-      });
-      if (!loaded && rememberedPath && path === rememberedPath) {
-        this.clearRememberedDirectory();
-        await this.fetchFiles("$WORK_DIR");
-      }
+      this.closePromise = window.openModal(FILE_BROWSER_MODAL_PATH);
+      await this.loadOpeningPath(path);
 
       // await modal close
       await this.closePromise;
-      this.destroy();
+      if (!this.isSurfaceHandoff) this.destroy();
 
     } catch (error) {
       console.error("File browser error:", error);
@@ -137,17 +138,45 @@ const model = {
     }
   },
 
+  async openSurface(path = "") {
+    if (this.isLoading) return false;
+    this.resetOpenState();
+
+    try {
+      const retainedPath = this.normalizeOpeningPath(
+        path
+          || this.surfaceHandoffPath
+          || this.browser.currentPath
+          || this.initialPath
+      );
+      return await this.loadOpeningPath(retainedPath);
+    } catch (error) {
+      console.error("File browser surface error:", error);
+      this.error = error?.message || "Failed to load files";
+      this.isLoading = false;
+      return false;
+    }
+  },
+
   handleClose() {
     // Close the modal manually
     this.disposeScopedTooltips();
-    window.closeModal();
+    window.closeModal(FILE_BROWSER_MODAL_PATH);
   },
 
   destroy() {
+    this._floatingCleanup?.();
+    this._floatingCleanup = null;
+    this.cancelMountedDefaultLoad();
     // Reset state when modal closes
     this.isLoading = false;
     this.history = [];
     this.initialPath = "";
+    this.closePromise = null;
+    this.isSurfaceHandoff = false;
+    this.surfaceHandoffPath = "";
+    this.browser.currentPath = "";
+    this.browser.parentPath = "";
     this.browser.entries = [];
     this.openDropdownPath = null;
     this.searchQuery = "";
@@ -158,7 +187,87 @@ const model = {
     this.resetRenameState();
   },
 
+  setupFloatingModal(element = null) {
+    this._floatingCleanup?.();
+    this._floatingCleanup = setupFloatingSurfaceModalChrome({
+      root: element,
+      modalClass: "file-browser-modal",
+      focusButtonClass: "file-browser-modal-focus-button",
+      minWidth: 420,
+      minHeight: 360,
+    });
+  },
+
+  cancelMountedDefaultLoad() {
+    if (!this._mountedDefaultLoadTimer) return;
+    globalThis.clearTimeout(this._mountedDefaultLoadTimer);
+    this._mountedDefaultLoadTimer = null;
+  },
+
+  scheduleMountedDefaultLoad() {
+    this.cancelMountedDefaultLoad();
+    this._mountedDefaultLoadTimer = globalThis.setTimeout(async () => {
+      this._mountedDefaultLoadTimer = null;
+      if (this.isLoading) return;
+      const targetPath = this.browser.currentPath || "";
+      if (targetPath && this.browser.entries.length) {
+        this.syncPathInput();
+        return;
+      }
+      try {
+        await this.loadOpeningPath(targetPath);
+      } catch (error) {
+        console.error("File browser default path load failed:", error);
+      }
+    }, 120);
+  },
+
   // --- Helpers -------------------------------------------------------------
+  resetOpenState() {
+    this.cancelMountedDefaultLoad();
+    this.isLoading = true;
+    this.error = null;
+    this.history = [];
+    this.searchQuery = "";
+    this.isBulkBusy = false;
+    this.pathError = "";
+    this.isPathSubmitting = false;
+  },
+
+  async loadOpeningPath(path = "") {
+    await this.loadDirectoryPreference();
+    const explicitPath = this.normalizeOpeningPath(path || this.initialPath);
+    const rememberedPath = !explicitPath ? this.getRememberedDirectory() : "";
+    const targetPath = explicitPath || rememberedPath || "$WORK_DIR";
+    this.browser.currentPath = targetPath;
+    this.syncPathInput();
+
+    const loaded = await this.fetchFiles(this.browser.currentPath, {
+      preserveOnError: Boolean(rememberedPath && targetPath === rememberedPath),
+      suppressErrorToast: Boolean(rememberedPath && targetPath === rememberedPath),
+    });
+    if (!loaded && rememberedPath && targetPath === rememberedPath) {
+      this.clearRememberedDirectory();
+      return await this.fetchFiles("$WORK_DIR");
+    }
+    return loaded;
+  },
+
+  beginSurfaceHandoff() {
+    this.isSurfaceHandoff = true;
+    this.surfaceHandoffPath = this.browser.currentPath || this.pathInput || "";
+  },
+
+  finishSurfaceHandoff() {
+    this.isSurfaceHandoff = false;
+    this.surfaceHandoffPath = "";
+  },
+
+  cancelSurfaceHandoff() {
+    this.isSurfaceHandoff = false;
+    this.surfaceHandoffPath = "";
+  },
+
   isArchive(filename) {
     const archiveExts = ["zip", "tar", "gz", "rar", "7z"];
     const ext = filename.split(".").pop().toLowerCase();
@@ -493,11 +602,13 @@ const model = {
   async fetchFiles(path = "", options = {}) {
     const preserveOnError = options?.preserveOnError === true;
     const suppressErrorToast = options?.suppressErrorToast === true;
+    const requestedPath = this.normalizeOpeningPath(path) || "$WORK_DIR";
     this.isLoading = true;
     
     // Preserve scroll position if refreshing the same path
-    const isSamePath = this.browser.currentPath === path || 
-                       (!path && !this.browser.currentPath);
+    const isSamePath =
+      this.browser.currentPath === requestedPath ||
+      (requestedPath === "$WORK_DIR" && ["/a0", "$WORK_DIR", ""].includes(this.browser.currentPath));
     const scrollPos = isSamePath ? this.saveScrollPosition() : null;
     const selectedPaths = isSamePath
       ? new Set(this.selectedFiles.map((file) => file.path))
@@ -505,12 +616,14 @@ const model = {
     
     try {
       const response = await fetchApi(
-        `/get_work_dir_files?path=${encodeURIComponent(path)}`
+        `/get_work_dir_files?path=${encodeURIComponent(requestedPath)}`
       );
       const data = await response.json().catch(() => ({}));
 
       const result = data.data || {};
-      const requestedPath = String(path || "");
+      const entries = result.entries || [];
+      const resolvedCurrentPath =
+        result.current_path || (requestedPath === "$WORK_DIR" ? "/a0" : requestedPath);
       const resultError =
         data.error ||
         result.error ||
@@ -518,7 +631,7 @@ const model = {
           requestedPath &&
           requestedPath !== "$WORK_DIR" &&
           !result.current_path &&
-          !(result.entries || []).length
+          !entries.length
             ? "Directory not found or not accessible"
             : ""
         );
@@ -526,10 +639,10 @@ const model = {
       if (response.ok && !resultError) {
         if (!isSamePath) this.searchQuery = "";
         this.browser.entries = this.decorateEntries(
-          result.entries || [],
+          entries,
           selectedPaths
         );
-        this.browser.currentPath = result.current_path;
+        this.browser.currentPath = resolvedCurrentPath;
         this.browser.parentPath = result.parent_path;
         this.syncPathInput();
         this.pathError = "";
@@ -1020,7 +1133,7 @@ const model = {
       }
 
       this.disposeScopedTooltips();
-      await window.closeModal?.("modals/file-browser/file-browser.html");
+      await window.closeModal?.(FILE_BROWSER_MODAL_PATH);
     } catch (error) {
       window.toastFrontendError?.(
         error?.message || "Could not open file",

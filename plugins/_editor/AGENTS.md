@@ -16,6 +16,7 @@
 
 - Keep editor session state synchronized across API, WebSocket, and WebUI panel behavior.
 - Do not expose unsaved content or local paths beyond intended chat/context surfaces.
+- Keep the floating Editor modal on the shared surface modal chrome so the header remains draggable while existing Focus mode continues to work.
 
 ## Work Guidance
 

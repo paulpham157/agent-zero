@@ -12,6 +12,29 @@ const SURFACE_MODAL_ACTION_GROUPS = ["surfaces", "window", "new"];
 
 export const CORE_SURFACES = [
   {
+    id: "files",
+    title: "Files",
+    icon: "folder",
+    order: 5,
+    modalPath: "modals/file-browser/file-browser.html",
+    async beginDockHandoff() {
+      const { store } = await import("/components/modals/file-browser/file-browser-store.js");
+      store.beginSurfaceHandoff?.();
+    },
+    async finishDockHandoff(payload = {}) {
+      const { store } = await import("/components/modals/file-browser/file-browser-store.js");
+      store.finishSurfaceHandoff?.(payload);
+    },
+    async cancelDockHandoff() {
+      const { store } = await import("/components/modals/file-browser/file-browser-store.js");
+      store.cancelSurfaceHandoff?.();
+    },
+    async open(payload = {}) {
+      const { store } = await import("/components/modals/file-browser/file-browser-store.js");
+      await store.openSurface(payload.path || payload.filePath || payload.directory || "");
+    },
+  },
+  {
     id: "browser",
     title: "Browser",
     icon: "language",
@@ -367,6 +390,202 @@ export function placeSurfaceModalHeaderAction(header, element, groupName = "wind
   }
 
   refreshSurfaceModalActionRail(header);
+}
+
+export function setupFloatingSurfaceModalChrome(options = {}) {
+  const root = options.root || null;
+  const modal = options.modal || root?.closest?.(".modal") || null;
+  const inner = options.inner || modal?.querySelector?.(".modal-inner") || root?.closest?.(".modal-inner") || null;
+  const header = options.header || inner?.querySelector?.(".modal-header") || null;
+  if (!modal || !inner || !header) return () => {};
+
+  const viewportGap = Number.isFinite(Number(options.viewportGap)) ? Number(options.viewportGap) : 8;
+  const minWidth = Number.isFinite(Number(options.minWidth)) ? Number(options.minWidth) : 320;
+  const minHeight = Number.isFinite(Number(options.minHeight)) ? Number(options.minHeight) : 300;
+  const modalClass = String(options.modalClass || "").trim();
+  const focusButtonClass = String(options.focusButtonClass || "").trim();
+  const focusEnabled = options.focus !== false;
+  const focusLabel = options.focusLabel || "Focus mode";
+  const restoreLabel = options.restoreLabel || "Restore size";
+  const onBoundsChange = typeof options.onBoundsChange === "function" ? options.onBoundsChange : null;
+  const onFocusChange = typeof options.onFocusChange === "function" ? options.onFocusChange : null;
+
+  modal.classList.add("surface-floating", "modal-floating");
+  inner.classList.add("surface-modal", "is-draggable-surface-modal");
+  if (modalClass) inner.classList.add(modalClass);
+
+  const viewportWidth = () => Math.max(document.documentElement.clientWidth || 0, globalThis.innerWidth || 0);
+  const viewportHeight = () => Math.max(document.documentElement.clientHeight || 0, globalThis.innerHeight || 0);
+  const currentBounds = () => {
+    const bounds = inner.getBoundingClientRect();
+    return {
+      left: bounds.left,
+      top: bounds.top,
+      width: bounds.width,
+      height: bounds.height,
+    };
+  };
+  const normalizedBounds = (bounds = {}) => {
+    const maxWidth = Math.max(minWidth, viewportWidth() - viewportGap * 2);
+    const maxHeight = Math.max(minHeight, viewportHeight() - viewportGap * 2);
+    const width = Math.min(Math.max(minWidth, Number(bounds.width || minWidth)), maxWidth);
+    const height = Math.min(Math.max(minHeight, Number(bounds.height || minHeight)), maxHeight);
+    return {
+      left: Math.min(
+        Math.max(viewportGap, Number(bounds.left || viewportGap)),
+        Math.max(viewportGap, viewportWidth() - width - viewportGap),
+      ),
+      top: Math.min(
+        Math.max(viewportGap, Number(bounds.top || viewportGap)),
+        Math.max(viewportGap, viewportHeight() - height - viewportGap),
+      ),
+      width,
+      height,
+    };
+  };
+  const notifyBoundsChange = () => {
+    try {
+      onBoundsChange?.({
+        ...currentBounds(),
+        focus: inner.classList.contains("is-focus-mode"),
+      });
+    } catch (error) {
+      console.error("Surface modal bounds callback failed", error);
+    }
+  };
+  const setBounds = (bounds = {}) => {
+    const next = normalizedBounds(bounds);
+    inner.style.position = "fixed";
+    inner.style.transform = "none";
+    inner.style.left = `${Math.round(next.left)}px`;
+    inner.style.top = `${Math.round(next.top)}px`;
+    inner.style.width = `${Math.round(next.width)}px`;
+    inner.style.height = `${Math.round(next.height)}px`;
+    inner.style.maxWidth = `${Math.max(minWidth, viewportWidth() - viewportGap * 2)}px`;
+    inner.style.maxHeight = `${Math.max(minHeight, viewportHeight() - viewportGap * 2)}px`;
+    notifyBoundsChange();
+    return next;
+  };
+  const focusBounds = () => ({
+    left: viewportGap,
+    top: viewportGap,
+    width: viewportWidth() - viewportGap * 2,
+    height: viewportHeight() - viewportGap * 2,
+  });
+  const clampGeometry = () => {
+    if (inner.classList.contains("is-focus-mode")) {
+      setBounds(focusBounds());
+      return;
+    }
+    setBounds(currentBounds());
+  };
+
+  const initialBounds = currentBounds();
+  inner.style.left = `${Math.max(viewportGap, initialBounds.left)}px`;
+  inner.style.top = `${Math.max(viewportGap, initialBounds.top)}px`;
+  inner.style.transform = "none";
+  clampGeometry();
+
+  let drag = null;
+  let resizeObserver = null;
+  let beforeFocusBounds = null;
+  let focusButton = null;
+
+  const updateFocusButton = (active) => {
+    if (!focusButton) return;
+    const label = active ? restoreLabel : focusLabel;
+    focusButton.setAttribute("aria-label", label);
+    focusButton.setAttribute("title", label);
+    focusButton.classList.toggle("is-active", active);
+    const icon = focusButton.querySelector(".material-symbols-outlined");
+    if (icon) icon.textContent = active ? "fullscreen_exit" : "fullscreen";
+  };
+  const setFocusMode = (enabled) => {
+    const active = Boolean(enabled);
+    if (active === inner.classList.contains("is-focus-mode")) return;
+    if (active) {
+      beforeFocusBounds = currentBounds();
+      inner.classList.add("is-focus-mode");
+      setBounds(focusBounds());
+    } else {
+      inner.classList.remove("is-focus-mode");
+      setBounds(beforeFocusBounds || currentBounds());
+      beforeFocusBounds = null;
+    }
+    updateFocusButton(active);
+    try {
+      onFocusChange?.(active);
+    } catch (error) {
+      console.error("Surface modal focus callback failed", error);
+    }
+  };
+
+  const onPointerMove = (event) => {
+    if (!drag) return;
+    setBounds({
+      ...currentBounds(),
+      left: drag.left + event.clientX - drag.x,
+      top: drag.top + event.clientY - drag.y,
+    });
+  };
+  const onPointerUp = () => {
+    drag = null;
+    globalThis.removeEventListener("pointermove", onPointerMove);
+    globalThis.removeEventListener("pointerup", onPointerUp);
+    try {
+      header.releasePointerCapture?.(header.__surfaceModalPointerId || 0);
+    } catch {}
+  };
+  const onPointerDown = (event) => {
+    if (event.button !== 0) return;
+    if (event.target?.closest?.("button, input, select, textarea, a, [data-no-modal-drag], .surface-modal-actions")) return;
+    if (inner.classList.contains("is-focus-mode")) return;
+    const bounds = currentBounds();
+    drag = {
+      x: event.clientX,
+      y: event.clientY,
+      left: bounds.left,
+      top: bounds.top,
+    };
+    header.__surfaceModalPointerId = event.pointerId;
+    header.setPointerCapture?.(event.pointerId);
+    globalThis.addEventListener("pointermove", onPointerMove);
+    globalThis.addEventListener("pointerup", onPointerUp);
+    event.preventDefault();
+  };
+  header.addEventListener("pointerdown", onPointerDown);
+
+  if (focusEnabled) {
+    focusButton = globalThis.document.createElement("button");
+    focusButton.type = "button";
+    focusButton.className = ["surface-button", "surface-modal-focus-button", focusButtonClass]
+      .filter(Boolean)
+      .join(" ");
+    focusButton.innerHTML = '<span class="material-symbols-outlined" aria-hidden="true">fullscreen</span>';
+    const onFocusClick = () => setFocusMode(!inner.classList.contains("is-focus-mode"));
+    updateFocusButton(false);
+    focusButton.addEventListener("click", onFocusClick);
+    focusButton.__surfaceModalFocusCleanup = () => focusButton.removeEventListener("click", onFocusClick);
+    placeSurfaceModalHeaderAction(header, focusButton, "window");
+  }
+
+  globalThis.addEventListener("resize", clampGeometry);
+  if (globalThis.ResizeObserver) {
+    resizeObserver = new ResizeObserver(clampGeometry);
+    resizeObserver.observe(inner);
+  }
+
+  return () => {
+    focusButton?.__surfaceModalFocusCleanup?.();
+    focusButton?.remove();
+    refreshSurfaceModalActionRail(header);
+    header.removeEventListener("pointerdown", onPointerDown);
+    globalThis.removeEventListener("pointermove", onPointerMove);
+    globalThis.removeEventListener("pointerup", onPointerUp);
+    globalThis.removeEventListener("resize", clampGeometry);
+    resizeObserver?.disconnect?.();
+    inner.classList.remove("is-focus-mode", "is-draggable-surface-modal");
+  };
 }
 
 function markSurfaceModal(modal, metadata) {

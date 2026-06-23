@@ -10,6 +10,7 @@
 - Each CSS file owns a named surface or primitive family such as buttons, messages, modals, notifications, scheduler, settings, surfaces, tables, or toast.
 - Component-specific styles should usually stay inside the component HTML unless they are intentionally shared.
 - `modals.css` owns the shared stacked modal shell, backdrop, scroll area, footer slot, modal button classes, floating/no-backdrop modal behavior, and shared modal section primitives.
+- `surfaces.css` owns surface modal switchers, action rails, draggable header affordances, focus-button state, and right-canvas surface primitives.
 - `index.css` defines global theme variables such as `--color-*`, `--spacing-*`, `--font-size-*`, and `--transition-speed`.
 
 ## Local Contracts

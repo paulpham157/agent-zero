@@ -1,6 +1,7 @@
 import { createStore } from "/js/AlpineStore.js";
 import * as shortcuts from "/js/shortcuts.js";
 import { store as fileBrowserStore } from "/components/modals/file-browser/file-browser-store.js";
+import { openLatest as openLatestSurface } from "/js/surfaces.js";
 import { store as messageQueueStore } from "/components/chat/message-queue/message-queue-store.js";
 import { store as attachmentsStore } from "/components/chat/attachments/attachmentsStore.js";
 import { store as chatsStore } from "/components/sidebar/chats/chats-store.js";
@@ -330,7 +331,13 @@ const model = {
         }
       }
     }
-    await fileBrowserStore.open(path);
+    let opened = false;
+    try {
+      opened = await openLatestSurface("files", { path, source: "sidebar" });
+    } catch (error) {
+      console.error("Error opening Files surface", error);
+    }
+    if (!opened) await fileBrowserStore.open(path);
   },
 
   focus() {

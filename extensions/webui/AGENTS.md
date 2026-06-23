@@ -41,6 +41,7 @@ Direct child DOX files:
 | [initFw_end/AGENTS.md](initFw_end/AGENTS.md) | Post-WebUI-framework-initialization extensions. |
 | [json_api_call_after/AGENTS.md](json_api_call_after/AGENTS.md) | Frontend hooks after `callJsonApi()` calls. |
 | [json_api_call_before/AGENTS.md](json_api_call_before/AGENTS.md) | Frontend hooks before `callJsonApi()` calls. |
+| [right-canvas-panels/AGENTS.md](right-canvas-panels/AGENTS.md) | Built-in right-canvas panel HTML contributions. |
 | [right_canvas_register_surfaces/AGENTS.md](right_canvas_register_surfaces/AGENTS.md) | Built-in right-canvas surface registrations. |
 | [set_messages_after_loop/AGENTS.md](set_messages_after_loop/AGENTS.md) | Frontend hooks after message DOM updates. |
 | [set_messages_before_loop/AGENTS.md](set_messages_before_loop/AGENTS.md) | Frontend hooks before message DOM updates. |

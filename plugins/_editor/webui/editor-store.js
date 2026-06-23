@@ -2,7 +2,10 @@ import { createStore } from "/js/AlpineStore.js";
 import { callJsonApi } from "/js/api.js";
 import { getNamespacedClient } from "/js/websocket.js";
 import { store as fileBrowserStore } from "/components/modals/file-browser/file-browser-store.js";
-import { placeSurfaceModalHeaderAction } from "/js/surfaces.js";
+import {
+  placeSurfaceModalHeaderAction,
+  setupFloatingSurfaceModalChrome,
+} from "/js/surfaces.js";
 import {
   buildMarkdownPages,
   isExternalHref,
@@ -1658,38 +1661,21 @@ const model = {
     if (!inner || !header || inner.dataset.editorModalReady === "1") return;
     inner.dataset.editorModalReady = "1";
     inner.classList.add("editor-modal");
-    const cleanup = [];
-    const focusButton = document.createElement("button");
-    focusButton.type = "button";
-    focusButton.className = "surface-button editor-modal-focus-button";
-    focusButton.innerHTML = '<span class="material-symbols-outlined" aria-hidden="true">fullscreen</span>';
-    const updateFocusButton = (active) => {
-      const label = active ? "Restore size" : "Focus mode";
-      focusButton.setAttribute("aria-label", label);
-      focusButton.setAttribute("title", label);
-      focusButton.querySelector(".material-symbols-outlined").textContent = active ? "fullscreen_exit" : "fullscreen";
-    };
-    updateFocusButton(false);
-    const onFocusClick = () => {
-      const active = !inner.classList.contains("is-focus-mode");
-      inner.classList.toggle("is-focus-mode", active);
-      updateFocusButton(active);
-    };
-    focusButton.addEventListener("click", onFocusClick);
-    placeSurfaceModalHeaderAction(header, focusButton, "window");
-    cleanup.push(() => focusButton.removeEventListener("click", onFocusClick));
-    cleanup.push(() => focusButton.remove());
-
-    this._headerCleanup = () => {
-      cleanup.splice(0).reverse().forEach((entry) => entry());
-      delete inner.dataset.editorModalReady;
-      inner.classList.remove("editor-modal", "is-focus-mode");
-    };
+    const floatingCleanup = setupFloatingSurfaceModalChrome({
+      root,
+      modalClass: "editor-modal",
+      focusButtonClass: "editor-modal-focus-button",
+      minWidth: 640,
+      minHeight: 460,
+      onBoundsChange: () => this.refreshSourceEditorLayout(),
+      onFocusChange: () => this.refreshSourceEditorLayout(),
+    });
     const menuCleanup = this.installHeaderNewMenu(header);
-    const previousCleanup = this._headerCleanup;
     this._headerCleanup = () => {
       menuCleanup?.();
-      previousCleanup?.();
+      floatingCleanup?.();
+      delete inner.dataset.editorModalReady;
+      inner.classList.remove("editor-modal", "is-focus-mode");
     };
   },
 };

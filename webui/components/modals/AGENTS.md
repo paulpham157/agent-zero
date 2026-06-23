@@ -27,4 +27,8 @@
 
 ## Child DOX Index
 
-No child DOX files.
+Direct child DOX files:
+
+| Child | Scope |
+| --- | --- |
+| [file-browser/AGENTS.md](file-browser/AGENTS.md) | File browser modal and right-canvas Files surface workflow. |

@@ -13,6 +13,7 @@
 - `extensions.js` owns frontend extension loading.
 - `components.js` owns `<x-component>` loading, component caching, module injection, nested component processing, and `globalThis.xAttrs`.
 - `modals.js` owns the stacked modal shell, `openModal`, `closeModal`, `scrollModal`, footer relocation, backdrop, and modal z-index behavior.
+- `surfaces.js` owns shared surface registration, right-canvas/modal mode routing, surface modal action rails, and reusable draggable/focus modal chrome.
 - `initFw.js` owns Alpine bootstrap and custom lifecycle directives such as `x-create`, `x-destroy`, and periodic `x-every-*` hooks.
 - Other modules own focused UI utilities such as modals, messages, safe markdown, shortcuts, TTS/STT, surfaces, and initialization.
 

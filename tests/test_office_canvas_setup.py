@@ -201,6 +201,36 @@ def test_browser_surface_restores_focus_mode_chrome():
     assert ".modal-inner.browser-modal.is-focus-mode" in browser_panel
 
 
+def test_files_and_editor_surface_modals_have_draggable_focus_chrome():
+    surfaces_js = read("webui", "js", "surfaces.js")
+    surfaces_css = read("webui", "css", "surfaces.css")
+    file_store = read("webui", "components", "modals", "file-browser", "file-browser-store.js")
+    file_modal = read("webui", "components", "modals", "file-browser", "file-browser.html")
+    editor_store = read("plugins", "_editor", "webui", "editor-store.js")
+    editor_panel = read("plugins", "_editor", "webui", "editor-panel.html")
+
+    assert "setupFloatingSurfaceModalChrome" in surfaces_js
+    assert "is-draggable-surface-modal" in surfaces_js
+    assert "surface-modal-focus-button" in surfaces_js
+    assert "fullscreen_exit" in surfaces_js
+    assert "Focus mode" in surfaces_js
+    assert "Restore size" in surfaces_js
+    assert ".modal-inner.surface-modal.is-draggable-surface-modal .modal-header" in surfaces_css
+    assert "cursor: move" in surfaces_css
+    assert ".surface-modal-focus-button.is-active" in surfaces_css
+
+    assert "setupFloatingSurfaceModalChrome" in file_store
+    assert 'focusButtonClass: "file-browser-modal-focus-button"' in file_store
+    assert ".modal-inner.file-browser-modal" in file_modal
+    assert "resize: both" in file_modal
+
+    assert "setupFloatingSurfaceModalChrome" in editor_store
+    assert 'focusButtonClass: "editor-modal-focus-button"' in editor_store
+    assert "onBoundsChange: () => this.refreshSourceEditorLayout()" in editor_store
+    assert "editor.resize?.(true)" in editor_store
+    assert ".modal-inner.editor-modal.is-focus-mode" in editor_panel
+
+
 def test_office_frontend_is_document_only_and_does_not_import_browser_or_desktop_runtime_code():
     office_store = read("plugins", "_office", "webui", "office-store.js")
     office_panel = read("plugins", "_office", "webui", "office-panel.html")
