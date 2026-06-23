@@ -17,6 +17,8 @@
 - The floating file-browser modal must use the shared surface modal chrome so it remains draggable/resizable and exposes Focus mode.
 - Preserve remembered-directory behavior: explicit paths win, then remembered path, then `$WORK_DIR`.
 - Empty mounted startup states must self-heal to the `$WORK_DIR` default instead of rendering a blank path and empty list.
+- Preserve picker modes for Editor Open and Save As: Editor Open selects one or more Markdown or plain text files with a pinned primary action, and Save As selects the current folder plus a `.md` or `.txt` file name.
+- Keep the row-level Open in Editor action visible outside the overflow menu for Editor-owned `.md` and `.txt` files.
 - Keep the file list readable in narrow canvas/modal containers by hiding the Modified date column before sacrificing the Name or Size columns.
 - Keep New file and New folder controls icon-only across canvas and modal modes while preserving accessible labels.
 - Keep narrow mobile controls compact: Up shares the path row, and New file/New folder share the search row.

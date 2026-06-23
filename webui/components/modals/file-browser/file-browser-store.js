@@ -10,8 +10,11 @@ import {
 const FILE_BROWSER_MODAL_PATH = "modals/file-browser/file-browser.html";
 const FILE_BROWSER_LAST_DIRECTORY_STORAGE_KEY = "fileBrowser.lastDirectory";
 const DEFAULT_REMEMBER_LAST_DIRECTORY = true;
-const MARKDOWN_EXTENSIONS = new Set(["md", "markdown", "mdown"]);
-const DESKTOP_EXTENSIONS = new Set(["odt", "ods", "odp", "docx", "xlsx", "pptx", "txt"]);
+const PICKER_MODE_NONE = "";
+const PICKER_MODE_TEXT_OPEN = "text-open";
+const PICKER_MODE_SAVE_AS = "save-as";
+const EDITOR_TEXT_EXTENSIONS = new Set(["md", "txt"]);
+const DESKTOP_EXTENSIONS = new Set(["odt", "ods", "odp", "docx", "xlsx", "pptx"]);
 const BROWSER_EXTENSIONS = new Set([
   "html",
   "htm",
@@ -32,7 +35,7 @@ const SURFACE_ACTIONS = {
   editor: {
     label: "Open in Editor",
     icon: "article",
-    title: "Open Markdown in Editor",
+    title: "Open text in Editor",
   },
   desktop: {
     label: "Open in Desktop",
@@ -87,6 +90,12 @@ const model = {
   openDropdownPath: null, // Track which dropdown is currently open
   searchQuery: "",
   isBulkBusy: false,
+  pickerMode: PICKER_MODE_NONE,
+  pickerConfirmLabel: "",
+  pickerFilename: "",
+  pickerDefaultExtension: "md",
+  pickerFilenameError: "",
+  pickerOnConfirm: null,
 
   // --- Lifecycle -----------------------------------------------------------
   init() {
@@ -118,9 +127,9 @@ const model = {
   },
 
   // --- Public API (called from button/link) --------------------------------
-  async open(path = "") {
+  async open(path = "", options = {}) {
     if (this.isLoading) return; // Prevent double-open
-    this.resetOpenState();
+    this.resetOpenState(options);
 
     try {
       // Open modal FIRST (immediate UI feedback)
@@ -164,6 +173,24 @@ const model = {
     window.closeModal(FILE_BROWSER_MODAL_PATH);
   },
 
+  async openTextPicker(path = "", onConfirm = null) {
+    return await this.open(path, {
+      pickerMode: PICKER_MODE_TEXT_OPEN,
+      confirmLabel: "Open Selected",
+      onConfirm,
+    });
+  },
+
+  async openSaveAsPicker(path = "", options = {}) {
+    return await this.open(path, {
+      pickerMode: PICKER_MODE_SAVE_AS,
+      confirmLabel: "Save Here",
+      filename: options.filename || "Untitled.md",
+      defaultExtension: options.defaultExtension || "",
+      onConfirm: options.onConfirm,
+    });
+  },
+
   destroy() {
     this._floatingCleanup?.();
     this._floatingCleanup = null;
@@ -184,6 +211,7 @@ const model = {
     this.pathInput = "";
     this.pathError = "";
     this.isPathSubmitting = false;
+    this.resetPickerState();
     this.resetRenameState();
   },
 
@@ -223,7 +251,7 @@ const model = {
   },
 
   // --- Helpers -------------------------------------------------------------
-  resetOpenState() {
+  resetOpenState(options = {}) {
     this.cancelMountedDefaultLoad();
     this.isLoading = true;
     this.error = null;
@@ -232,6 +260,32 @@ const model = {
     this.isBulkBusy = false;
     this.pathError = "";
     this.isPathSubmitting = false;
+    this.configurePicker(options);
+  },
+
+  configurePicker(options = {}) {
+    const mode = String(options?.pickerMode || PICKER_MODE_NONE).trim();
+    this.pickerMode = [PICKER_MODE_TEXT_OPEN, PICKER_MODE_SAVE_AS].includes(mode)
+      ? mode
+      : PICKER_MODE_NONE;
+    this.pickerConfirmLabel = String(options?.confirmLabel || "").trim()
+      || (this.pickerMode === PICKER_MODE_SAVE_AS ? "Save Here" : "Open Selected");
+    this.pickerFilename = String(options?.filename || "").trim();
+    this.pickerDefaultExtension = this.normalizedEditorTextExtension(
+      options?.defaultExtension || this.fileExtension({ name: this.pickerFilename }) || "md",
+    );
+    this.pickerFilenameError = "";
+    this.pickerOnConfirm = typeof options?.onConfirm === "function" ? options.onConfirm : null;
+    if (this.pickerMode) this.clearSelection();
+  },
+
+  resetPickerState() {
+    this.pickerMode = PICKER_MODE_NONE;
+    this.pickerConfirmLabel = "";
+    this.pickerFilename = "";
+    this.pickerDefaultExtension = "md";
+    this.pickerFilenameError = "";
+    this.pickerOnConfirm = null;
   },
 
   async loadOpeningPath(path = "") {
@@ -328,9 +382,9 @@ const model = {
 
   get filteredEntries() {
     const query = this.searchQuery.trim().toLowerCase();
-    if (!query) return this.browser.entries;
-
     return this.browser.entries.filter((file) => {
+      if (!this.pickerAllowsEntry(file)) return false;
+      if (!query) return true;
       const searchable = [
         file.name,
         file.path,
@@ -354,7 +408,11 @@ const model = {
   },
 
   get selectedFiles() {
-    return this.browser.entries.filter((file) => file.selected);
+    return this.browser.entries.filter((file) => file.selected && this.isSelectableEntry(file));
+  },
+
+  get selectableEntries() {
+    return this.filteredEntries.filter((file) => this.isSelectableEntry(file));
   },
 
   get selectedCount() {
@@ -367,18 +425,18 @@ const model = {
 
   get allVisibleSelected() {
     return (
-      this.filteredEntries.length > 0 &&
-      this.filteredEntries.every((file) => file.selected)
+      this.selectableEntries.length > 0 &&
+      this.selectableEntries.every((file) => file.selected)
     );
   },
 
   get someVisibleSelected() {
-    return this.filteredEntries.some((file) => file.selected);
+    return this.selectableEntries.some((file) => file.selected);
   },
 
   toggleSelectAllVisible() {
     const shouldSelect = !this.allVisibleSelected;
-    this.filteredEntries.forEach((file) => {
+    this.selectableEntries.forEach((file) => {
       file.selected = shouldSelect;
     });
   },
@@ -387,6 +445,24 @@ const model = {
     this.browser.entries.forEach((file) => {
       file.selected = false;
     });
+  },
+
+  isPickerMode() {
+    return this.pickerMode !== PICKER_MODE_NONE;
+  },
+
+  isTextOpenPicker() {
+    return this.pickerMode === PICKER_MODE_TEXT_OPEN;
+  },
+
+  isSaveAsPicker() {
+    return this.pickerMode === PICKER_MODE_SAVE_AS;
+  },
+
+  isSelectableEntry(file = {}) {
+    if (this.isSaveAsPicker()) return false;
+    if (this.isTextOpenPicker()) return !file?.is_dir && this.fileSurfaceTarget(file) === "editor";
+    return true;
   },
 
   normalizeOpeningPath(path) {
@@ -483,14 +559,136 @@ const model = {
   fileSurfaceTarget(file = {}) {
     if (!file || file.is_dir) return "";
     const ext = this.fileExtension(file);
-    if (MARKDOWN_EXTENSIONS.has(ext)) return "editor";
+    if (EDITOR_TEXT_EXTENSIONS.has(ext)) return "editor";
     if (BROWSER_EXTENSIONS.has(ext)) return "browser";
     if (DESKTOP_EXTENSIONS.has(ext)) return "desktop";
     return "";
   },
 
+  pickerAllowsEntry(file = {}) {
+    if (!this.isTextOpenPicker()) return true;
+    return Boolean(file?.is_dir || this.fileSurfaceTarget(file) === "editor");
+  },
+
+  pickerSelectedFiles() {
+    if (!this.isTextOpenPicker()) return [];
+    return this.selectedFiles.filter((file) => !file.is_dir && this.fileSurfaceTarget(file) === "editor");
+  },
+
+  pickerSelectionLabel() {
+    if (!this.isTextOpenPicker()) return "";
+    const count = this.pickerSelectedFiles().length;
+    if (!count) return "No text files selected";
+    return `${count} text ${count === 1 ? "file" : "files"} selected`;
+  },
+
+  normalizedEditorTextExtension(value = "") {
+    const ext = String(value || "").toLowerCase().trim().replace(/^\./, "");
+    return EDITOR_TEXT_EXTENSIONS.has(ext) ? ext : "md";
+  },
+
+  pickerFilenameValue() {
+    const raw = String(this.pickerFilename || "").trim();
+    if (!raw) return "";
+    const ext = this.fileExtension({ name: raw });
+    return ext ? raw : `${raw}.${this.pickerDefaultExtension || "md"}`;
+  },
+
+  validatePickerFilename(updateError = true) {
+    if (!this.isSaveAsPicker()) return true;
+    const raw = String(this.pickerFilename || "").trim();
+    const filename = this.pickerFilenameValue();
+    let error = "";
+    if (!raw) {
+      error = "File name is required.";
+    } else if (raw === "." || raw === "..") {
+      error = "File name cannot be '.' or '..'.";
+    } else if (raw.includes("/") || raw.includes("\\")) {
+      error = "File name cannot include path separators.";
+    } else if (!EDITOR_TEXT_EXTENSIONS.has(this.fileExtension({ name: filename }))) {
+      error = "Use a .md or .txt file name.";
+    } else if ((this.browser.entries || []).some((entry) => entry?.name === filename)) {
+      error = `An item named "${filename}" already exists.`;
+    }
+    if (updateError) this.pickerFilenameError = error;
+    return !error;
+  },
+
+  onPickerFilenameInput() {
+    if (this.pickerFilenameError) this.validatePickerFilename(true);
+  },
+
+  canConfirmPicker() {
+    if (this.isTextOpenPicker()) return this.pickerSelectedFiles().length > 0;
+    if (this.isSaveAsPicker()) return Boolean(this.pickerFilenameValue()) && !this.pickerFilenameError;
+    return false;
+  },
+
+  pickerTargetPath() {
+    if (!this.isSaveAsPicker()) return "";
+    return this.buildChildPath(this.pickerFilenameValue());
+  },
+
+  togglePickerFile(file = {}) {
+    if (!this.isTextOpenPicker() || file?.is_dir || this.fileSurfaceTarget(file) !== "editor") return;
+    file.selected = !file.selected;
+  },
+
+  async confirmPicker() {
+    if (!this.isPickerMode() || this.isBulkBusy) return;
+    if (this.isSaveAsPicker() && !this.validatePickerFilename(true)) return;
+    const payload = this.isSaveAsPicker()
+      ? {
+        mode: this.pickerMode,
+        directory: this.browser.currentPath,
+        filename: this.pickerFilenameValue(),
+        path: this.pickerTargetPath(),
+      }
+      : {
+        mode: this.pickerMode,
+        directory: this.browser.currentPath,
+        selectedFiles: this.pickerSelectedFiles(),
+      };
+    try {
+      this.isBulkBusy = true;
+      const result = await this.pickerOnConfirm?.(payload);
+      if (result === false) return;
+      this.disposeScopedTooltips();
+      window.closeModal(FILE_BROWSER_MODAL_PATH);
+    } catch (error) {
+      const message = error?.message || "File selection failed";
+      if (this.isSaveAsPicker()) this.pickerFilenameError = message;
+      window.toastFrontendError?.(message, "File Browser");
+    } finally {
+      this.isBulkBusy = false;
+    }
+  },
+
+  cancelPicker() {
+    this.disposeScopedTooltips();
+    window.closeModal(FILE_BROWSER_MODAL_PATH);
+  },
+
+  handleFileNameClick(file = {}) {
+    if (file?.is_dir) {
+      return this.navigateToFolder(file.path);
+    }
+    if (this.isTextOpenPicker()) {
+      this.togglePickerFile(file);
+    }
+  },
+
   canOpenInSurface(file = {}) {
     return Boolean(this.fileSurfaceTarget(file));
+  },
+
+  isEditorSurface(file = {}) {
+    return this.fileSurfaceTarget(file) === "editor";
+  },
+
+  canOpenInActionMenu(file = {}) {
+    const target = this.fileSurfaceTarget(file);
+    return Boolean(target && target !== "editor");
   },
 
   surfaceAction(file = {}) {
@@ -1117,7 +1315,7 @@ const model = {
           if (!this.storeHasPath(editorStore, path)) {
             const session = await editorStore.openPath(path, { source: "file-browser" });
             if (!session || session.ok === false) {
-              throw new Error(editorStore.error || "Markdown could not be opened.");
+              throw new Error(editorStore.error || "Text document could not be opened.");
             }
           }
         }

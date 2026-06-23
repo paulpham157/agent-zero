@@ -81,12 +81,51 @@ def test_file_browser_compact_controls_and_narrow_layout_contract() -> None:
 
     assert "container: file-browser / inline-size;" in html
     assert "@container file-browser (max-width: 620px)" in html
-    assert "grid-template-columns: 2.25rem minmax(0, 1fr) minmax(4.25rem, max-content) 5.25rem;" in html
+    assert "grid-template-columns: 2.25rem minmax(0, 1fr) minmax(4.25rem, max-content) 8rem;" in html
     assert ".file-cell-date,\n    .file-date {\n        display: none;" in html
     assert ".file-cell-size,\n    .file-size" not in html
 
     assert "hiding the Modified date column" in dox
     assert "New file and New folder controls icon-only" in dox
+
+
+def test_file_browser_editor_picker_modes_have_primary_footer_actions() -> None:
+    html = read("webui", "components", "modals", "file-browser", "file-browser.html")
+    store = read("webui", "components", "modals", "file-browser", "file-browser-store.js")
+    dox = read("webui", "components", "modals", "file-browser", "AGENTS.md")
+
+    assert "PICKER_MODE_TEXT_OPEN" in store
+    assert "PICKER_MODE_SAVE_AS" in store
+    assert "openTextPicker" in store
+    assert "openSaveAsPicker" in store
+    assert 'new Set(["md", "txt"])' in store
+    assert "pickerSelectedFiles()" in store
+    assert "validatePickerFilename" in store
+    assert "handleFileNameClick(file = {})" in store
+    assert "fileSurfaceTarget(file) === \"editor\"" in store
+    assert "isEditorSurface(file = {})" in store
+    assert "canOpenInActionMenu(file = {})" in store
+
+    assert "file-browser-picker-actions" in html
+    assert "file-editor-open-action" in html
+    assert 'aria-label="Open in Editor"' in html
+    assert "picker-filename-input" in html
+    assert "Open Selected" in store
+    assert "Save Here" in store
+    assert "$store.fileBrowser.confirmPicker()" in html
+    assert "$store.fileBrowser.pickerSelectionLabel()" in html
+    assert "$store.fileBrowser.isPickerMode()" in html
+    assert "$store.fileBrowser.isTextOpenPicker()" in html
+    assert "picker-confirm-button" in html
+
+    assert "picker modes for Editor Open and Save As" in dox
+    assert "Markdown or plain text files" in dox
+    assert "Open in Editor action visible outside the overflow menu" in dox
+
+    editor_button_index = html.index("file-editor-open-action")
+    dropdown_menu_index = html.index('class="dropdown-menu"')
+    assert editor_button_index < dropdown_menu_index
+    assert 'x-show="$store.fileBrowser.canOpenInActionMenu(file)"' in html
 
 
 def test_file_browser_empty_api_path_uses_default_workdir_contract() -> None:

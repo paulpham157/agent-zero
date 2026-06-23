@@ -2239,7 +2239,12 @@ const model = {
   async openDesktopUrlIntent(intent = {}) {
     const url = String(intent?.url || "").trim();
     const handled = await handleUrlIntent({ url, source: "desktop-url" });
-    this.setMessage(handled ? "Opened link in Browser" : "Browser is not available");
+    const isEditorIntent = url.startsWith("a0-editor:");
+    this.setMessage(
+      handled
+        ? (isEditorIntent ? "Opened text in Editor" : "Opened link in Browser")
+        : (isEditorIntent ? "Editor is not available" : "Browser is not available"),
+    );
   },
 
   browserDestinationForDesktopUrl() {

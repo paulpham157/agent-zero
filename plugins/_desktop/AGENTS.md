@@ -16,6 +16,7 @@
 - Preserve session startup, cleanup, and route protection for desktop access.
 - Keep desktop state injected into prompts accurate and bounded.
 - Do not expose desktop routes without the expected auth protections.
+- Keep Markdown and plain text file open-with handling routed to the Editor surface through the desktop intent bridge; Desktop owns the Xfce launcher/MIME setup, while Editor owns `.md` and `.txt` editing.
 
 ## Work Guidance
 
