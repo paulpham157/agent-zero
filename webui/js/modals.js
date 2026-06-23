@@ -107,7 +107,7 @@ document.body.appendChild(backdrop);
 // Function to update z-index for all modals and backdrop
 function updateModalZIndexes() {
   // Base z-index for modals
-  const baseZIndex = 3000;
+  const baseZIndex = 5000;
 
   // Update z-index for all modals
   modalStack.forEach((modal, index) => {

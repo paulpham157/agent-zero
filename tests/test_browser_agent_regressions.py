@@ -898,6 +898,24 @@ def test_surface_buttons_keep_modal_and_canvas_entry_points_separate():
     assert "&& !modalRequiresExplicitClose(newModal)" in modals_js
     assert "if (modalRequiresExplicitClose(modalStack[modalStack.length - 1])) return;" in modals_js
     assert ".modal-surface-switcher" not in modals_css
+
+    modal_stack_z = int(re.search(r"const baseZIndex = (\d+);", modals_js).group(1))
+    modal_css_z = int(re.search(r"\.modal \{[^}]*z-index: (\d+);", modals_css, re.S).group(1))
+    legacy_overlay_z = int(re.search(r"\.modal-overlay \{[^}]*z-index: (\d+);", modals_css, re.S).group(1))
+    mobile_canvas_z = int(
+        re.search(
+            r"body\.right-canvas-mobile-mode \.right-canvas \{[^}]*z-index: (\d+);",
+            canvas_css,
+            re.S,
+        ).group(1)
+    )
+    assert mobile_canvas_z == 3400
+    assert modal_stack_z > mobile_canvas_z
+    assert modal_css_z > mobile_canvas_z
+    assert legacy_overlay_z > mobile_canvas_z
+    assert "@media (max-width: 420px)" in canvas_css
+    assert "body.right-canvas-mobile-mode .right-canvas-rail {\n    gap: 5px;" in canvas_css
+    assert "transform: translateY(-50%) scale(0.92);" in canvas_css
     assert ".surface-switcher" in surfaces_css
     assert ".surface-button" in surfaces_css
     assert ".modal-surface-button.is-active" in surfaces_css

@@ -25,6 +25,7 @@
 - Tall modal bodies must scroll inside `.modal-scroll`; pinned footer content must stay outside that scroll area.
 - `.modal-floating` must keep the full-screen shell pointer-transparent while `.modal-inner` remains pointer-active.
 - Use `.modal-no-backdrop` only for backdrop suppression without click-through floating behavior.
+- Shared modal layers must stay above the mobile right-canvas rail while confirmation dialogs remain above normal modals.
 - Do not add decorative one-note palette changes that conflict with existing WebUI design.
 
 ## Work Guidance

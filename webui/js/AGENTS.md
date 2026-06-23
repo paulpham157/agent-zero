@@ -47,6 +47,7 @@
 - Check plugin extension callers before changing shared extension behavior.
 - Preserve the single shared modal shell and backdrop model; do not add a parallel overlay implementation.
 - Preserve modal z-index spacing with a stable base stack and a shared backdrop below the active modal.
+- Keep the shared modal stack above the mobile right-canvas rail so blocking modals remain authoritative on small screens.
 - If opening a new modal from a close handler, schedule it with `requestAnimationFrame` to avoid stack removal races.
 - Keep modal state cleanup explicit because stores can outlive their DOM.
 - Device-specific styling may rely on the `device-touch` or `device-mouse` body class set during initialization.
