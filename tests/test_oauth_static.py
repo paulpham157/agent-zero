@@ -148,7 +148,8 @@ def test_usage_plan_catalog_stays_backend_only_on_oauth_settings_page():
 
     assert "oauth-plan-catalog" not in config_html
     assert "usagePlanEntries" in store_js
-    assert "Google Gemini API" in plans_py
+    assert "Google Cloud Gemini" in plans_py
+    assert "Google Cloud project" in plans_py
     assert "GEMINI_API_PROVIDER_ID" in plans_py
     assert "Google Gemini / Antigravity" not in plans_py
     assert "Claude Code" not in plans_py
