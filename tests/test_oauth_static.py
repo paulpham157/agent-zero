@@ -179,6 +179,8 @@ def test_oauth_discovery_card_renders_in_welcome_account_panel():
 
     assert "discovery-oauth-accounts" in discovery_cards
     assert "Your AI accounts" in discovery_cards
+    assert "Use your subscription-backed logins for model access." in discovery_cards
+    assert "Link account-backed providers such as" not in discovery_cards
     assert "Connected OAuth accounts" not in discovery_cards
     assert "discovery-codex-oauth" not in discovery_cards
     assert "5h and weekly limits are ready." not in discovery_cards
@@ -188,6 +190,9 @@ def test_oauth_discovery_card_renders_in_welcome_account_panel():
     assert "account_chips" in discovery_cards
     assert "discovery-account-card" in welcome_cards
     assert "discovery-account-chip" in welcome_cards
+    assert "discovery-account-icon" not in welcome_cards
+    assert ".discovery-account-chip {\n            display: inline-grid;" in welcome_cards
+    assert "            border-radius: 8px;" in welcome_cards
     assert "discovery-account-usage" in welcome_cards
     assert "formatRemainingPercent(window)" in welcome_cards
     assert "formatRemainingPercent(window)" in discovery_store

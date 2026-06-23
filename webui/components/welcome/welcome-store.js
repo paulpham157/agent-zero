@@ -143,12 +143,50 @@ const model = {
   get sortedBanners() {
     return [...this.banners]
       .filter((b) => b.id !== "system-resources")
+      .filter((b) => b.id !== "missing-api-key")
       .filter((b) => b.type !== "hero" && b.type !== "feature")
       .sort((a, b) => (b.priority || 0) - (a.priority || 0));
   },
 
   get systemResourceBanner() {
     return this.banners.find((b) => b.id === "system-resources") || null;
+  },
+
+  get blockingSetupBanner() {
+    return this.banners.find((b) => b.id === "missing-api-key") || null;
+  },
+
+  get hasBlockingSetupBanner() {
+    return Boolean(this.blockingSetupBanner);
+  },
+
+  get heroSubtitle() {
+    if (this.hasBlockingSetupBanner) {
+      return "One setup step before chatting.";
+    }
+    return "How can I help you today?";
+  },
+
+  openBlockingSetup() {
+    const path =
+      this.blockingSetupBanner?.auto_modal_path ||
+      "/plugins/_onboarding/webui/onboarding.html";
+    window.openModal(path);
+  },
+
+  executeBannerAction(action) {
+    if (!action) return;
+
+    if (action.startsWith("open-modal:")) {
+      const path = action.slice("open-modal:".length);
+      if (path) window.openModal(path);
+      return;
+    }
+
+    if (action.startsWith("open-url:")) {
+      const url = action.slice("open-url:".length);
+      if (url) window.open(url, "_blank", "noopener,noreferrer");
+    }
   },
 
   /**

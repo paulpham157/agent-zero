@@ -10,17 +10,70 @@ def _read(relative_path: str) -> str:
 
 def test_welcome_screen_embeds_shared_new_chat_composer() -> None:
     welcome = _read("webui/components/welcome/welcome-screen.html")
+    welcome_store = _read("webui/components/welcome/welcome-store.js")
     index = _read("webui/index.html")
     discovery_cards = _read(
         "plugins/_discovery/extensions/webui/welcome-actions-end/discovery-cards.html"
     )
+    discovery_store = _read("plugins/_discovery/webui/discovery-store.js")
 
     assert 'class="welcome-composer"' in welcome
     assert 'path="chat/attachments/inputPreview.html"' in welcome
     assert 'path="chat/input/chat-bar-input.html"' in welcome
+    assert "x-text=\"$store.welcomeStore.heroSubtitle\"" in welcome
+    assert "Hello! I'm Agent Zero" in welcome
+    assert "'is-setup-required': $store.welcomeStore.hasBlockingSetupBanner" in welcome
+    assert 'class="welcome-setup-composer"' in welcome
+    assert "Configure your models to start chatting" in welcome
+    assert "Start Onboarding" in welcome
+    assert "openBlockingSetup()" in welcome
+    assert '.filter((b) => b.id !== "missing-api-key")' in welcome_store
+    assert "get blockingSetupBanner()" in welcome_store
+    assert "get heroSubtitle()" in welcome_store
+    assert 'return "One setup step before chatting.";' in welcome_store
+    assert 'return "How can I help you today?";' in welcome_store
+    assert "openBlockingSetup()" in welcome_store
     assert '<h2>Quick Actions</h2>' in welcome
     assert 'class="welcome-lower-grid"' in welcome
     assert 'x-extension id="welcome-actions-end"' in welcome
+    assert "grid-template-columns: repeat(4, minmax(0, 1fr));" in welcome
+    assert '"accounts accounts channels channels"' in welcome
+    assert '"system system system system"' in welcome
+    assert "align-items: stretch;" in welcome
+    assert ".welcome-lower-grid .discovery-slot {\n            display: contents;" in welcome
+    assert ".welcome-lower-grid .discovery-account-card {\n            grid-area: accounts;" in welcome
+    assert "grid-area: system;" in welcome
+    assert ".welcome-composer .input-row {\n            min-height: 4.9rem;" in welcome
+    assert "border-radius: 8px;" in welcome
+    assert 'aria-label="Refresh System Resources"' in welcome
+    assert "refreshBanners(true)" in welcome
+    assert 'aria-label="Dismiss System Resources"' in welcome
+    assert "dismissBanner($store.welcomeStore.systemResourceBanner?.id || 'system-resources')" in welcome
+    assert "welcome-panel-status-icon" not in welcome
+    assert "monitoring" not in welcome
+    assert ".welcome-banner {\n            --welcome-banner-accent: #2f6bff;" in welcome
+    assert "grid-template-columns: auto minmax(0, 1fr) auto auto;" in welcome
+    assert ".welcome-banner.banner-warning {\n            --welcome-banner-accent: #f59e0b;" in welcome
+    assert "border-left: 4px" not in welcome
+    assert 'class="welcome-banner-cta"' in welcome
+    assert "executeBannerAction(banner.cta_action)" in welcome
+    assert "executeBannerAction(action)" in welcome_store
+    assert 'action.startsWith("open-modal:")' in welcome_store
+    assert ".welcome-banner-html .onboarding-banner-btn-container" in welcome
+    assert "justify-content: flex-end;" in welcome
+    assert "justify-content: flex-start;" in welcome
+    assert ".welcome-banner-html .btn,\n        .welcome-banner-html button" in welcome
+    assert "background-color: #4248f1;" in welcome
+    assert 'aria-label="Dismiss Connect Channels"' in discovery_cards
+    assert "dismissFeatureCards()" in discovery_cards
+    assert "dismissFeatureCards() {" in discovery_store
+    assert 'class="discovery-feature-card"\n                                type="button"' in discovery_cards
+    assert "`${card.cta_text || 'Connect'} ${card.title}`" in discovery_cards
+    assert "discovery-feature-card > .btn" not in discovery_cards
+    assert "discovery-feature-head" not in discovery_cards
+    assert "discovery-account-header" in discovery_cards
+    assert "discovery-account-cta" in discovery_cards
+    assert "discovery-account-icon" not in discovery_cards
 
     assert "x-if=\"$store.welcomeStore && $store.welcomeStore.isVisible\"" in index
     assert "x-if=\"!$store.welcomeStore || !$store.welcomeStore.isVisible\"" in index

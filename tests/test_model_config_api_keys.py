@@ -82,6 +82,9 @@ async def test_missing_api_key_banner_exposes_missing_providers(monkeypatch):
     )
     row = next(b for b in banners if b.get("id") == "missing-api-key")
     assert row.get("missing_providers") == fake
+    assert row["cta_text"] == "Start Onboarding"
+    assert row["cta_action"] == "open-modal:/plugins/_onboarding/webui/onboarding.html"
+    assert "onboarding-banner-btn-container" not in row["html"]
 
 
 def test_model_config_frontend_tracks_inline_api_key_edits():
@@ -267,6 +270,8 @@ def test_missing_api_key_banner_includes_auto_modal_metadata(monkeypatch):
     assert row["type"] == "warning"
     assert row["dismissible"] is False
     assert row["missing_providers"] == fake
+    assert row["cta_text"] == "Start Onboarding"
+    assert row["cta_action"] == "open-modal:/plugins/_onboarding/webui/onboarding.html"
 
 
 def test_provider_key_modes_for_local_and_ollama_cloud():

@@ -11,37 +11,35 @@
 
             <section class="discovery-features-panel" x-show="$store.discoveryStore.featureCards.length > 0">
                 <header class="discovery-panel-header">
-                    <h2>Connect Channels</h2>
-                    <p>Extend Agent Zero across your favorite platforms.</p>
+                    <div class="discovery-panel-copy">
+                        <h2>Connect Channels</h2>
+                        <p>Extend Agent Zero across your favorite platforms.</p>
+                    </div>
+                    <button class="discovery-dismiss discovery-panel-dismiss"
+                            type="button"
+                            x-show="$store.discoveryStore.featureCards.some(card => card.dismissible !== false)"
+                            @click.stop="$store.discoveryStore.dismissFeatureCards()"
+                            aria-label="Dismiss Connect Channels"
+                            title="Dismiss">
+                        <span class="material-symbols-outlined">close</span>
+                    </button>
                 </header>
 
                 <div class="discovery-features">
                     <template x-for="card in $store.discoveryStore.featureCards" :key="card.id">
-                        <article class="discovery-feature-card"
-                                 role="button"
-                                 tabindex="0"
-                                 @click="$store.discoveryStore.executeCta(card.cta_action)"
-                                 @keydown.enter.prevent="$store.discoveryStore.executeCta(card.cta_action)"
-                                 @keydown.space.prevent="$store.discoveryStore.executeCta(card.cta_action)">
-
-                            <div class="discovery-feature-head">
-                                <div class="discovery-feature-thumb">
-                                    <template x-if="card.thumbnail">
-                                        <img :src="card.thumbnail" :alt="card.title" loading="lazy">
-                                    </template>
-                                    <template x-if="!card.thumbnail && card.icon">
-                                        <span class="material-symbols-outlined discovery-feature-icon" x-text="card.icon"></span>
-                                    </template>
-                                </div>
-                                <h4 class="discovery-feature-title" x-text="card.title"></h4>
-                            </div>
-
-                            <button class="btn btn primary"
-                                    type="button"
-                                    @click.stop="$store.discoveryStore.executeCta(card.cta_action)">
-                                <span x-text="card.cta_text"></span>
-                            </button>
-                        </article>
+                        <button class="discovery-feature-card"
+                                type="button"
+                                @click="$store.discoveryStore.executeCta(card.cta_action)">
+                            <span class="discovery-feature-thumb">
+                                <template x-if="card.thumbnail">
+                                    <img :src="card.thumbnail" :alt="card.title" loading="lazy">
+                                </template>
+                                <template x-if="!card.thumbnail && card.icon">
+                                    <span class="material-symbols-outlined discovery-feature-icon" x-text="card.icon"></span>
+                                </template>
+                            </span>
+                            <span class="discovery-feature-title" x-text="`${card.cta_text || 'Connect'} ${card.title}`"></span>
+                        </button>
                     </template>
                 </div>
             </section>
@@ -58,11 +56,16 @@
                     </button>
 
                     <header class="discovery-account-header">
-                        <span class="material-symbols-outlined discovery-account-icon">key</span>
                         <div class="discovery-account-copy">
                             <h2 x-text="card.title"></h2>
                             <p x-show="card.description" x-text="card.description"></p>
                         </div>
+                        <button class="btn btn primary discovery-account-cta"
+                                type="button"
+                                @click="$store.discoveryStore.executeCta(card.cta_action)">
+                            <span x-text="card.cta_text"></span>
+                            <span class="material-symbols-outlined">arrow_forward</span>
+                        </button>
                     </header>
 
                     <div class="discovery-account-chips" x-show="(card.account_chips || []).length > 0">
@@ -95,12 +98,6 @@
                         </template>
                     </div>
 
-                    <button class="btn btn primary discovery-account-cta"
-                            type="button"
-                            @click="$store.discoveryStore.executeCta(card.cta_action)">
-                        <span x-text="card.cta_text"></span>
-                        <span class="material-symbols-outlined">arrow_forward</span>
-                    </button>
                 </article>
             </template>
 
@@ -135,13 +132,21 @@
 
         .discovery-features-panel {
             min-height: 100%;
-            padding: 1.7rem 1.55rem 1.55rem;
+            padding: 1.25rem 1.45rem;
         }
 
         .discovery-panel-header {
             display: grid;
-            gap: 0.42rem;
+            grid-template-columns: minmax(0, 1fr) auto;
+            gap: 0.7rem;
+            align-items: start;
             margin-bottom: 1.28rem;
+        }
+
+        .discovery-panel-copy {
+            display: grid;
+            gap: 0.42rem;
+            min-width: 0;
         }
 
         .discovery-panel-header h2 {
@@ -162,31 +167,32 @@
         .discovery-features {
             display: grid;
             grid-template-columns: repeat(3, minmax(0, 1fr));
-            gap: 0.7rem;
+            gap: 0.65rem;
         }
 
         .discovery-feature-card {
-            position: relative;
-            display: flex;
-            flex-direction: column;
-            align-items: flex-start;
-            text-align: left;
-        }
-
-        .discovery-feature-head {
-            display: flex;
-            flex-direction: row;
+            display: inline-flex;
             align-items: center;
-            gap: 0.75rem;
-            width: 100%;
+            gap: 0.5rem;
             min-width: 0;
-            margin-bottom: 1rem;
+            min-height: 3.1rem;
+            border: 1px solid color-mix(in srgb, var(--color-border) 52%, transparent);
+            border-radius: 8px;
+            padding: 0.56rem 0.58rem;
+            background: color-mix(in srgb, var(--color-background) 50%, transparent);
+            color: inherit;
+            cursor: pointer;
+            font-family: var(--font-family-main, "Rubik", Arial, Helvetica, sans-serif);
+            text-align: left;
+            transition:
+                border-color 0.18s ease,
+                background-color 0.18s ease;
         }
 
         .discovery-feature-thumb {
             flex: 0 0 auto;
-            width: 52px;
-            height: 52px;
+            width: 32px;
+            height: 32px;
             display: flex;
             align-items: center;
             justify-content: center;
@@ -212,34 +218,15 @@
             flex: 1 1 auto;
             min-width: 0;
             color: var(--color-text);
-            font-size: 0.96rem;
+            font-size: 0.84rem;
             font-weight: 520;
             line-height: 1.25;
         }
 
-        .discovery-feature-desc {
-            margin: 1.12rem 0 0;
-            padding-bottom: var(--spacing-md);
-            color: color-mix(in srgb, var(--color-text) 72%, transparent);
-            font-size: 0.86rem;
-            line-height: 1.48;
-        }
-
-        .discovery-feature-card > .btn {
-            margin-top: auto;
-            min-width: 6.1rem;
-            min-height: 2.35rem;
-            border: 0;
-            border-radius: 8px;
-            color: #fff;
-            font-family: var(--font-family-main, "Rubik", Arial, Helvetica, sans-serif);
-            font-size: 0.88rem;
-            font-weight: 460;
-        }
-
-        .discovery-feature-card > .btn:hover,
-        .discovery-feature-card > .btn:focus-visible {
-            filter: brightness(1.06);
+        .discovery-feature-card:hover,
+        .discovery-feature-card:focus-visible {
+            border-color: color-mix(in srgb, var(--color-border) 88%, var(--color-text) 12%);
+            background: color-mix(in srgb, var(--color-panel) 86%, var(--color-background) 14%);
             outline: none;
         }
 
@@ -272,10 +259,12 @@
             height: 26px;
         }
 
-        .discovery-feature-card:hover .discovery-dismiss,
-        .discovery-feature-card:focus-visible .discovery-dismiss,
-        .discovery-account-card:hover .discovery-dismiss,
-        .discovery-account-card:focus-within .discovery-dismiss {
+        .discovery-panel-dismiss {
+            position: static;
+            opacity: 0.68;
+        }
+
+        .discovery-account-card > .discovery-dismiss {
             opacity: 0.68;
         }
 
@@ -294,30 +283,17 @@
         .discovery-account-card {
             position: relative;
             display: grid;
-            gap: 1.1rem;
-            padding: 1.35rem 1.45rem 1.4rem;
+            gap: 1rem;
+            padding: 1.25rem 1.45rem 1.25rem;
         }
 
         .discovery-account-header {
             display: grid;
-            grid-template-columns: auto minmax(0, 1fr);
+            grid-template-columns: minmax(0, 1fr) auto;
             gap: 0.95rem;
             align-items: center;
             min-width: 0;
             padding-right: 2.1rem;
-        }
-
-        .discovery-account-icon {
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            width: 3rem;
-            height: 3rem;
-            border-radius: 10px;
-            color: #2f6bff;
-            background: color-mix(in srgb, var(--color-primary) 10%, transparent);
-            box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-primary) 12%, transparent);
-            font-size: 1.7rem;
         }
 
         .discovery-account-copy {
@@ -357,7 +333,7 @@
             min-height: 2rem;
             padding: 0.32rem 0.58rem;
             border: 1px solid color-mix(in srgb, var(--color-border) 52%, transparent);
-            border-radius: 999px;
+            border-radius: 8px;
             background: color-mix(in srgb, var(--color-background) 50%, transparent);
             color: color-mix(in srgb, var(--color-text) 74%, transparent);
             font-size: 0.8rem;
@@ -464,7 +440,7 @@
         }
 
         .discovery-account-cta {
-            justify-self: start;
+            justify-self: end;
             display: inline-flex;
             align-items: center;
             justify-content: center;
@@ -479,6 +455,7 @@
             font-family: var(--font-family-main, "Rubik", Arial, Helvetica, sans-serif);
             font-size: 0.88rem;
             font-weight: 460;
+            white-space: nowrap;
             box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.2);
         }
 
@@ -536,33 +513,14 @@
             }
 
             .discovery-feature-card {
-                display: grid;
-                grid-template-columns: minmax(0, 1fr) auto;
-                gap: 0.75rem;
+                display: inline-flex;
                 min-height: 0;
-                align-items: center;
-            }
-
-            .discovery-feature-head {
-                grid-column: 1;
-                min-width: 0;
-                margin-bottom: 0;
+                padding: 0.62rem 0.7rem;
             }
 
             .discovery-feature-thumb {
-                width: 46px;
-                height: 46px;
-            }
-
-            .discovery-feature-desc {
-                display: none;
-            }
-
-            .discovery-feature-card > .btn {
-                grid-column: 2;
-                grid-row: 1;
-                align-self: center;
-                margin-top: 0;
+                width: 32px;
+                height: 32px;
             }
 
             .discovery-account-usage-row {
@@ -577,12 +535,7 @@
             }
 
             .discovery-feature-card {
-                grid-template-columns: minmax(0, 1fr) auto;
-                padding-right: 3rem;
-            }
-
-            .discovery-feature-card > .btn {
-                justify-self: end;
+                padding-right: 0.7rem;
             }
 
             .discovery-account-card {
@@ -594,11 +547,11 @@
                 padding-right: 2.2rem;
             }
 
-            .discovery-account-icon {
-                width: 2.55rem;
-                height: 2.55rem;
-                font-size: 1.45rem;
+            .discovery-account-cta {
+                grid-column: 1 / -1;
+                justify-self: start;
             }
+
         }
     </style>
 </div>

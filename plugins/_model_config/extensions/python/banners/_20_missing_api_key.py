@@ -7,12 +7,8 @@ class MissingApiKeyCheck(Extension):
     """Check if API keys are configured for selected model providers."""
 
     LOCAL_PROVIDERS = {"ollama", "lm_studio", "llama_cpp", "omlx", "vllm"}
-    CONFIGURE_MODEL_SETTINGS_LINK = (
-        """<div class="onboarding-banner-btn-container" style="margin-top: 12px;">"""
-        """<button class="btn btn-ok" onclick="window.openModal('/plugins/_onboarding/webui/onboarding.html');return false;">"""
-        """Start Onboarding</button>"""
-        """</div>"""
-    )
+    ONBOARDING_MODAL_PATH = "/plugins/_onboarding/webui/onboarding.html"
+    ONBOARDING_CTA_TEXT = "Start Onboarding"
 
     async def execute(self, banners: list = [], frontend_context: dict = {}, **kwargs):
         cfg = plugins.get_plugin_config("_model_config") or {}
@@ -25,11 +21,12 @@ class MissingApiKeyCheck(Extension):
                 "priority": 100,
                 "title": "Welcome to Agent Zero!",
                 "html": f"""You're almost ready to chat. Please configure your models to continue.<br>
-                         Insert your API key in the onboarding wizard.
-                         {self.CONFIGURE_MODEL_SETTINGS_LINK}""",
+                         Insert your API key in the onboarding wizard.""",
+                "cta_text": self.ONBOARDING_CTA_TEXT,
+                "cta_action": f"open-modal:{self.ONBOARDING_MODAL_PATH}",
                 "dismissible": False,
                 "source": "backend",
-                "auto_modal_path": "/plugins/_onboarding/webui/onboarding.html",
+                "auto_modal_path": self.ONBOARDING_MODAL_PATH,
                 "auto_modal_reason": "missing-api-key",
                 "auto_modal_priority": 100,
                 "auto_modal_surfaces": ["welcome", "chat-created"],
@@ -69,8 +66,9 @@ class MissingApiKeyCheck(Extension):
                     "priority": 90,
                     "title": "Missing API Key for model presets",
                     "html": f"""No API key configured for preset models: {preset_list}.<br>
-                             These presets will not work until you provide the required API keys.<br>
-                             {self.CONFIGURE_MODEL_SETTINGS_LINK}""",
+                             These presets will not work until you provide the required API keys.""",
+                    "cta_text": self.ONBOARDING_CTA_TEXT,
+                    "cta_action": f"open-modal:{self.ONBOARDING_MODAL_PATH}",
                     "dismissible": True,
                     "source": "backend"
                 })

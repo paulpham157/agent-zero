@@ -15,11 +15,31 @@
 
                 <main class="welcome-shell">
                     <header class="welcome-hero">
-                        <h1>Welcome back <span aria-hidden="true">&#128075;</span></h1>
-                        <p>Agent Zero is ready to help.</p>
+                        <h1>Hello! I'm Agent Zero <span aria-hidden="true">&#128075;</span></h1>
+                        <p x-text="$store.welcomeStore.heroSubtitle"></p>
                     </header>
 
-                    <section class="welcome-composer" aria-label="Start a new chat">
+                    <section class="welcome-composer"
+                             :class="{ 'is-setup-required': $store.welcomeStore.hasBlockingSetupBanner }"
+                             :aria-label="$store.welcomeStore.hasBlockingSetupBanner ? 'Configure models to start chatting' : 'Start a new chat'">
+                        <template x-if="$store.welcomeStore.hasBlockingSetupBanner">
+                            <button type="button"
+                                    class="welcome-setup-composer"
+                                    @click="$store.welcomeStore.openBlockingSetup()"
+                                    aria-label="Start onboarding">
+                                <span class="welcome-setup-icon" aria-hidden="true">
+                                    <span class="material-symbols-outlined">warning</span>
+                                </span>
+                                <span class="welcome-setup-copy">
+                                    <span class="welcome-setup-title">Configure your models to start chatting</span>
+                                    <span class="welcome-setup-detail">Insert your API key in the onboarding wizard.</span>
+                                </span>
+                                <span class="welcome-setup-cta">
+                                    <span>Start Onboarding</span>
+                                    <span class="material-symbols-outlined" aria-hidden="true">arrow_forward</span>
+                                </span>
+                            </button>
+                        </template>
                         <x-component path="chat/attachments/inputPreview.html"></x-component>
                         <x-component path="chat/input/chat-bar-input.html"></x-component>
                     </section>
@@ -37,6 +57,14 @@
                                         <div class="welcome-banner-title" x-text="banner.title"></div>
                                         <div class="welcome-banner-html" x-html="banner.html"></div>
                                     </div>
+                                    <button class="welcome-banner-cta"
+                                            type="button"
+                                            x-show="banner.cta_text && banner.cta_action"
+                                            @click.stop="$store.welcomeStore.executeBannerAction(banner.cta_action)"
+                                            :aria-label="banner.cta_text">
+                                        <span x-text="banner.cta_text"></span>
+                                        <span class="material-symbols-outlined" aria-hidden="true">arrow_forward</span>
+                                    </button>
                                     <button class="welcome-banner-dismiss"
                                             type="button"
                                             x-show="banner.dismissible !== false"
@@ -131,7 +159,24 @@
                                  x-transition.opacity>
                             <header class="welcome-panel-header">
                                 <h2 x-text="$store.welcomeStore.systemResourceBanner?.title || 'System Resources'"></h2>
-                                <span class="material-symbols-outlined">monitoring</span>
+                                <div class="welcome-panel-actions">
+                                    <button class="welcome-panel-icon-button"
+                                            type="button"
+                                            :disabled="$store.welcomeStore.bannersLoading"
+                                            @click.stop="$store.welcomeStore.refreshBanners(true)"
+                                            title="Refresh"
+                                            aria-label="Refresh System Resources">
+                                        <span class="material-symbols-outlined">refresh</span>
+                                    </button>
+                                    <button class="welcome-panel-icon-button"
+                                            type="button"
+                                            x-show="$store.welcomeStore.systemResourceBanner?.dismissible !== false"
+                                            @click.stop="$store.welcomeStore.dismissBanner($store.welcomeStore.systemResourceBanner?.id || 'system-resources')"
+                                            title="Dismiss"
+                                            aria-label="Dismiss System Resources">
+                                        <span class="material-symbols-outlined">close</span>
+                                    </button>
+                                </div>
                             </header>
                             <div class="welcome-system-body"
                                  x-html="$store.welcomeStore.systemResourceBanner?.html || ''"></div>
@@ -189,6 +234,7 @@
             gap: 1.55rem;
             width: min(100%, 1220px);
             margin: 0 auto;
+            padding-top: 4rem;
         }
 
         .welcome-hero h1 {
@@ -217,10 +263,110 @@
             display: contents;
         }
 
+        .welcome-composer.is-setup-required > x-component {
+            display: none;
+        }
+
+        .welcome-setup-composer {
+            display: grid;
+            grid-template-columns: auto minmax(0, 1fr) auto;
+            align-items: center;
+            gap: 1rem;
+            width: 100%;
+            min-height: 4.9rem;
+            padding: 0.74rem 0.7rem 0.74rem 0.86rem;
+            border: 1px solid color-mix(in srgb, var(--color-border) 72%, transparent);
+            border-radius: 8px;
+            background: color-mix(in srgb, var(--color-panel) 64%, var(--color-background) 36%);
+            color: inherit;
+            cursor: pointer;
+            font-family: var(--font-family-main, "Rubik", Arial, Helvetica, sans-serif);
+            text-align: left;
+            box-shadow:
+                inset 0 1px 0 rgba(255, 255, 255, 0.035),
+                0 18px 46px rgba(0, 0, 0, 0.18);
+            transition:
+                border-color 0.18s ease,
+                background-color 0.18s ease,
+                box-shadow 0.18s ease;
+        }
+
+        .welcome-setup-composer:hover,
+        .welcome-setup-composer:focus-visible {
+            border-color: color-mix(in srgb, var(--color-border) 88%, var(--color-text) 12%);
+            background: color-mix(in srgb, var(--color-panel) 74%, var(--color-background) 26%);
+            box-shadow:
+                inset 0 1px 0 rgba(255, 255, 255, 0.045),
+                0 22px 54px rgba(0, 0, 0, 0.22);
+            outline: none;
+        }
+
+        .welcome-setup-icon {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 2.5rem;
+            height: 2.5rem;
+            border-radius: 8px;
+            color: #f59e0b;
+            background: color-mix(in srgb, #f59e0b 9%, transparent);
+            box-shadow: inset 0 0 0 1px color-mix(in srgb, #f59e0b 12%, transparent);
+        }
+
+        .welcome-setup-icon .material-symbols-outlined {
+            font-size: 1.35rem;
+        }
+
+        .welcome-setup-copy {
+            display: grid;
+            gap: 0.18rem;
+            min-width: 0;
+        }
+
+        .welcome-setup-title {
+            color: var(--color-text);
+            font-size: 1rem;
+            font-weight: 520;
+            line-height: 1.25;
+        }
+
+        .welcome-setup-detail {
+            color: color-mix(in srgb, var(--color-text) 58%, transparent);
+            font-size: 0.92rem;
+            line-height: 1.35;
+        }
+
+        .welcome-setup-cta {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.36rem;
+            min-height: 2.75rem;
+            border-radius: 12px;
+            padding: 0.62rem 0.95rem;
+            background-color: #4248f1;
+            color: #fff;
+            font-size: 0.92rem;
+            font-weight: 500;
+            line-height: 1;
+            white-space: nowrap;
+            box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.2);
+            transition: background-color 0.18s ease;
+        }
+
+        .welcome-setup-composer:hover .welcome-setup-cta,
+        .welcome-setup-composer:focus-visible .welcome-setup-cta {
+            background-color: #353bc5;
+        }
+
+        .welcome-setup-cta .material-symbols-outlined {
+            font-size: 1.24rem;
+        }
+
         .welcome-composer .input-row {
             min-height: 4.9rem;
             padding: 0.58rem 0.7rem 0.58rem 0.86rem;
-            border-radius: 16px;
+            border-radius: 8px;
             background: color-mix(in srgb, var(--color-panel) 64%, var(--color-background) 36%);
         }
 
@@ -261,64 +407,64 @@
         }
 
         .welcome-banner {
+            --welcome-banner-accent: #2f6bff;
             position: relative;
-            display: flex;
-            align-items: flex-start;
-            gap: 0.78rem;
-            padding: 0.9rem 1rem;
-            border-radius: 12px;
+            display: grid;
+            grid-template-columns: auto minmax(0, 1fr) auto auto;
+            align-items: start;
+            gap: 1rem;
+            min-height: 5.45rem;
+            padding: 1rem 1.1rem;
+            border-radius: 8px;
             text-align: left;
         }
 
         .welcome-banner.banner-info {
-            border-left: 4px solid #2f6bff;
+            --welcome-banner-accent: #2f6bff;
         }
 
         .welcome-banner.banner-warning {
-            border-left: 4px solid #f59e0b;
+            --welcome-banner-accent: #f59e0b;
         }
 
         .welcome-banner.banner-error {
-            border-left: 4px solid #ef4444;
+            --welcome-banner-accent: #ef4444;
         }
 
         .welcome-banner-icon {
-            display: flex;
-            width: 1.6rem;
-            height: 1.6rem;
+            display: inline-flex;
+            width: 2.25rem;
+            height: 2.25rem;
             align-items: center;
             justify-content: center;
-            color: #2f6bff;
-        }
-
-        .banner-warning .welcome-banner-icon {
-            color: #f59e0b;
-        }
-
-        .banner-error .welcome-banner-icon {
-            color: #ef4444;
+            border-radius: 8px;
+            color: var(--welcome-banner-accent);
+            background: color-mix(in srgb, var(--welcome-banner-accent) 9%, transparent);
+            box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--welcome-banner-accent) 12%, transparent);
         }
 
         .welcome-banner-icon .material-symbols-outlined {
-            font-size: 1.25rem;
+            font-size: 1.28rem;
         }
 
         .welcome-banner-content {
             flex: 1;
             min-width: 0;
+            padding-top: 0.05rem;
         }
 
         .welcome-banner-title {
-            margin-bottom: 0.25rem;
+            margin-bottom: 0.28rem;
             color: var(--color-text);
-            font-size: 0.92rem;
-            font-weight: 650;
+            font-size: 1rem;
+            font-weight: 560;
             line-height: 1.25;
         }
 
         .welcome-banner-html {
-            color: color-mix(in srgb, var(--color-text) 68%, transparent);
-            font-size: 0.84rem;
+            max-width: 72ch;
+            color: color-mix(in srgb, var(--color-text) 58%, transparent);
+            font-size: 0.92rem;
             line-height: 1.45;
         }
 
@@ -329,6 +475,55 @@
 
         .welcome-banner-html a:hover {
             text-decoration: underline;
+        }
+
+        .welcome-banner-html .onboarding-banner-btn-container {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: flex-end;
+            gap: 0.55rem;
+            margin-top: 0.9rem !important;
+        }
+
+        .welcome-banner-cta,
+        .welcome-banner-html .btn,
+        .welcome-banner-html button {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 2.35rem;
+            border: 0;
+            border-radius: 8px;
+            padding: 0.55rem 0.9rem;
+            background-color: #4248f1;
+            color: #fff;
+            font-family: var(--font-family-main, "Rubik", Arial, Helvetica, sans-serif);
+            font-size: 0.88rem;
+            font-weight: 460;
+            line-height: 1.2;
+            box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.2);
+            transition: background-color 0.18s ease;
+        }
+
+        .welcome-banner-cta {
+            align-self: center;
+            justify-self: end;
+            gap: 0.36rem;
+            white-space: nowrap;
+        }
+
+        .welcome-banner-cta .material-symbols-outlined {
+            font-size: 1.05rem;
+        }
+
+        .welcome-banner-cta:hover,
+        .welcome-banner-cta:focus-visible,
+        .welcome-banner-html .btn:hover,
+        .welcome-banner-html .btn:focus-visible,
+        .welcome-banner-html button:hover,
+        .welcome-banner-html button:focus-visible {
+            background-color: #353bc5;
+            outline: none;
         }
 
         .welcome-banner-dismiss,
@@ -348,6 +543,7 @@
             width: 2rem;
             height: 2rem;
             border-radius: 8px;
+            margin: -0.2rem -0.2rem 0 0;
         }
 
         .welcome-banner-dismiss:hover,
@@ -451,18 +647,33 @@
 
         .welcome-lower-grid {
             display: grid;
-            grid-template-columns: minmax(0, 1.06fr) minmax(320px, 0.94fr);
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+            grid-template-areas:
+                "accounts accounts channels channels"
+                "system system system system";
             gap: 1rem;
             align-items: stretch;
         }
 
         .welcome-lower-grid .discovery-slot {
-            grid-column: auto;
-            min-width: 0;
-            width: 100%;
+            display: contents;
+        }
+
+        .welcome-lower-grid .discovery-features-panel {
+            grid-area: channels;
+            min-height: 0;
+        }
+
+        .welcome-lower-grid .discovery-account-card {
+            grid-area: accounts;
+        }
+
+        .welcome-lower-grid .discovery-undismiss {
+            grid-column: 1 / -1;
         }
 
         .welcome-system-card {
+            grid-area: system;
             min-width: 0;
             border-radius: 8px;
             padding: 1.6rem 1.7rem;
@@ -477,10 +688,41 @@
             margin-bottom: 1.5rem;
         }
 
-        .welcome-panel-header .material-symbols-outlined {
+        .welcome-panel-actions {
+            display: flex;
+            align-items: center;
+            gap: 0.35rem;
+            flex: 0 0 auto;
+        }
+
+        .welcome-panel-icon-button {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 2rem;
+            height: 2rem;
+            border: 0;
+            border-radius: 8px;
+            background: transparent;
+            color: color-mix(in srgb, var(--color-text) 64%, transparent);
+            cursor: pointer;
+            font-family: var(--font-family-main, "Rubik", Arial, Helvetica, sans-serif);
+        }
+
+        .welcome-panel-icon-button:hover,
+        .welcome-panel-icon-button:focus-visible {
             color: var(--color-text);
-            font-size: 1.35rem;
-            opacity: 0.86;
+            background: color-mix(in srgb, var(--color-border) 45%, transparent);
+            outline: none;
+        }
+
+        .welcome-panel-icon-button:disabled {
+            cursor: default;
+            opacity: 0.45;
+        }
+
+        .welcome-panel-icon-button .material-symbols-outlined {
+            font-size: 1.18rem;
         }
 
         .system-resource-body {
@@ -560,6 +802,14 @@
 
             .welcome-lower-grid {
                 grid-template-columns: 1fr;
+                grid-template-areas:
+                    "accounts"
+                    "channels"
+                    "system";
+            }
+
+            .welcome-shell {
+                padding-top: 4rem;
             }
         }
 
@@ -571,6 +821,7 @@
 
             .welcome-shell {
                 gap: 1.2rem;
+                padding-top: 4rem;
             }
 
             .welcome-actions {
@@ -591,6 +842,54 @@
 
             .welcome-composer .input-row {
                 min-height: 4.35rem;
+            }
+
+            .welcome-setup-composer {
+                grid-template-columns: auto minmax(0, 1fr);
+                align-items: start;
+                gap: 0.8rem;
+                min-height: 4.35rem;
+                padding: 0.8rem;
+            }
+
+            .welcome-setup-cta {
+                grid-column: 2;
+                justify-self: start;
+                min-height: 2.45rem;
+                border-radius: 8px;
+                padding: 0.55rem 0.85rem;
+            }
+
+            .welcome-banner {
+                grid-template-columns: auto minmax(0, 1fr);
+                gap: 0.82rem;
+                padding: 0.95rem;
+            }
+
+            .welcome-banner-dismiss {
+                position: absolute;
+                top: 0.7rem;
+                right: 0.7rem;
+                margin: 0;
+            }
+
+            .welcome-banner-content {
+                padding-right: 1.9rem;
+            }
+
+            .welcome-banner-html {
+                max-width: none;
+            }
+
+            .welcome-banner-html .onboarding-banner-btn-container {
+                justify-content: flex-start;
+                margin-top: 0.75rem !important;
+            }
+
+            .welcome-banner-cta {
+                grid-column: 2;
+                justify-self: start;
+                margin-top: 0.25rem;
             }
 
             .welcome-system-card {

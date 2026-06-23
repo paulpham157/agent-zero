@@ -64,6 +64,25 @@ const model = {
     this.hasDismissedCards = true;
   },
 
+  dismissFeatureCards() {
+    const featureIds = this.featureCards
+      .filter((card) => card.dismissible !== false)
+      .map((card) => card.id)
+      .filter(Boolean);
+
+    if (!featureIds.length) return;
+
+    const dismissed = this._getDismissedIds();
+    const dismissSet = new Set(featureIds);
+    for (const id of dismissSet) {
+      dismissed.add(id);
+    }
+    this._persistDismissedIds(dismissed);
+
+    this.cards = this.cards.filter((card) => !dismissSet.has(card.id));
+    this.hasDismissedCards = true;
+  },
+
   undismissCards() {
     localStorage.removeItem(STORAGE_KEY);
     this.refreshCards();

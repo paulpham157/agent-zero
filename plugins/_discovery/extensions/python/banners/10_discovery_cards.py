@@ -138,7 +138,7 @@ class DiscoveryCardsExtension(Extension):
             "type": "hero",
             "placement": "after-features",
             "title": "Your AI accounts",
-            "description": "Link account-backed providers such as ChatGPT/Codex, GitHub Copilot, Gemini API, and xAI Grok."
+            "description": "Use your subscription-backed logins for model access."
             if not connected_count
             else "",
             "cta_text": "Connect accounts" if not connected_count else "Manage accounts",
