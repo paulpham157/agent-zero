@@ -1354,14 +1354,23 @@ def test_browser_panel_exposes_agent_friendly_address_input():
     assert 'class="browser-address" aria-label="Browser address" name="browser_address"' in panel
 
 
-def test_browser_panel_gives_address_bar_full_mobile_row():
+def test_browser_panel_groups_mobile_toolbar_controls_above_address():
     panel = (
         PROJECT_ROOT / "plugins" / "_browser" / "webui" / "browser-panel.html"
     ).read_text(encoding="utf-8")
 
+    toolbar_index = panel.index('<div class="browser-toolbar">')
+    nav_index = panel.index('<div class="browser-navigation">', toolbar_index)
+    controls_index = panel.index('<div class="browser-session-controls">', toolbar_index)
+    address_index = panel.index('<form class="browser-address-form"', toolbar_index)
+
+    assert nav_index < controls_index < address_index
+    assert ".browser-panel {\n      --browser-chrome-surface:" in panel
+    assert "container-type: inline-size;" in panel
     assert "@container (max-width: 460px)" in panel
-    assert ".browser-toolbar {\n        grid-template-columns: minmax(0, 1fr);" in panel
-    assert '          "nav"\n          "address";' in panel
+    assert ".browser-toolbar {\n        grid-template-columns: auto minmax(0, 1fr) auto;" in panel
+    assert '          "nav . controls"\n          "address address address";' in panel
+    assert ".browser-session-controls {\n        width: auto;" in panel
     assert ".browser-address-form {\n        width: 100%;" in panel
 
 
