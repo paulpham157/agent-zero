@@ -102,6 +102,12 @@ def test_welcome_composer_can_create_a_chat_before_sending() -> None:
     assert 'return "arrow_forward";' in input_store
 
 
+def test_welcome_composer_does_not_overlap_idle_progress_placeholder() -> None:
+    input_store = _read("webui/components/chat/input/input-store.js")
+
+    assert "!!chatsStore.selected &&\n      this._getSendState() !== \"all\"" in input_store
+
+
 def test_welcome_composer_buttons_keep_target_geometry_without_glow() -> None:
     chat_bar = _read("webui/components/chat/input/chat-bar-input.html")
     mic_css = _read("plugins/_whisper_stt/webui/whisper-stt.css")

@@ -91,6 +91,7 @@ const model = {
 
   get showProgressPlaceholder() {
     return (
+      !!chatsStore.selected &&
       this._getSendState() !== "all" &&
       !!this.progressText &&
       !this.message
