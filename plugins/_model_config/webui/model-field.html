@@ -141,6 +141,19 @@
       </div>
     </template>
 
+    <!-- Context window size (main and utility only) -->
+    <template x-if="modelType !== 'embedding'">
+      <div class="field">
+        <div class="field-label">
+          <div class="field-title">Context window size</div>
+          <div class="field-description">Maximum number of tokens in the context window. System prompt, chat history, RAG and response all count towards this limit.</div>
+        </div>
+        <div class="field-control">
+          <input type="number" x-model.number="model.ctx_length" />
+        </div>
+      </div>
+    </template>
+
     <!-- Advanced Settings (collapsed by default) -->
     <div class="advanced-section" x-data="{ advOpen: false }">
       <div class="advanced-toggle" @click="advOpen = !advOpen">
@@ -161,19 +174,6 @@
             <input type="text" x-model="model.api_base" />
           </div>
         </div>
-
-        <!-- Context length (not for embedding) -->
-        <template x-if="modelType !== 'embedding'">
-          <div class="field">
-            <div class="field-label">
-              <div class="field-title">Context length</div>
-              <div class="field-description">Maximum number of tokens in the context window. System prompt, chat history, RAG and response all count towards this limit.</div>
-            </div>
-            <div class="field-control">
-              <input type="number" x-model.number="model.ctx_length" />
-            </div>
-          </div>
-        </template>
 
         <!-- Chat-specific: ctx_history, max_embeds -->
         <template x-if="modelType === 'chat'">
