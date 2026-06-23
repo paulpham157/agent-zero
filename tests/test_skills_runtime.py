@@ -228,7 +228,24 @@ def test_reactivating_name_only_scope_default_by_path_clears_hidden_override(mon
     assert runtime.get_chat_disabled_skills(agent.context) == []
 
 
-def test_loaded_skill_entries_come_from_agent_data():
+def test_loaded_skill_entries_come_from_context_data():
+    agent = DummyAgent()
+    agent.context.set_data(
+        runtime.CONTEXT_DATA_NAME_LOADED_SKILLS,
+        [
+            "host-computer-use",
+            "",
+            "a0-development",
+        ],
+    )
+
+    assert runtime.get_loaded_skill_entries(agent) == [
+        {"name": "host-computer-use"},
+        {"name": "a0-development"},
+    ]
+
+
+def test_loaded_skill_entries_migrate_legacy_agent_data():
     agent = DummyAgent()
     agent.data[runtime.AGENT_DATA_NAME_LOADED_SKILLS] = [
         "host-computer-use",
@@ -240,6 +257,20 @@ def test_loaded_skill_entries_come_from_agent_data():
         {"name": "host-computer-use"},
         {"name": "a0-development"},
     ]
+    assert agent.context.get_data(runtime.CONTEXT_DATA_NAME_LOADED_SKILLS) == [
+        "host-computer-use",
+        "a0-development",
+    ]
+    assert runtime.AGENT_DATA_NAME_LOADED_SKILLS not in agent.data
+
+
+def test_unloading_last_migrated_skill_does_not_restore_legacy_agent_data():
+    agent = DummyAgent()
+    agent.data[runtime.AGENT_DATA_NAME_LOADED_SKILLS] = ["host-computer-use"]
+
+    assert runtime.unload_agent_skill(agent, {"name": "host-computer-use"}) is True
+    assert agent.context.get_data(runtime.CONTEXT_DATA_NAME_LOADED_SKILLS) is None
+    assert runtime.get_loaded_skill_entries(agent) == []
 
 
 def test_skill_runtime_does_not_alias_old_office_skill_references():
@@ -262,12 +293,15 @@ def test_skill_runtime_does_not_alias_old_office_skill_references():
     ]
 
     agent = DummyAgent()
-    agent.data[runtime.AGENT_DATA_NAME_LOADED_SKILLS] = [
-        "office-artifacts",
-        "word-documents",
-        "excel-workbooks",
-        "presentation-decks",
-    ]
+    agent.context.set_data(
+        runtime.CONTEXT_DATA_NAME_LOADED_SKILLS,
+        [
+            "office-artifacts",
+            "word-documents",
+            "excel-workbooks",
+            "presentation-decks",
+        ],
+    )
 
     assert runtime.get_loaded_skill_entries(agent) == [
         {"name": "office-artifacts"},
@@ -277,7 +311,7 @@ def test_skill_runtime_does_not_alias_old_office_skill_references():
     ]
 
     assert runtime.unload_agent_skill(agent, {"name": "office-artifacts"}) is True
-    assert agent.data[runtime.AGENT_DATA_NAME_LOADED_SKILLS] == [
+    assert agent.context.get_data(runtime.CONTEXT_DATA_NAME_LOADED_SKILLS) == [
         "word-documents",
         "excel-workbooks",
         "presentation-decks",
@@ -415,10 +449,13 @@ def test_host_computer_use_ranks_before_linux_desktop_for_host_screen_queries(mo
 
 def test_unload_agent_skill_removes_loaded_skill_by_name():
     agent = DummyAgent()
-    agent.data[runtime.AGENT_DATA_NAME_LOADED_SKILLS] = [
-        "host-computer-use",
-        "a0-development",
-    ]
+    agent.context.set_data(
+        runtime.CONTEXT_DATA_NAME_LOADED_SKILLS,
+        [
+            "host-computer-use",
+            "a0-development",
+        ],
+    )
 
     removed = runtime.unload_agent_skill(
         agent,
@@ -429,7 +466,7 @@ def test_unload_agent_skill_removes_loaded_skill_by_name():
     )
 
     assert removed is True
-    assert agent.data[runtime.AGENT_DATA_NAME_LOADED_SKILLS] == [
+    assert agent.context.get_data(runtime.CONTEXT_DATA_NAME_LOADED_SKILLS) == [
         "a0-development"
     ]
 

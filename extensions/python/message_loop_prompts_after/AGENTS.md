@@ -7,7 +7,9 @@
 ## Ownership
 
 - Ordered Python files own current datetime, skill recall/load context, agent info, parallel job status, and workdir extras injection.
-- Loaded and active skill instructions belong in prompt protocol, not prompt extras.
+- Active skill instructions belong in prompt protocol.
+- Explicitly loaded skill bodies belong in tool-result history with metadata so they can survive persistence and be reattached after compaction.
+- Explicitly loaded skill IDs are chat-wide context data, not agent-local state.
 
 ## Local Contracts
 
@@ -17,11 +19,11 @@
 
 ## Work Guidance
 
-- Coordinate prompt protocol and prompt-extra changes with skill, workdir, and profile contracts.
+- Coordinate prompt protocol, history-reattachment, and prompt-extra changes with skill, workdir, and profile contracts.
 
 ## Verification
 
-- Inspect rendered prompt protocol/extras or run prompt-construction tests after changes.
+- Inspect rendered prompt protocol/history/extras or run prompt-construction tests after changes.
 
 ## Child DOX Index
 

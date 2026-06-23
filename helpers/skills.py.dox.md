@@ -30,6 +30,7 @@
 - `delete_skill(skill_path: str) -> None`: Delete a skill directory.
 - `find_skill(skill_name: str, agent: Agent | None=..., include_content: bool=..., include_hidden: bool=...) -> Optional[Skill]`
 - `load_skill_for_agent(skill_name: str, agent: Agent | None=...) -> str`: Load skill and format it as a complete string for agent context.
+- `skill_instruction_name(message: Any) -> str`
 - `_get_skill_files(skill_dir: Path) -> str`: Get file tree for skill directory.
 - `search_skills(query: str, limit: int=..., agent: Agent | None=..., include_hidden: bool=...) -> List[Skill]`
 - `validate_skill(skill: Skill) -> List[str]`
@@ -45,13 +46,17 @@
 - `get_scope_hidden_skills(agent: Agent | None) -> list[ActiveSkillEntry]`
 - `get_chat_active_skills(context: Any | None) -> list[ActiveSkillEntry]`
 - `get_chat_disabled_skills(context: Any | None) -> list[ActiveSkillEntry]`
-- Notable constants/configuration names: `MAX_ACTIVE_SKILLS`, `ACTIVE_SKILLS_PLUGIN_NAME`, `AGENT_DATA_NAME_LOADED_SKILLS`, `CONTEXT_DATA_NAME_CHAT_ACTIVE_SKILLS`, `CONTEXT_DATA_NAME_CHAT_DISABLED_SKILLS`, `CONTEXT_DATA_NAME_CHAT_VISIBLE_SKILLS`, `_NAME_RE`.
+- `get_loaded_skill_names(agent: Agent | None) -> list[str]`
+- `set_loaded_skill_names(agent: Agent | None, skill_names: Any) -> list[str]`
+- `add_loaded_skill_name(agent: Agent | None, skill_name: str, limit: int | None=...) -> list[str]`
+- Notable constants/configuration names: `MAX_ACTIVE_SKILLS`, `ACTIVE_SKILLS_PLUGIN_NAME`, `AGENT_DATA_NAME_LOADED_SKILLS`, `CONTEXT_DATA_NAME_LOADED_SKILLS`, `CONTEXT_DATA_NAME_CHAT_ACTIVE_SKILLS`, `CONTEXT_DATA_NAME_CHAT_DISABLED_SKILLS`, `CONTEXT_DATA_NAME_CHAT_VISIBLE_SKILLS`, `_NAME_RE`.
 
 ## Runtime Contracts
 
 - Helper modules own reusable framework APIs and must preserve public callers unless all callers, tests, and docs are updated together.
 - Update this file whenever public functions, classes, persistence behavior, path/security assumptions, side effects, or cross-module contracts change.
-- Observed side-effect areas: filesystem reads, filesystem deletion, plugin state, settings/state persistence, secret handling.
+- Loaded skill names are chat-wide context data under `CONTEXT_DATA_NAME_LOADED_SKILLS`; legacy agent-local `loaded_skills` lists are migrated into context data and cleared when read.
+- Observed side-effect areas: filesystem reads, filesystem deletion, plugin state, settings/state persistence, context data, secret handling.
 - Imported dependency areas include: `__future__`, `dataclasses`, `helpers`, `os`, `pathlib`, `re`, `typing`.
 
 ## Key Concepts

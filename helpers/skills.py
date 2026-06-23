@@ -21,6 +21,7 @@ except Exception:  # pragma: no cover
 MAX_ACTIVE_SKILLS = 20
 ACTIVE_SKILLS_PLUGIN_NAME = "_skills"
 AGENT_DATA_NAME_LOADED_SKILLS = "loaded_skills"
+CONTEXT_DATA_NAME_LOADED_SKILLS = AGENT_DATA_NAME_LOADED_SKILLS
 CONTEXT_DATA_NAME_CHAT_ACTIVE_SKILLS = "skills_chat_active"
 CONTEXT_DATA_NAME_CHAT_DISABLED_SKILLS = "skills_chat_disabled"
 CONTEXT_DATA_NAME_CHAT_VISIBLE_SKILLS = "skills_chat_visible"
@@ -451,6 +452,20 @@ def load_skill_for_agent(
     return "\n".join(lines)
 
 
+def skill_instruction_name(message: Any) -> str:
+    match message:
+        case {
+            "content": {
+                "skill_instructions": {
+                    "content_included": included,
+                    "name": name,
+                }
+            }
+        } if included:
+            return str(name or "").strip()
+    return ""
+
+
 def _get_skill_files(skill_dir: Path) -> str:
     """Get file tree for skill directory."""
     if not skill_dir.exists():
@@ -830,19 +845,77 @@ def get_active_skills(agent: Agent | None) -> list[ActiveSkillEntry]:
     return _build_active_skills(agent, limit=get_max_active_skills(agent=agent))
 
 
-def get_loaded_skill_entries(agent: Agent | None) -> list[ActiveSkillEntry]:
+def _normalize_loaded_skill_names(raw: Any) -> list[str]:
+    if not isinstance(raw, list):
+        return []
+
+    names: list[str] = []
+    for value in raw:
+        name = str(value or "").strip()
+        if name and name not in names:
+            names.append(name)
+    return names
+
+
+def get_loaded_skill_names(agent: Agent | None) -> list[str]:
     if not agent:
         return []
 
-    loaded = getattr(agent, "data", {}).get(AGENT_DATA_NAME_LOADED_SKILLS)
-    if not isinstance(loaded, list):
-        return []
+    context = getattr(agent, "context", None)
+    if context and hasattr(context, "get_data"):
+        names = _normalize_loaded_skill_names(
+            context.get_data(CONTEXT_DATA_NAME_LOADED_SKILLS)
+        )
+        if names:
+            data = getattr(agent, "data", None)
+            if isinstance(data, dict):
+                data.pop(AGENT_DATA_NAME_LOADED_SKILLS, None)
+            return names
 
-    return [
-        {"name": str(skill_name).strip()}
-        for skill_name in loaded
-        if str(skill_name).strip()
-    ]
+    legacy_names = _normalize_loaded_skill_names(
+        getattr(agent, "data", {}).get(AGENT_DATA_NAME_LOADED_SKILLS)
+    )
+    if legacy_names:
+        set_loaded_skill_names(agent, legacy_names)
+    return legacy_names
+
+
+def set_loaded_skill_names(agent: Agent | None, skill_names: Any) -> list[str]:
+    names = _normalize_loaded_skill_names(skill_names)[-MAX_ACTIVE_SKILLS:]
+    if not agent:
+        return names
+
+    context = getattr(agent, "context", None)
+    if context and hasattr(context, "set_data"):
+        context.set_data(CONTEXT_DATA_NAME_LOADED_SKILLS, names or None)
+        data = getattr(agent, "data", None)
+        if isinstance(data, dict):
+            data.pop(AGENT_DATA_NAME_LOADED_SKILLS, None)
+        return names
+
+    data = getattr(agent, "data", None)
+    if isinstance(data, dict):
+        data[AGENT_DATA_NAME_LOADED_SKILLS] = names
+    return names
+
+
+def add_loaded_skill_name(
+    agent: Agent | None,
+    skill_name: str,
+    *,
+    limit: int | None = None,
+) -> list[str]:
+    name = str(skill_name or "").strip()
+    if not name:
+        return get_loaded_skill_names(agent)
+
+    names = [loaded for loaded in get_loaded_skill_names(agent) if loaded != name]
+    names.append(name)
+    return set_loaded_skill_names(agent, names[-(limit or MAX_ACTIVE_SKILLS):])
+
+
+def get_loaded_skill_entries(agent: Agent | None) -> list[ActiveSkillEntry]:
+    return [{"name": skill_name} for skill_name in get_loaded_skill_names(agent)]
 
 
 def unload_agent_skill(agent: Agent | None, entry: Any) -> bool:
@@ -850,17 +923,9 @@ def unload_agent_skill(agent: Agent | None, entry: Any) -> bool:
     if not agent or not normalized:
         return False
 
-    data = getattr(agent, "data", None)
-    if not isinstance(data, dict):
-        return False
-
-    loaded = data.get(AGENT_DATA_NAME_LOADED_SKILLS)
-    if not isinstance(loaded, list):
-        return False
-
     next_loaded: list[str] = []
     removed = False
-    for skill_name in loaded:
+    for skill_name in get_loaded_skill_names(agent):
         loaded_entry = _normalize_active_skill_entry(str(skill_name))
         if loaded_entry and _entries_match(loaded_entry, normalized):
             removed = True
@@ -868,7 +933,7 @@ def unload_agent_skill(agent: Agent | None, entry: Any) -> bool:
         next_loaded.append(skill_name)
 
     if removed:
-        data[AGENT_DATA_NAME_LOADED_SKILLS] = next_loaded
+        set_loaded_skill_names(agent, next_loaded)
     return removed
 
 
