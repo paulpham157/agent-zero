@@ -179,7 +179,7 @@ const model = {
 
     if (action.startsWith("open-modal:")) {
       const path = action.slice("open-modal:".length);
-      if (path) window.openModal(path);
+      this.openModalPath(path);
       return;
     }
 
@@ -187,6 +187,34 @@ const model = {
       const url = action.slice("open-url:".length);
       if (url) window.open(url, "_blank", "noopener,noreferrer");
     }
+  },
+
+  handleBannerHtmlClick(event) {
+    const actionTarget = event?.target?.closest?.("[data-banner-action]");
+    if (!actionTarget) return;
+    const action = actionTarget.getAttribute("data-banner-action");
+    if (!action) return;
+
+    event.preventDefault();
+    event.stopPropagation();
+    this.executeBannerAction(action);
+  },
+
+  openModalPath(path) {
+    if (!path) return;
+
+    let modalPath = path;
+    let hash = "";
+    const hashIndex = path.indexOf("#");
+    if (hashIndex !== -1) {
+      modalPath = path.slice(0, hashIndex);
+      hash = path.slice(hashIndex + 1);
+    }
+
+    if (hash) {
+      history.replaceState(null, "", `#${hash}`);
+    }
+    if (modalPath) window.openModal(modalPath);
   },
 
   /**

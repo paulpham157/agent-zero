@@ -13,6 +13,8 @@
 
 - Keep banner and discovery card behavior compatible with Python `banners` extensions.
 - Supported banner/card CTA actions must stay synchronized with plugin discovery contracts.
+- Banner body links may use `data-banner-action`; these actions route through the same welcome action dispatcher as CTA buttons.
+- `open-modal:` banner actions may include a `#section-id` fragment, which updates the page hash before opening the modal so settings sections can deep-link correctly.
 - Do not show setup prompts for already configured plugins when backend status can prevent it.
 - The welcome screen mounts the shared chat composer to start a new chat; keep it mutually exclusive with the normal chat input DOM.
 - Render `system-resources` as the dedicated System Resources panel, not as a generic alert banner.

@@ -55,7 +55,9 @@
                                     </div>
                                     <div class="welcome-banner-content">
                                         <div class="welcome-banner-title" x-text="banner.title"></div>
-                                        <div class="welcome-banner-html" x-html="banner.html"></div>
+                                        <div class="welcome-banner-html"
+                                             x-html="banner.html"
+                                             @click="$store.welcomeStore.handleBannerHtmlClick($event)"></div>
                                     </div>
                                     <button class="welcome-banner-cta"
                                             type="button"

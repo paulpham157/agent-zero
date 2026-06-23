@@ -58,7 +58,12 @@ def test_welcome_screen_embeds_shared_new_chat_composer() -> None:
     assert 'class="welcome-banner-cta"' in welcome
     assert "executeBannerAction(banner.cta_action)" in welcome
     assert "executeBannerAction(action)" in welcome_store
+    assert "handleBannerHtmlClick($event)" in welcome
+    assert "handleBannerHtmlClick(event)" in welcome_store
+    assert "[data-banner-action]" in welcome_store
     assert 'action.startsWith("open-modal:")' in welcome_store
+    assert 'const hashIndex = path.indexOf("#");' in welcome_store
+    assert 'history.replaceState(null, "", `#${hash}`);' in welcome_store
     assert ".welcome-banner-html .onboarding-banner-btn-container" in welcome
     assert "justify-content: flex-end;" in welcome
     assert "justify-content: flex-start;" in welcome

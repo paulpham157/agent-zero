@@ -12,6 +12,7 @@
 
 - Banner IDs must be unique and stable.
 - Use supported banner/card fields and types only.
+- Banner HTML links that trigger WebUI behavior should use supported structured actions, such as `data-banner-action`, instead of inline JavaScript handlers.
 - Do not expose secrets, local paths, or raw system diagnostics in banner text.
 
 ## Work Guidance
