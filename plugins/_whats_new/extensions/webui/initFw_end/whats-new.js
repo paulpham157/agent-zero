@@ -1,17 +1,35 @@
 import { getModalStack, isModalOpen, openModal } from "/js/modals.js";
 
-const MODAL_PATH = "/plugins/_whats_new/webui/whats-new.html";
-const STORAGE_KEY = "a0_whats_new_seen_version";
+const MODAL_PATH = "/plugins/_whats_new/webui/main.html";
+const LEGACY_MODAL_PATH = "/plugins/_whats_new/webui/whats-new.html";
+const SEEN_VERSION_STORAGE_KEY = "a0_whats_new_seen_version";
+const NEVER_SHOW_STORAGE_KEY = "a0_whats_new_never_show";
+const INTERMEDIATE_ONCE_STORAGE_KEY = "a0_whats_new_seen_once";
 const STARTUP_DELAY_MS = 1200;
 const RETRY_DELAY_MS = 900;
 const MAX_BUSY_RETRIES = 20;
 
 let initialized = false;
 let busyRetries = 0;
-let openedForVersion = null;
 
 function cleanPath(path = "") {
   return String(path || "").replace(/^\/+/, "");
+}
+
+function storageValue(key) {
+  try {
+    return globalThis.localStorage?.getItem(key) || "";
+  } catch {
+    return "";
+  }
+}
+
+function storageSet(key, value) {
+  try {
+    globalThis.localStorage?.setItem(key, value);
+  } catch {
+    // localStorage may be unavailable in private or locked-down browser modes.
+  }
 }
 
 function parseVersion(value) {
@@ -31,6 +49,16 @@ function parseVersion(value) {
   };
 }
 
+function parseStoredVersion(rawValue) {
+  if (!rawValue) return null;
+  try {
+    const parsed = JSON.parse(rawValue);
+    return parseVersion(parsed?.version || parsed?.raw || rawValue);
+  } catch {
+    return parseVersion(rawValue);
+  }
+}
+
 function compareVersions(left, right) {
   if (!left || !right) return null;
   for (let index = 0; index < left.parts.length; index += 1) {
@@ -45,23 +73,43 @@ function currentVersion() {
   return parseVersion(globalThis.gitinfo?.version || "");
 }
 
-function storedSeenVersion() {
-  try {
-    const rawValue = globalThis.localStorage?.getItem(STORAGE_KEY) || "";
-    if (!rawValue) return null;
+function markVersionSeen(version = currentVersion()) {
+  if (!version) return;
+  storageSet(
+    SEEN_VERSION_STORAGE_KEY,
+    JSON.stringify({
+      version: version.raw,
+      seenAt: new Date().toISOString(),
+    }),
+  );
+}
 
-    try {
-      const parsed = JSON.parse(rawValue);
-      return parseVersion(parsed?.version || parsed?.raw || rawValue);
-    } catch {
-      return parseVersion(rawValue);
-    }
+function storedSeenVersion() {
+  const stored = parseStoredVersion(storageValue(SEEN_VERSION_STORAGE_KEY));
+  if (stored) return stored;
+
+  const intermediate = parseStoredVersion(storageValue(INTERMEDIATE_ONCE_STORAGE_KEY));
+  if (!intermediate) return null;
+
+  markVersionSeen(intermediate);
+  return intermediate;
+}
+
+function shouldNeverShow() {
+  const value = storageValue(NEVER_SHOW_STORAGE_KEY);
+  if (!value) return false;
+
+  try {
+    const parsed = JSON.parse(value);
+    if (parsed && typeof parsed === "object") return parsed.enabled !== false;
+    return Boolean(parsed);
   } catch {
-    return null;
+    return !["0", "false", "no", "off"].includes(value.trim().toLowerCase());
   }
 }
 
-function shouldShowWhatsNew(version) {
+function shouldShowWhatsNew(version = currentVersion()) {
+  if (shouldNeverShow()) return false;
   if (!version) return false;
 
   const seen = storedSeenVersion();
@@ -71,23 +119,17 @@ function shouldShowWhatsNew(version) {
   return comparison !== null && comparison > 0;
 }
 
-function markVersionSeen(version = currentVersion()) {
-  if (!version) return;
-  try {
-    globalThis.localStorage?.setItem(
-      STORAGE_KEY,
-      JSON.stringify({
-        version: version.raw,
-        seenAt: new Date().toISOString(),
-      }),
-    );
-  } catch {
-    // localStorage may be unavailable in private or locked-down browser modes.
-  }
-}
-
 function anotherModalIsOpen() {
   return getModalStack().length > 0 || Boolean(document.querySelector(".modal.show"));
+}
+
+function isWhatsNewPath(path = "") {
+  const cleaned = cleanPath(path);
+  return [MODAL_PATH, LEGACY_MODAL_PATH].some((candidate) => cleanPath(candidate) === cleaned);
+}
+
+function isWhatsNewOpen() {
+  return isModalOpen(MODAL_PATH) || isModalOpen(LEGACY_MODAL_PATH);
 }
 
 function scheduleRetry() {
@@ -102,21 +144,19 @@ function maybeOpenWhatsNew() {
   const version = currentVersion();
   if (!shouldShowWhatsNew(version)) return;
 
-  if (isModalOpen(MODAL_PATH)) return;
+  if (isWhatsNewOpen()) return;
   if (anotherModalIsOpen()) {
     scheduleRetry();
     return;
   }
 
-  openedForVersion = version;
   void openModal(MODAL_PATH);
 }
 
 function handleModalClosed(event) {
   const closedPath = event?.detail?.modalPath || "";
-  if (cleanPath(closedPath) === cleanPath(MODAL_PATH)) {
-    markVersionSeen(openedForVersion || currentVersion());
-    openedForVersion = null;
+  if (isWhatsNewPath(closedPath)) {
+    markVersionSeen();
     return;
   }
 

@@ -2,6 +2,7 @@ import { createStore } from "/js/AlpineStore.js";
 import { closeModal } from "/js/modals.js";
 
 const ASSET_BASE = "/plugins/_whats_new/webui/assets";
+const NEVER_SHOW_STORAGE_KEY = "a0_whats_new_never_show";
 
 const slides = [
   {
@@ -54,15 +55,58 @@ const slides = [
   },
 ];
 
+function storageValue(key) {
+  try {
+    return globalThis.localStorage?.getItem(key) || "";
+  } catch {
+    return "";
+  }
+}
+
+function isNeverShowEnabled() {
+  const value = storageValue(NEVER_SHOW_STORAGE_KEY);
+  if (!value) return false;
+
+  try {
+    const parsed = JSON.parse(value);
+    if (parsed && typeof parsed === "object") return parsed.enabled !== false;
+    return Boolean(parsed);
+  } catch {
+    return !["0", "false", "no", "off"].includes(value.trim().toLowerCase());
+  }
+}
+
+function persistNeverShowPreference(enabled) {
+  try {
+    if (enabled) {
+      globalThis.localStorage?.setItem(
+        NEVER_SHOW_STORAGE_KEY,
+        JSON.stringify({
+          enabled: true,
+          updatedAt: new Date().toISOString(),
+        }),
+      );
+    } else {
+      globalThis.localStorage?.removeItem(NEVER_SHOW_STORAGE_KEY);
+    }
+  } catch {
+    // localStorage may be unavailable in private or locked-down browser modes.
+  }
+}
+
 export const store = createStore("whatsNew", {
   slides,
   currentIndex: 0,
+  neverShowAgain: false,
 
   onOpen() {
     this.currentIndex = 0;
+    this.neverShowAgain = isNeverShowEnabled();
   },
 
-  cleanup() {},
+  cleanup() {
+    persistNeverShowPreference(this.neverShowAgain);
+  },
 
   get currentSlide() {
     return this.slides[this.currentIndex] || this.slides[0];
@@ -94,6 +138,11 @@ export const store = createStore("whatsNew", {
 
   previous() {
     if (!this.isFirst()) this.currentIndex -= 1;
+  },
+
+  setNeverShowAgain(value) {
+    this.neverShowAgain = Boolean(value);
+    persistNeverShowPreference(this.neverShowAgain);
   },
 
   next() {
