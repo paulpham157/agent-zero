@@ -597,7 +597,9 @@ function markSurfaceModal(modal, metadata) {
   const inner = modal?.inner || element?.querySelector?.(".modal-inner");
   if (!element || !inner) return;
   element.dataset.surfaceId = metadata.surfaceId;
+  element.dataset.modalRestore = "surface";
   element.classList.add("surface-floating", "modal-floating", "modal-no-backdrop", "modal-explicit-close");
+  inner.dataset.modalRestore = "surface";
   inner.classList.add("surface-modal", "modal-no-backdrop", "modal-explicit-close");
 }
 
@@ -709,8 +711,9 @@ async function configureSurfaceModal(event) {
   markSurfaceModal(modal, metadata);
   configureModalSurfaceSwitcher(modal, metadata);
   configureModalDockButton(modal, metadata);
-  const { refreshModalStack } = await modalApi();
+  const { persistRestorableModalStack, refreshModalStack } = await modalApi();
   refreshModalStack();
+  persistRestorableModalStack?.({ force: true });
 }
 
 export async function open(surfaceId = "", payload = {}) {

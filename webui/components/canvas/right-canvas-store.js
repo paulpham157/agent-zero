@@ -13,6 +13,7 @@ import {
 } from "/js/surfaces.js";
 
 const STORAGE_KEY = "a0.rightCanvas";
+const SESSION_STORAGE_KEY = "a0.rightCanvas.session";
 const DEFAULT_WIDTH = 720;
 const MIN_WIDTH = 0;
 const DESKTOP_BREAKPOINT = 1200;
@@ -32,6 +33,13 @@ function normalizeWidth(value, fallback = DEFAULT_WIDTH) {
   return Number.isFinite(width) ? Math.max(MIN_WIDTH, Math.round(width)) : fallback;
 }
 
+function isReloadNavigation() {
+  const navigation = performance.getEntriesByType?.("navigation")?.[0];
+  if (navigation?.type) return navigation.type === "reload";
+  if (!performance.navigation) return false;
+  return performance.navigation?.type === performance.navigation?.TYPE_RELOAD;
+}
+
 const model = {
   surfaces: [],
   activeSurfaceId: "",
@@ -46,11 +54,15 @@ const model = {
   _rootElement: null,
   _resizeCleanup: null,
   _lastPayloadBySurface: {},
+  _restoreOpenRequested: false,
+  _restoreOpenTimer: null,
+  _restoringSurface: false,
 
   async init(element = null) {
     if (element) this._rootElement = element;
     if (this._initialized) {
       this.applyLayoutState();
+      this.scheduleRestoreOpenSurface();
       return;
     }
 
@@ -70,6 +82,7 @@ const model = {
       await callJsExtensions("right_canvas_register_surfaces", this);
       this._registering = false;
       this.ensureActiveSurface();
+      this.scheduleRestoreOpenSurface();
     }
   },
 
@@ -126,6 +139,9 @@ const model = {
     if (typeof surface.canOpen === "function" && surface.canOpen(payload) === false) {
       return false;
     }
+
+    this._restoreOpenRequested = false;
+    this.cancelRestoreOpenSurface();
 
     if (surface.actionOnly) {
       try {
@@ -226,6 +242,8 @@ const model = {
   },
 
   async close() {
+    this._restoreOpenRequested = false;
+    this.cancelRestoreOpenSurface();
     this.isOpen = false;
     this.persist();
     this.applyLayoutState();
@@ -314,6 +332,9 @@ const model = {
     if (!surface || !modalPath) return false;
     const openModal = globalThis.ensureModalOpen || globalThis.openModal;
     if (!openModal) return false;
+
+    this._restoreOpenRequested = false;
+    this.cancelRestoreOpenSurface();
 
     if (this.isOpen && this.activeSurfaceId === targetId) {
       this.isOpen = false;
@@ -420,19 +441,57 @@ const model = {
     }
   },
 
-  persist() {
+  cancelRestoreOpenSurface() {
+    if (!this._restoreOpenTimer) return;
+    globalThis.clearTimeout?.(this._restoreOpenTimer);
+    this._restoreOpenTimer = null;
+  },
+
+  scheduleRestoreOpenSurface() {
+    if (!this._restoreOpenRequested || this._restoreOpenTimer) return;
+    if (!this.shouldRender() || this.isMobileMode) return;
+    this._restoreOpenTimer = globalThis.setTimeout?.(() => {
+      this._restoreOpenTimer = null;
+      this.restoreOpenSurface();
+    }, 0) || null;
+  },
+
+  async restoreOpenSurface() {
+    if (!this._restoreOpenRequested || this._restoringSurface) return false;
+    if (!this.shouldRender() || this.isMobileMode) {
+      return false;
+    }
+
+    const targetId = normalizeSurfaceId(this.activeSurfaceId || this.panelSurfaces[0]?.id || "");
+    if (!targetId || !this.getSurface(targetId)) {
+      return false;
+    }
+
+    this._restoreOpenRequested = false;
+    this._restoringSurface = true;
     try {
-      localStorage.setItem(
-        STORAGE_KEY,
-        JSON.stringify({
-          isOpen: this.isOpen,
-          activeSurfaceId: this.activeSurfaceId,
-          surfaceModes: this.surfaceModes,
-          width: this.width,
-        }),
-      );
+      return await this.open(targetId, { source: "reload-restore" });
+    } finally {
+      this._restoringSurface = false;
+    }
+  },
+
+  persist() {
+    const state = {
+      isOpen: this.isOpen,
+      activeSurfaceId: this.activeSurfaceId,
+      surfaceModes: this.surfaceModes,
+      width: this.width,
+    };
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
     } catch (error) {
       console.warn("Could not persist right canvas state", error);
+    }
+    try {
+      sessionStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(state));
+    } catch (error) {
+      console.warn("Could not persist right canvas session state", error);
     }
   },
 
@@ -452,6 +511,31 @@ const model = {
     } catch (error) {
       console.warn("Could not restore right canvas state", error);
     }
+
+    if (isReloadNavigation()) {
+      try {
+        const savedSession = migratePersistedSurfaceState(
+          JSON.parse(sessionStorage.getItem(SESSION_STORAGE_KEY) || "{}"),
+        );
+        if (savedSession?.activeSurfaceId) this.activeSurfaceId = String(savedSession.activeSurfaceId);
+        if (savedSession?.surfaceModes) {
+          this.surfaceModes = Object.fromEntries(
+            Object.entries(savedSession.surfaceModes || {}).map(([surfaceId, mode]) => [
+              surfaceId,
+              normalizeSurfaceMode(mode),
+            ]),
+          );
+        }
+        if (Number.isFinite(Number(savedSession?.width))) this.width = Number(savedSession.width);
+        this._restoreOpenRequested = Boolean(savedSession?.isOpen && savedSession?.activeSurfaceId);
+      } catch (error) {
+        console.warn("Could not restore right canvas session state", error);
+        sessionStorage.removeItem(SESSION_STORAGE_KEY);
+      }
+    } else {
+      sessionStorage.removeItem(SESSION_STORAGE_KEY);
+    }
+
     this.setWidth(this.width, { persist: false });
   },
 
@@ -485,6 +569,7 @@ const model = {
     document.body.classList.toggle("right-canvas-open", this.isOpen && !this.isMobileMode && this.shouldRender());
     document.body.classList.toggle("right-canvas-overlay-mode", this.isOverlayMode);
     document.body.classList.toggle("right-canvas-mobile-mode", this.isMobileMode);
+    this.scheduleRestoreOpenSurface();
   },
 
   widthStyle() {

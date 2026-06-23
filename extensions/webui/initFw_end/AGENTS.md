@@ -6,7 +6,7 @@
 
 ## Ownership
 
-- JavaScript files own post-bootstrap global setup such as self-update helpers.
+- JavaScript files own post-bootstrap global setup such as self-update helpers and session-scoped UI restoration hooks.
 
 ## Local Contracts
 

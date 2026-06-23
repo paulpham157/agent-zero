@@ -29,6 +29,7 @@
 - Opening the same modal path multiple times must continue creating multiple stack entries; no dedupe is assumed.
 - `closeModal()` with no path closes the top modal; `closeModal(path)` closes that path wherever it is in the stack; missing paths are no-ops.
 - Modal stack semantics are top-modal-first for Escape, close buttons, z-index, and backdrop placement.
+- Restorable modal state is session-scoped and opt-in; surface modals may set `data-modal-restore="surface"` and `modals.js` restores only those path-based surface windows after reload navigation. Browser hard-refresh is still reported to app code as reload, so do not treat this as durable cross-session UI state.
 - The modal shell structure is `.modal` > `.modal-inner` > `.modal-header`, `.modal-scroll` containing `.modal-bd`, and `.modal-footer-slot`.
 - `data-modal-footer` content is relocated from modal body into `.modal-footer-slot`.
 - Click-outside close requires both `mousedown` and `mouseup` on the outer `.modal` container.
