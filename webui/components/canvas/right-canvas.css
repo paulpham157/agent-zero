@@ -318,8 +318,39 @@ body.right-canvas-overlay-mode .right-canvas-resize-handle {
   display: none;
 }
 
-body.right-canvas-mobile-mode .right-canvas,
+body.right-canvas-mobile-mode .right-canvas {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 3400;
+  display: flex !important;
+  width: 0 !important;
+  min-width: 0;
+  height: 100%;
+  overflow: visible;
+  transform: none;
+  border-left: 0;
+  background: transparent;
+  box-shadow: none;
+  pointer-events: none;
+}
+
+body.right-canvas-mobile-mode .right-canvas.is-open {
+  transform: none;
+}
+
 body.right-canvas-mobile-mode .right-canvas-rail {
+  position: fixed;
+  top: 50%;
+  right: max(0px, env(safe-area-inset-right));
+  display: flex !important;
+  transform: translateY(-50%);
+  pointer-events: auto;
+}
+
+body.right-canvas-mobile-mode .right-canvas-shell,
+body.right-canvas-mobile-mode .right-canvas-resize-handle {
   display: none !important;
 }
 

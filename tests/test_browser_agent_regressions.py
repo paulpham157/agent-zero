@@ -810,6 +810,9 @@ def test_surface_buttons_keep_modal_and_canvas_entry_points_separate():
     canvas_html = (PROJECT_ROOT / "webui" / "components" / "canvas" / "right-canvas.html").read_text(
         encoding="utf-8"
     )
+    canvas_css = (PROJECT_ROOT / "webui" / "components" / "canvas" / "right-canvas.css").read_text(
+        encoding="utf-8"
+    )
     modals_js = (PROJECT_ROOT / "webui" / "js" / "modals.js").read_text(encoding="utf-8")
     modals_css = (PROJECT_ROOT / "webui" / "css" / "modals.css").read_text(encoding="utf-8")
     surfaces_js = (PROJECT_ROOT / "webui" / "js" / "surfaces.js").read_text(encoding="utf-8")
@@ -825,6 +828,10 @@ def test_surface_buttons_keep_modal_and_canvas_entry_points_separate():
     open_modal_block = canvas_store[
         canvas_store.index("async openModalSurface"):
         canvas_store.index("async undockActiveSurface")
+    ]
+    should_render_block = canvas_store[
+        canvas_store.index("shouldRender()"):
+        canvas_store.index("};\n\nexport const store")
     ]
     surface_button_block = surfaces_js[
         surfaces_js.index("function createModalSurfaceButton"):
@@ -845,6 +852,12 @@ def test_surface_buttons_keep_modal_and_canvas_entry_points_separate():
     assert "surfaceModes: this.surfaceModes" in canvas_store
     assert "normalizeSurfaceMode(mode)" in canvas_store
     assert "migratePersistedSurfaceState" in canvas_store
+    assert "if (this.isMobileMode && !surface.actionOnly)" not in canvas_store
+    assert "return await this.openModalSurface(targetId, payload);" in canvas_store
+    assert "return await this.open(targetId, payload);" in canvas_store
+    assert 'return await this.open(this.activeSurfaceId || this.panelSurfaces[0]?.id || "", { source: "mobile-toggle" });' in canvas_store
+    assert "return true;" in should_render_block
+    assert "isMobileMode" not in should_render_block
     assert "this.mountedSurfaces = {}" not in close_block
     assert "surface?.close" not in close_block
     assert "this.mountedSurfaces = {}" not in undock_block
@@ -854,6 +867,10 @@ def test_surface_buttons_keep_modal_and_canvas_entry_points_separate():
 
     assert '@click="$store.rightCanvas.openLatest(surface.id)"' not in canvas_html
     assert canvas_html.count('@click="$store.rightCanvas.open(surface.id)"') == 2
+    assert "body.right-canvas-mobile-mode .right-canvas-rail" in canvas_css
+    assert "display: flex !important;" in canvas_css
+    assert "body.right-canvas-mobile-mode .right-canvas-shell" in canvas_css
+    assert "body.right-canvas-mobile-mode .right-canvas,\nbody.right-canvas-mobile-mode .right-canvas-rail" not in canvas_css
 
     assert "recordMode(metadata.surfaceId, SURFACE_MODE_FLOATING)" in surfaces_js
     assert "configureModalSurfaceSwitcher" in surfaces_js
@@ -886,6 +903,13 @@ def test_surface_buttons_keep_modal_and_canvas_entry_points_separate():
     assert ".modal-surface-button.is-active" in surfaces_css
     assert ".modal-surface-image" in surfaces_css
     assert ".modal.modal-surface-parked" in surfaces_css
+    assert "@media (max-width: 768px)" in surfaces_css
+    assert ".modal-inner.surface-modal .surface-modal-action-group-surfaces" in surfaces_css
+    assert ".modal-inner.surface-modal .surface-modal-action-group-window" in surfaces_css
+    assert ".modal-inner.surface-modal .surface-modal-action-group-new" in surfaces_css
+    assert ".modal-inner.editor-modal .surface-modal-action-group-new" in surfaces_css
+    assert ".surface-modal-new-action:not(.editor-header-actions)" in surfaces_css
+    assert "const safeMinWidth = Math.min(minWidth, maxWidth)" in surfaces_js
     assert "grid-auto-flow: column" in surfaces_css
     assert 'id: "browser"' in surfaces_js
     assert 'id: "desktop"' in surfaces_js

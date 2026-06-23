@@ -416,6 +416,8 @@ export function setupFloatingSurfaceModalChrome(options = {}) {
 
   const viewportWidth = () => Math.max(document.documentElement.clientWidth || 0, globalThis.innerWidth || 0);
   const viewportHeight = () => Math.max(document.documentElement.clientHeight || 0, globalThis.innerHeight || 0);
+  const availableWidth = () => Math.max(1, viewportWidth() - viewportGap * 2);
+  const availableHeight = () => Math.max(1, viewportHeight() - viewportGap * 2);
   const currentBounds = () => {
     const bounds = inner.getBoundingClientRect();
     return {
@@ -426,10 +428,12 @@ export function setupFloatingSurfaceModalChrome(options = {}) {
     };
   };
   const normalizedBounds = (bounds = {}) => {
-    const maxWidth = Math.max(minWidth, viewportWidth() - viewportGap * 2);
-    const maxHeight = Math.max(minHeight, viewportHeight() - viewportGap * 2);
-    const width = Math.min(Math.max(minWidth, Number(bounds.width || minWidth)), maxWidth);
-    const height = Math.min(Math.max(minHeight, Number(bounds.height || minHeight)), maxHeight);
+    const maxWidth = availableWidth();
+    const maxHeight = availableHeight();
+    const safeMinWidth = Math.min(minWidth, maxWidth);
+    const safeMinHeight = Math.min(minHeight, maxHeight);
+    const width = Math.min(Math.max(safeMinWidth, Number(bounds.width || safeMinWidth)), maxWidth);
+    const height = Math.min(Math.max(safeMinHeight, Number(bounds.height || safeMinHeight)), maxHeight);
     return {
       left: Math.min(
         Math.max(viewportGap, Number(bounds.left || viewportGap)),
@@ -461,16 +465,16 @@ export function setupFloatingSurfaceModalChrome(options = {}) {
     inner.style.top = `${Math.round(next.top)}px`;
     inner.style.width = `${Math.round(next.width)}px`;
     inner.style.height = `${Math.round(next.height)}px`;
-    inner.style.maxWidth = `${Math.max(minWidth, viewportWidth() - viewportGap * 2)}px`;
-    inner.style.maxHeight = `${Math.max(minHeight, viewportHeight() - viewportGap * 2)}px`;
+    inner.style.maxWidth = `${availableWidth()}px`;
+    inner.style.maxHeight = `${availableHeight()}px`;
     notifyBoundsChange();
     return next;
   };
   const focusBounds = () => ({
     left: viewportGap,
     top: viewportGap,
-    width: viewportWidth() - viewportGap * 2,
-    height: viewportHeight() - viewportGap * 2,
+    width: availableWidth(),
+    height: availableHeight(),
   });
   const clampGeometry = () => {
     if (inner.classList.contains("is-focus-mode")) {

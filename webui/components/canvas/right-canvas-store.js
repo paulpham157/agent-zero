@@ -122,9 +122,6 @@ const model = {
     if (!surface) {
       return false;
     }
-    if (this.isMobileMode && !surface.actionOnly) {
-      return false;
-    }
     if (typeof surface.canOpen === "function" && surface.canOpen(payload) === false) {
       return false;
     }
@@ -136,6 +133,12 @@ const model = {
         console.error(`Canvas action ${targetId} failed`, error);
       }
       return true;
+    }
+
+    if (this.isMobileMode) {
+      this.activeSurfaceId = targetId;
+      this.isOpen = false;
+      return await this.openModalSurface(targetId, payload);
     }
 
     this.activeSurfaceId = targetId;
@@ -208,6 +211,9 @@ const model = {
   async openLatest(surfaceId = "", payload = {}) {
     const targetId = normalizeSurfaceId(surfaceId || this.activeSurfaceId || this.panelSurfaces[0]?.id || "");
     if (!targetId) return false;
+    if (this.isMobileMode) {
+      return await this.open(targetId, payload);
+    }
     if (this.latestSurfaceMode(targetId) === SURFACE_MODE_FLOATING) {
       return await this.openModalSurface(targetId, payload);
     }
@@ -337,7 +343,7 @@ const model = {
 
   async toggleCanvas() {
     if (this.isMobileMode) {
-      return false;
+      return await this.open(this.activeSurfaceId || this.panelSurfaces[0]?.id || "", { source: "mobile-toggle" });
     }
     if (this.isOpen) {
       await this.close();
@@ -512,7 +518,7 @@ const model = {
   },
 
   shouldRender() {
-    return !this.isMobileMode;
+    return true;
   },
 };
 

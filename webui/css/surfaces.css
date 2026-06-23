@@ -176,6 +176,23 @@
   }
 }
 
+@media (max-width: 768px) {
+  .modal-inner.surface-modal .surface-modal-action-group-surfaces,
+  .modal-inner.surface-modal .surface-modal-action-group-window,
+  .modal-inner.surface-modal .surface-modal-action-separator,
+  .modal-inner.surface-modal .surface-modal-action-group-new {
+    display: none !important;
+  }
+
+  .modal-inner.editor-modal .surface-modal-action-group-new {
+    display: inline-flex !important;
+  }
+
+  .modal-inner.editor-modal .surface-modal-action-group-new .surface-modal-new-action:not(.editor-header-actions) {
+    display: none !important;
+  }
+}
+
 .surface-image,
 .modal-surface-image {
   display: block;
