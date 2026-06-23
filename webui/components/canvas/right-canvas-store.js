@@ -1,4 +1,5 @@
 import { createStore } from "/js/AlpineStore.js";
+import { store as chatsStore } from "/components/sidebar/chats/chats-store.js";
 import { callJsExtensions } from "/js/extensions.js";
 import {
   SURFACE_MODE_DOCKED,
@@ -133,6 +134,10 @@ const model = {
         console.error(`Canvas action ${targetId} failed`, error);
       }
       return true;
+    }
+
+    if (!this.shouldRender()) {
+      return await this.openModalSurface(targetId, payload);
     }
 
     if (this.isMobileMode) {
@@ -342,6 +347,7 @@ const model = {
   },
 
   async toggleCanvas() {
+    if (!this.shouldRender()) return false;
     if (this.isMobileMode) {
       return await this.open(this.activeSurfaceId || this.panelSurfaces[0]?.id || "", { source: "mobile-toggle" });
     }
@@ -476,7 +482,7 @@ const model = {
   applyLayoutState() {
     this.updateLayoutMode();
     document.documentElement.style.setProperty("--right-canvas-width", `${this.width}px`);
-    document.body.classList.toggle("right-canvas-open", this.isOpen && !this.isMobileMode);
+    document.body.classList.toggle("right-canvas-open", this.isOpen && !this.isMobileMode && this.shouldRender());
     document.body.classList.toggle("right-canvas-overlay-mode", this.isOverlayMode);
     document.body.classList.toggle("right-canvas-mobile-mode", this.isMobileMode);
   },
@@ -517,8 +523,12 @@ const model = {
     return this.currentSurface()?.title || "Canvas";
   },
 
+  isWelcomeVisible() {
+    return !chatsStore.selected;
+  },
+
   shouldRender() {
-    return true;
+    return !this.isWelcomeVisible();
   },
 };
 

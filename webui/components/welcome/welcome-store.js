@@ -2,7 +2,7 @@ import { createStore } from "/js/AlpineStore.js";
 import { store as chatsStore } from "/components/sidebar/chats/chats-store.js";
 import { store as memoryStore } from "/plugins/_memory/webui/memory-dashboard-store.js";
 import { store as projectsStore } from "/components/projects/projects-store.js";
-import { store as chatInputStore } from "/components/chat/input/input-store.js";
+import { store as fileBrowserStore } from "/components/modals/file-browser/file-browser-store.js";
 import * as API from "/js/api.js";
 import { getCurrentUserISOString } from "/js/time-utils.js";
 
@@ -261,7 +261,7 @@ const model = {
         memoryStore.openModal();
         break;
       case "files":
-        chatInputStore.browseFiles();
+        fileBrowserStore.open();
         break;
       case "website":
         window.open("https://agent-zero.ai", "_blank");

@@ -144,6 +144,7 @@ def test_file_browser_is_registered_as_right_canvas_surface() -> None:
     register = read("extensions", "webui", "right_canvas_register_surfaces", "register-files.js")
     panel = read("extensions", "webui", "right-canvas-panels", "files-panel.html")
     input_store = read("webui", "components", "chat", "input", "input-store.js")
+    welcome_store = read("webui", "components", "welcome", "welcome-store.js")
 
     assert 'id: "files"' in surfaces
     assert 'title: "Files"' in surfaces
@@ -167,6 +168,9 @@ def test_file_browser_is_registered_as_right_canvas_surface() -> None:
     assert 'data-surface-id="files"' in panel
     assert 'path="modals/file-browser/file-browser.html" mode="canvas"' in panel
     assert 'openLatestSurface("files"' in input_store
+    assert 'import { store as fileBrowserStore } from "/components/modals/file-browser/file-browser-store.js";' in welcome_store
+    assert "fileBrowserStore.open()" in welcome_store
+    assert "chatInputStore.browseFiles" not in welcome_store
 
 
 def test_file_browser_reports_missing_directory(tmp_path: Path) -> None:

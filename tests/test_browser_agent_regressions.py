@@ -830,7 +830,7 @@ def test_surface_buttons_keep_modal_and_canvas_entry_points_separate():
         canvas_store.index("async undockActiveSurface")
     ]
     should_render_block = canvas_store[
-        canvas_store.index("shouldRender()"):
+        canvas_store.index("\n  shouldRender()"):
         canvas_store.index("};\n\nexport const store")
     ]
     surface_button_block = surfaces_js[
@@ -845,6 +845,7 @@ def test_surface_buttons_keep_modal_and_canvas_entry_points_separate():
     assert "markSurfaceMounted(targetId)" in canvas_store
     assert "isSurfaceRendered(id)" in canvas_store
     assert "isSurfaceVisible(id)" in canvas_store
+    assert 'import { store as chatsStore } from "/components/sidebar/chats/chats-store.js";' in canvas_store
     assert "async openLatest(surfaceId" in canvas_store
     assert "async openModalSurface(surfaceId" in canvas_store
     assert "this.recordSurfaceMode(targetId, SURFACE_MODE_DOCKED" in canvas_store
@@ -856,8 +857,10 @@ def test_surface_buttons_keep_modal_and_canvas_entry_points_separate():
     assert "return await this.openModalSurface(targetId, payload);" in canvas_store
     assert "return await this.open(targetId, payload);" in canvas_store
     assert 'return await this.open(this.activeSurfaceId || this.panelSurfaces[0]?.id || "", { source: "mobile-toggle" });' in canvas_store
-    assert "return true;" in should_render_block
+    assert "isWelcomeVisible()" in canvas_store
+    assert "return !this.isWelcomeVisible();" in should_render_block
     assert "isMobileMode" not in should_render_block
+    assert 'document.body.classList.toggle("right-canvas-open", this.isOpen && !this.isMobileMode && this.shouldRender());' in canvas_store
     assert "this.mountedSurfaces = {}" not in close_block
     assert "surface?.close" not in close_block
     assert "this.mountedSurfaces = {}" not in undock_block
