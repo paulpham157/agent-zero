@@ -44,6 +44,54 @@ You'll also be prompted through the UI when a new A0 version is released. Backup
 
 For technical details of the updater, see [Self Update](../guides/self-update.md).
 
+### Updating from v1.20 to v2.0
+
+Agent Zero v2.0 starts a new major release line. If your instance is on v1.20,
+the in-app Self Update can show the newer v2.x line, but it will not apply that
+jump inside the existing v1 Docker image. The safe path is:
+
+1. Create a backup zip from the old v1.20 instance.
+2. Pull the new `agent0ai/agent-zero:latest` Docker image. For the v2.0 release,
+   `latest` is the v2.0 image.
+3. Start a new container from that image.
+4. Restore the backup zip into the new v2.0 instance.
+
+![Self Update warning for a newer major release line](../res/usage/updating/self-update-v1-to-v2-warning.png)
+
+#### Without Agent Zero Launcher
+
+Use this path if you manage Agent Zero directly from Docker Desktop or Docker
+CLI.
+
+1. Open your old v1.20 Web UI and create a backup from **Settings -> Check for Updates -> Backup & Restore -> Create Backup**. Keep the downloaded `.zip` file.
+2. Pull the v2.0 image. In **Docker Desktop**, search for `agent0ai/agent-zero:latest` and pull that image. In **Docker CLI**, run:
+   ```bash
+   docker pull agent0ai/agent-zero:latest
+   ```
+3. Start a new v2.0 container on a different host port so the old instance stays available:
+   ```bash
+   docker run -d -p 50081:80 --name agent-zero-v2 -v a0_v2_usr:/a0/usr agent0ai/agent-zero:latest
+   ```
+4. Open the new v2.0 instance, complete any first-run prompts, then restore the downloaded `.zip` from **Settings -> Check for Updates -> Backup & Restore -> Restore Backup**.
+5. Verify chats, projects, memory, settings, and custom plugins before removing the old v1.20 container.
+
+#### With Agent Zero Launcher
+
+Launcher gives you the same backup/restore idea from the **Instances** page.
+
+1. Open **Instances**, choose the old v1.20 Instance, and use **Backup `/a0/usr`**.
+2. Open **Installs**, use the **latest** card, then **Install** or **Run** the image. For the v2.0 release, **latest** is the v2.0 image.
+3. Return to **Instances**, choose the new v2.0 Instance, and use **Restore `/a0/usr`** with the backup zip.
+4. Open the new Instance and verify it before deleting or stopping the old v1.20 container.
+
+Launcher keeps old and new Instances visible separately, which makes it easier
+to compare them before cleanup.
+
+> [!CAUTION]
+> Do not try to solve the v1.20 -> v2.0 jump by bind-mounting the whole old
+> `/a0` directory into a new container. Keep user data under `/a0/usr`, use the
+> backup/restore flow, and let the new image provide the v2.0 system files.
+
 ### Updating from Pre-v0.9.8
 
 If you are upgrading from Agent Zero v0.9.8 or earlier to v1.1 or newer, use the migration path below. Older installs were laid out differently, so the in-app Self Update is not the right tool for that jump.
@@ -61,9 +109,9 @@ If you are upgrading from Agent Zero v0.9.8 or earlier to v1.1 or newer, use the
 
 1. Keep the current container running
 2. `docker pull agent0ai/agent-zero:latest`
-3. Start a **new** container on a different host port, for example: `docker run -d -p 50081:80 --name agent-zero-new agent0ai/agent-zero`
-4. On the **old** instance: **Settings -> Backup & Restore -> Create Backup**
-5. On the **new** instance: **Restore** the backup
+3. Start a **new** container on a different host port, for example: `docker run -d -p 50081:80 --name agent-zero-new agent0ai/agent-zero:latest`
+4. On the **old** instance: **Settings -> Check for Updates -> Backup & Restore -> Create Backup**
+5. On the **new** instance: restore the downloaded backup zip
 6. Verify chats and data, then remove the old container
 
 > [!CAUTION]

@@ -12,6 +12,7 @@ docs focus on practical setup, screenshots, and user workflows.
 ## Quick Start
 
 - **[Quickstart Guide](quickstart.md):** Get up and running in 5 minutes with Agent Zero.
+- **[Agent Zero Launcher](guides/launcher.md):** Use the desktop app to set up Docker, install Agent Zero, open Instances, or connect a remote Instance.
 - **[First-Run Onboarding](guides/onboarding.md):** Choose Cloud or Local, add a provider key, and select main and utility models.
 - **[Installation Guide](setup/installation.md):** Install scripts, updates, and advanced Docker setup (includes [How to Update](setup/installation.md#how-to-update-agent-zero)).
 - **[A0 CLI Connector](guides/a0-cli-connector.md):** Install the host connector for a running Agent Zero instance, use the command palette, and switch Browser modes.
@@ -22,6 +23,7 @@ docs focus on practical setup, screenshots, and user workflows.
 ## User Guides
 
 - **[Usage Guide](guides/usage.md):** Practical tour of Agent Zero's main workflows.
+- **[Agent Zero Launcher](guides/launcher.md):** Fresh-machine Launcher walkthrough, Docker setup gate, Installs, Instances, and docs screenshot capture with Playwright/Electron.
 - **[First-Run Onboarding](guides/onboarding.md):** Set up OpenRouter, our proxy API or another provider with the guided wizard.
 - **[Browser Guide](guides/browser.md):** Use the built-in Browser, live Canvas surface, annotations, screenshots, host browser mode, and extensions.
 - **[Desktop Guide](guides/desktop.md):** Use the built-in Linux desktop, GUI apps, and LibreOffice Writer/Calc/Impress Cowork.
@@ -63,6 +65,7 @@ docs focus on practical setup, screenshots, and user workflows.
 
 - [Quick Start](#quick-start)
   - [Quickstart Guide](quickstart.md)
+  - [Agent Zero Launcher](guides/launcher.md)
   - [First-Run Onboarding](guides/onboarding.md)
   - [Installation Guide](setup/installation.md)
     - [How to Update Agent Zero](setup/installation.md#how-to-update-agent-zero)
@@ -113,6 +116,7 @@ docs focus on practical setup, screenshots, and user workflows.
     - [File Browser](guides/usage.md#file-browser)
     - [Memory Management](guides/usage.md#memory-management)
     - [Backup And Restore](guides/usage.md#backup-and-restore)
+  - [Agent Zero Launcher](guides/launcher.md)
   - [Browser Guide](guides/browser.md)
   - [Desktop Guide](guides/desktop.md)
   - [A0 CLI Connector](guides/a0-cli-connector.md)

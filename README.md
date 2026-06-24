@@ -13,6 +13,7 @@ Agent Zero is an open, dynamic, organic agentic framework. One Docker container 
 [![GitHub Sponsors](https://img.shields.io/badge/Sponsors-Thank%20you-FF69B4?style=for-the-badge&logo=githubsponsors&logoColor=white)](https://github.com/sponsors/agent0ai)
 
 [Install](#how-to-install) |
+[Launcher](#agent-zero-launcher) |
 [What's Different](#what-makes-agent-zero-different) |
 [A0 CLI](#a0-cli-connector-extend-onto-your-host-machine) |
 [Docs](#documentation)
@@ -33,6 +34,14 @@ Agent Zero is an open, dynamic, organic agentic framework. One Docker container 
 # What Makes Agent Zero Different
 
 ## How To Install
+
+### Agent Zero Launcher
+
+Starting fresh on a new machine? Use the desktop **Agent Zero Launcher** if you want a guided app instead of manual Docker commands.
+
+Download the Launcher from the [A0 Launcher releases](https://github.com/agent0ai/a0-launcher/releases), open it, and let it check your local runtime. If Docker is missing or stopped, the Launcher offers a setup path before it downloads Agent Zero. If you already host Agent Zero elsewhere, add it as a remote Instance and use the Launcher without local Docker setup.
+
+See the [Agent Zero Launcher guide](./docs/guides/launcher.md) for the first-run walkthrough, screenshots, and the Playwright/Electron capture recipe used for documentation.
 
 ### macOS / Linux
 

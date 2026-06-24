@@ -7,6 +7,10 @@ Agent Zero, add a model or API key, open the Web UI, and give it a concrete job.
 
 Run one command; the script handles Docker, image pull, and container setup.
 
+Prefer a desktop app on a fresh machine? Start with
+[Agent Zero Launcher](guides/launcher.md). It can set up the local runtime,
+download Agent Zero, open Instances, or save a remote Instance URL.
+
 **macOS / Linux:**
 ```bash
 curl -fsSL https://bash.agent-zero.ai | bash
