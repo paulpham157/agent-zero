@@ -14,7 +14,7 @@ docs focus on practical setup, screenshots, and user workflows.
 - **[Quickstart Guide](quickstart.md):** Get up and running in 5 minutes with Agent Zero.
 - **[Agent Zero Launcher](guides/launcher.md):** Use the desktop app to set up Docker, install Agent Zero, open Instances, or connect a remote Instance.
 - **[First-Run Onboarding](guides/onboarding.md):** Choose Cloud or Local, add a provider key, and select main and utility models.
-- **[Installation Guide](setup/installation.md):** Install scripts, updates, and advanced Docker setup (includes [How to Update](setup/installation.md#how-to-update-agent-zero)).
+- **[Installation Guide](setup/installation.md):** A0 Launcher downloads, A0 Install, direct Docker, updates, and advanced Docker setup (includes [How to Update](setup/installation.md#how-to-update-agent-zero)).
 - **[A0 CLI Connector](guides/a0-cli-connector.md):** Install the host connector for a running Agent Zero instance, use the command palette, and switch Browser modes.
 - **[Self Update](guides/self-update.md):** How the in-app updater works (technical reference).
 - **[VPS Deployment](setup/vps-deployment.md):** Deploy Agent Zero on a remote server.

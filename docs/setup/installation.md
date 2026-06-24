@@ -6,24 +6,77 @@
 
 ## Quick Start (Recommended)
 
-The install script is the fastest way to get Agent Zero running. It handles Docker, image pulling, and container setup automatically.
+Agent Zero runs as a Docker container, and you now have two friendly ways to get
+there:
 
-**macOS / Linux:**
+- **A0 Launcher** is the desktop app. It can download Agent Zero, create and
+  manage Instances, and help set up the local container runtime when needed.
+- **A0 Install** is the terminal installer. It is best for SSH sessions,
+  servers, scripted setup, recovery shells, or users who prefer commands.
+
+If Docker is already installed and running, you can also start the container
+directly.
+
+### A0 Launcher
+
+Use **A0 Launcher** when you want the guided desktop path. Download the app for
+your platform, open it, and let it check Docker or set up a runtime before it
+downloads Agent Zero.
+
+#### Downloads
+
+| Architecture | macOS | Linux | Windows |
+| --- | --- | --- | --- |
+| x86 | [Mac Intel](https://github.com/agent0ai/a0-launcher/releases/download/v0.9/a0-launcher-0.9-macos-x64.dmg) | [Linux x86](https://github.com/agent0ai/a0-launcher/releases/download/v0.9/a0-launcher-0.9-linux-x64.AppImage) | [Windows x86](https://github.com/agent0ai/a0-launcher/releases/download/v0.9/a0-launcher-0.9-windows-x64.exe) |
+| ARM64 | [Mac Apple Silicon](https://github.com/agent0ai/a0-launcher/releases/download/v0.9/a0-launcher-0.9-macos-arm64.dmg) | [Linux ARM64](https://github.com/agent0ai/a0-launcher/releases/download/v0.9/a0-launcher-0.9-linux-arm64.AppImage) | [Windows ARM64](https://github.com/agent0ai/a0-launcher/releases/download/v0.9/a0-launcher-0.9-windows-arm64.exe) |
+
+See the [A0 Launcher v0.9 release](https://github.com/agent0ai/a0-launcher/releases/tag/v0.9)
+for release notes and updater metadata. See the
+[Launcher guide](../guides/launcher.md) for the first-run walkthrough.
+
+### A0 Install
+
+Use **A0 Install** when you want the command-line path. The installer creates a
+Dockerized Agent Zero instance, mounts user data to `/a0/usr`, and tries to
+reuse an existing Docker-compatible runtime before setting one up.
+
+#### macOS / Linux
 ```bash
 curl -fsSL https://bash.agent-zero.ai | bash
 ```
 
-**Windows (PowerShell):**
+#### Windows PowerShell
 ```powershell
 irm https://ps.agent-zero.ai | iex
 ```
 
-**Docker (run directly):**
+#### Headless / scripted
+
+For servers and automation, Quick Start mode creates one instance and exits
+without opening menus:
+
 ```bash
-docker run -p 80:80 agent0ai/agent-zero
+curl -fsSL https://bash.agent-zero.ai | bash -s -- --quick-start --name agent-zero --port 5080
 ```
 
-Once the install completes, open the URL shown in your terminal to access the Web UI. Follow the prompts in the CLI to set your port and authentication, complete onboarding, add your API key, then continue to [Step 3: Configure Agent Zero](#step-3-configure-agent-zero).
+```powershell
+& ([scriptblock]::Create((irm https://ps.agent-zero.ai))) -QuickStart -Name agent-zero -Port 5080
+```
+
+Use `--skip-runtime-setup` / `-SkipRuntimeSetup` when Docker must already be
+working and the installer should not try to set up a runtime. See the
+[A0 Install repository](https://github.com/agent0ai/a0-install) for all
+installer flags.
+
+### Docker already installed? Run this directly
+
+```bash
+docker run -p 80:80 -v a0_usr:/a0/usr agent0ai/agent-zero
+```
+
+Once the install completes, open the URL shown in your terminal or Launcher to
+access the Web UI. Complete onboarding, add your model provider or API key, then
+continue to [Step 3: Configure Agent Zero](#step-3-configure-agent-zero).
 
 > [!TIP]
 > Need Agent Zero to reach host-machine files, shell, or a host browser? Install the optional [A0 CLI Connector](../guides/a0-cli-connector.md), then run `a0` to connect your terminal to this Agent Zero instance.

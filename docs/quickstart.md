@@ -5,11 +5,13 @@ Agent Zero, add a model or API key, open the Web UI, and give it a concrete job.
 
 ## Installation (recommended)
 
-Run one command; the script handles Docker, image pull, and container setup.
+Choose the path that matches your machine:
 
-Prefer a desktop app on a fresh machine? Start with
-[Agent Zero Launcher](guides/launcher.md). It can set up the local runtime,
-download Agent Zero, open Instances, or save a remote Instance URL.
+- Use [A0 Launcher](guides/launcher.md) if you want a desktop app on a fresh
+  machine. It can set up the local runtime, download Agent Zero, open
+  Instances, or save a remote Instance URL.
+- Use A0 Install if you want the terminal path. The script handles Docker
+  detection, image pull, and container setup.
 
 **macOS / Linux:**
 ```bash
@@ -27,7 +29,7 @@ Follow the CLI prompts for port and authentication, complete onboarding, then op
 > To update later, open **Settings UI -> Update tab -> Open Self Update** (see [How to Update](setup/installation.md#how-to-update-agent-zero)). Backups are automatically managed internally.
 
 > [!NOTE]
-> For manual Docker Desktop setup, volume mapping, and platform-specific detail, see the [Installation Guide](setup/installation.md#manual-installation-advanced).
+> For Launcher downloads, headless installer flags, direct Docker, manual Docker Desktop setup, volume mapping, and platform-specific detail, see the [Installation Guide](setup/installation.md).
 
 ## Use Agent Zero on your real local files
 
