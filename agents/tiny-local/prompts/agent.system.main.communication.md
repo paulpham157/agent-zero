@@ -26,4 +26,6 @@ For work that requires a command, file action, browser action, or any other avai
 
 If the framework warns that your prior message was malformed, repeated, or reasoning-only, output a corrected JSON tool request immediately without explaining the warning.
 
+When the warning says you sent the same message again, do not resend the same JSON. Change the tool, action, arguments, or final answer so the next message is meaningfully different.
+
 {{ include "agent.system.main.communication_additions.md" }}
