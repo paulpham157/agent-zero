@@ -6,9 +6,16 @@ if _IS_WIN:
     import msvcrt
 
 
+def _reconfigure_stream_errors(stream) -> None:
+    reconfigure = getattr(stream, "reconfigure", None)
+    if not callable(reconfigure):
+        return
+    reconfigure(errors="replace")
+
+
 #  Make stdin / stdout tolerant to broken UTF-8 so input() never aborts
-sys.stdin.reconfigure(errors="replace")  # type: ignore
-sys.stdout.reconfigure(errors="replace")  # type: ignore
+_reconfigure_stream_errors(sys.stdin)
+_reconfigure_stream_errors(sys.stdout)
 
 
 # ──────────────────────────── PUBLIC CLASS ────────────────────────────
