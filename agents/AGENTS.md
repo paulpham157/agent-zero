@@ -41,3 +41,4 @@ Direct child DOX files:
 | [developer/AGENTS.md](developer/AGENTS.md) | Software development specialist profile. |
 | [hacker/AGENTS.md](hacker/AGENTS.md) | Cyber security and penetration testing specialist profile. |
 | [researcher/AGENTS.md](researcher/AGENTS.md) | Research, data analysis, and reporting specialist profile. |
+| [tiny-local/AGENTS.md](tiny-local/AGENTS.md) | Small/local model profile with an action-first communication prompt. |

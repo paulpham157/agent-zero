@@ -71,6 +71,64 @@ async def test_default_agent0_prompt_budget_and_guardrails():
     assert "Computer Use enablement is scoped to the current CLI session" not in system_text
 
 
+@pytest.mark.asyncio
+async def test_tiny_local_profile_prompt_is_action_first_json_contract():
+    system_text = await _build_system_text("tiny-local")
+    communication_prompt = (
+        PROJECT_ROOT / "agents" / "tiny-local" / "prompts" / "agent.system.main.communication.md"
+    ).read_text(encoding="utf-8")
+    code_prompt = (
+        PROJECT_ROOT / "agents" / "tiny-local" / "prompts" / "agent.system.tool.code_exe.md"
+    ).read_text(encoding="utf-8")
+    response_prompt = (
+        PROJECT_ROOT / "agents" / "tiny-local" / "prompts" / "agent.system.tool.response.md"
+    ).read_text(encoding="utf-8")
+    text_editor_prompt = (
+        PROJECT_ROOT / "agents" / "tiny-local" / "prompts" / "agent.system.tool.text_editor.md"
+    ).read_text(encoding="utf-8")
+    solving_prompt = (
+        PROJECT_ROOT / "agents" / "tiny-local" / "prompts" / "agent.system.main.solving.md"
+    ).read_text(encoding="utf-8")
+
+    assert "You are Agent Zero. Act on the user's behalf." in system_text
+    assert "Your visible assistant message must be exactly one valid JSON object." in system_text
+    assert 'Use exactly these top-level fields: `"tool_name"` and `"tool_args"`.' in system_text
+    assert 'For a final user-facing answer, use the `response` tool.' in system_text
+    assert "Use `response` only when the work is complete, blocked, or the user is only acknowledging completed work." in system_text
+    assert "If the user says \"proceed\", \"continue\", \"go ahead\", \"do it\", \"excellent proceed\"" in system_text
+    assert "Do not explain what command the user could run manually." in system_text
+    assert "output a corrected JSON tool request immediately" in system_text
+    assert "## Tiny Local Output Rule" in system_text
+    assert "~~~json" not in communication_prompt
+    assert "~~~json" not in code_prompt
+    assert "~~~json" not in response_prompt
+    assert "~~~json" not in text_editor_prompt
+    assert "No JSON in markdown fences" not in communication_prompt
+    assert "thoughts: array thoughts before execution" not in communication_prompt
+    assert "headline: short headline summary" not in communication_prompt
+    assert "explain each step in thoughts" not in solving_prompt
+    assert "Continuation words" in solving_prompt
+    assert "Do not respond by saying you will begin, continue, start, proceed, or investigate." in solving_prompt
+    assert "Do not use this tool for \"proceed\", \"continue\", \"go ahead\"" in response_prompt
+    assert "do not repeat the same exact tool call" in solving_prompt
+    assert '"open_in_canvas":true' in text_editor_prompt
+    assert "do not repeat the same tool call" in text_editor_prompt
+    assert '"headline"' not in code_prompt
+    assert '"headline"' not in response_prompt
+    assert '"headline"' not in text_editor_prompt
+
+
+def test_tiny_local_profile_is_discoverable():
+    from helpers import subagents
+
+    profiles = {
+        str(item.get("key") or ""): str(item.get("label") or "")
+        for item in subagents.get_all_agents_list()
+    }
+
+    assert profiles["tiny-local"] == "Tiny Local"
+
+
 def test_removed_small_profile_and_prompt_text_generic():
     removed_profile = "a0" + "_" + "small"
 

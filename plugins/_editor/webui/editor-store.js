@@ -182,17 +182,19 @@ function taskLineIndexes(markdown = "") {
 }
 
 async function callEditor(action, payload = {}) {
+  const explicitContextId = String(payload.ctxid || payload.context_id || "").trim();
   return await callJsonApi("/plugins/_editor/editor_session", {
     action,
-    ctxid: currentContextId(),
     ...payload,
+    ctxid: explicitContextId || currentContextId(),
   });
 }
 
 async function requestEditor(eventType, payload = {}, timeoutMs = 5000) {
+  const explicitContextId = String(payload.ctxid || payload.context_id || "").trim();
   const response = await editorSocket.request(eventType, {
-    ctxid: currentContextId(),
     ...payload,
+    ctxid: explicitContextId || currentContextId(),
   }, { timeoutMs });
   const results = Array.isArray(response?.results) ? response.results : [];
   const first = results.find((item) => item?.ok === true && isEditorSocketData(item?.data))
@@ -284,9 +286,12 @@ const model = {
     await this.init();
     await this.refresh();
     if (payload?.path || payload?.file_id) {
+      const contextId = String(payload.ctxid || payload.context_id || "").trim();
       await this.openSession({
         path: payload.path || "",
         file_id: payload.file_id || "",
+        ctxid: contextId,
+        context_id: contextId,
         refresh: payload.refresh === true,
         source: payload.source || "",
       });
