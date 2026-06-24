@@ -16,6 +16,7 @@
 - Preserve stale-read protection before patch operations.
 - Validate patch structures before applying edits.
 - Read back changed regions after writes or patches where the tool contract requires confirmation.
+- Include the active agent context id in write/patch result metadata when available so canvas consumers can open the changed file in the correct chat context.
 
 ## Work Guidance
 

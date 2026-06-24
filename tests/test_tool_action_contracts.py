@@ -649,6 +649,21 @@ def test_tool_prompts_prevent_top_level_multi_tool():
     assert 'Never use `tool_name: "multi"`' in browser_prompt
 
 
+def test_local_model_tool_use_guide_stays_prompt_profile_plugin_only():
+    guide = Path("docs/guides/local-model-tool-use.md").read_text(encoding="utf-8")
+
+    assert "Tiny Local" in guide
+    assert "agents/tiny-local/" in guide
+    assert "*.promptinclude.md" in guide
+    assert "Do not change `agent.py`" in guide
+    assert "Do not change `helpers/extract_tools.py`" in guide
+    assert "Use exactly these top-level fields: `tool_name` and `tool_args`." in guide
+    assert '{"tool_name":"response","tool_args":{"text":"Done."}}' in guide
+    assert "If the user says \"proceed\", \"continue\", \"go ahead\", or similar" in guide
+    assert "call the next appropriate tool instead of replying with a promise or status update" in guide
+    assert "Do not create parser repair code for this workflow." in guide
+
+
 def _load_scheduler_tool(monkeypatch):
     _install_tool_stub(monkeypatch)
 

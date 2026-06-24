@@ -401,8 +401,12 @@ def test_office_artifacts_only_open_desktop_from_explicit_document_ui_requests()
     assert "syncTextEditorResultsIntoOpenEditor" in editor_sync
     assert 'toolName(payload) !== "text_editor"' in editor_sync
     assert 'return ["write", "patch"].includes(action);' in editor_sync
+    assert "if (!context?.results?.length) return;" in editor_sync
+    assert "if (context.historyEmpty && !explicitOpen) continue;" in editor_sync
     assert "syncOpenEditorSurface" in editor_sync
     assert "isEditorSurfaceOpen" in editor_sync
+    assert "context_id" in editor_sync
+    assert "ctxid" in editor_sync
     assert "void syncOpenDocumentSurfaces(target);" in auto_open
     assert "void syncOpenDocumentSurfaces({ path, file_id: fileId });" not in auto_open
     assert "editorStore" not in auto_open
