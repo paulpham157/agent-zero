@@ -26,7 +26,7 @@
 - Strip Agent Zero internal kwargs before sending requests to LiteLLM.
 - Do not send orphan tool controls when no tools are present; strict OpenAI-compatible servers can reject empty `tools` arrays.
 - Prefer Responses API when configured, but fallback to Chat Completions when the provider does not support Responses.
-- Fall back to Chat Completions when a Responses request is rejected before any output by a Bad Request/validation error that indicates the provider cannot parse the Responses request shape.
+- Fall back to Chat Completions when a Responses request is rejected before any output by an endpoint-specific or shape-specific Bad Request indicating the provider cannot parse Responses payloads.
 - Preserve provider-state metadata when Responses API calls succeed, and fall back to local replay when provider state is unsupported.
 - Keep prompt-cache markers only for providers that accept them.
 

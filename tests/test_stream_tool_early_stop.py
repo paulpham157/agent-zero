@@ -612,6 +612,48 @@ async def test_unified_call_falls_back_when_responses_bad_request_rejects_shape(
 
 
 @pytest.mark.asyncio
+async def test_unified_call_raises_generic_responses_bad_request(monkeypatch):
+    class BadRequestError(Exception):
+        status_code = 400
+
+    calls: list[str] = []
+
+    async def fake_aresponses(*args, **kwargs):
+        calls.append("responses")
+        raise BadRequestError(
+            "BadRequestError: validation error: invalid request: max_tokens is too high"
+        )
+
+    async def fake_acompletion(*args, **kwargs):
+        calls.append("chat")
+        raise AssertionError("generic 400 should not fallback to chat")
+
+    async def fake_rate_limiter(*args, **kwargs):
+        return None
+
+    monkeypatch.setattr(litellm_transport, "aresponses", fake_aresponses)
+    monkeypatch.setattr(litellm_transport, "acompletion", fake_acompletion)
+    monkeypatch.setattr(models, "apply_rate_limiter", fake_rate_limiter)
+
+    wrapper = models.LiteLLMChatWrapper(
+        model="test-model",
+        provider="openai",
+        model_config=None,
+    )
+
+    async def response_callback(chunk: str, full: str):
+        return None
+
+    with pytest.raises(BadRequestError):
+        await wrapper.unified_call(
+            messages=[],
+            response_callback=response_callback,
+        )
+
+    assert calls == ["responses"]
+
+
+@pytest.mark.asyncio
 async def test_unified_call_preserves_cache_control_with_chat_for_non_native_responses(
     monkeypatch,
 ):

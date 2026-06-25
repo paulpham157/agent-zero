@@ -1574,10 +1574,9 @@ def _looks_like_responses_request_rejected(text: str) -> bool:
             "expected object, received string",
             "expected string, received array",
             "zod",
-            "invalid request",
-            "invalid type",
-            "failed to deserialize",
-            "validation error",
+            "failed to deserialize input",
+            "failed to deserialize response",
+            "failed to deserialize responses",
         )
     )
 
