@@ -10,7 +10,7 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 import models
-from agent import Agent, AgentConfig, LoopData
+from agent import Agent, AgentConfig, AgentContextType, LoopData
 from helpers import history, litellm_transport
 from helpers.log import Log
 from helpers.llm_result import LLMResult, result_from_metadata
@@ -316,6 +316,7 @@ async def test_agent_executes_native_responses_function_call_and_records_output(
     class DummyContext:
         paused = False
         log = Log()
+        type = AgentContextType.USER
 
         def get_data(self, key, recursive=True):
             return None

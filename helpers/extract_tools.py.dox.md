@@ -14,6 +14,7 @@
 - `json_parse_dirty(json: str) -> dict[str, Any] | None`
 - `normalize_tool_request(tool_request: Any) -> tuple[str, dict]`
 - `extract_json_root_string(content: str) -> str | None`
+- `extract_json_root_strings(content: str) -> list[str]`
 - `extract_json_object_string(content)`
 - `extract_json_string(content)`
 - `fix_json_string(json_string)`
@@ -23,6 +24,7 @@
 - Helper modules own reusable framework APIs and must preserve public callers unless all callers, tests, and docs are updated together.
 - Update this file whenever public functions, classes, persistence behavior, path/security assumptions, side effects, or cross-module contracts change.
 - Observed side-effect areas: settings/state persistence.
+- Dirty parsing scans complete JSON object roots in prose and prefers the first object that normalizes as a valid tool request, so a leading text preamble or incidental non-tool object does not force a misformat warning when a valid tool call follows.
 - Imported dependency areas include: `dirty_json`, `helpers.modules`, `re`, `regex`, `typing`.
 
 ## Key Concepts

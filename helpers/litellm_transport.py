@@ -1524,6 +1524,8 @@ def _is_responses_not_supported_error(exc: Exception) -> bool:
     text = _exception_text(exc).lower()
     if any(marker in text for marker in ("429", "too many requests", "rate limit")):
         return False
+    if _is_bad_request_error(exc) and _looks_like_responses_request_rejected(text):
+        return True
     if _is_not_found_error(exc) and _looks_like_responses_endpoint_not_found(text):
         return True
     if "/v1/responses" in text and any(
@@ -1549,6 +1551,35 @@ def _is_not_found_error(exc: Exception) -> bool:
     if _exception_status_code(exc) == 404:
         return True
     return "notfounderror" in _exception_type_chain(exc).lower()
+
+
+def _is_bad_request_error(exc: Exception) -> bool:
+    if _exception_status_code(exc) == 400:
+        return True
+    type_chain = _exception_type_chain(exc).lower()
+    if "badrequesterror" in type_chain:
+        return True
+    text = _exception_text(exc).lower()
+    return "400" in text and "bad request" in text
+
+
+def _looks_like_responses_request_rejected(text: str) -> bool:
+    if "/v1/responses" in text or "responses api" in text:
+        return True
+    return any(
+        marker in text
+        for marker in (
+            "input_image",
+            "response.input",
+            "expected object, received string",
+            "expected string, received array",
+            "zod",
+            "invalid request",
+            "invalid type",
+            "failed to deserialize",
+            "validation error",
+        )
+    )
 
 
 def _looks_like_responses_endpoint_not_found(text: str) -> bool:

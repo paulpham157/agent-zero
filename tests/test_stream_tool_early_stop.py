@@ -78,6 +78,18 @@ def test_extract_json_root_string_returns_canonical_snapshot():
     assert extract_tools.extract_json_root_string('[{"tool_name":"response"}]') is None
 
 
+def test_json_parse_dirty_prefers_valid_tool_request_after_preamble_object():
+    text = (
+        'I will call the tool after this note {"note":"not the tool"}.\n'
+        '{"tool_name":"response","tool_args":{"text":"ok"}} trailing text'
+    )
+
+    assert extract_tools.json_parse_dirty(text) == {
+        "tool_name": "response",
+        "tool_args": {"text": "ok"},
+    }
+
+
 def test_litellm_global_kwargs_merge_defaults_and_config(monkeypatch):
     monkeypatch.setattr(
         models.settings,
@@ -449,6 +461,64 @@ async def test_unified_call_falls_back_when_litellm_hides_responses_404_url(
 
     response, reasoning = await wrapper.unified_call(
         messages=[],
+        response_callback=response_callback,
+    )
+
+    assert response == "fallback"
+    assert reasoning == ""
+    assert calls == ["responses", "chat"]
+
+
+@pytest.mark.asyncio
+async def test_unified_call_falls_back_when_responses_bad_request_rejects_shape(
+    monkeypatch,
+):
+    class BadRequestError(Exception):
+        status_code = 400
+
+    calls: list[str] = []
+
+    async def fake_aresponses(*args, **kwargs):
+        calls.append("responses")
+        raise BadRequestError(
+            'BadRequestError: Zod validation error: input_image Expected object, '
+            'received string; Expected string, received array'
+        )
+
+    async def fake_acompletion(*args, **kwargs):
+        calls.append("chat")
+        assert kwargs["stream"] is True
+        assert kwargs["drop_params"] is True
+        return _AsyncChunkStream([_chunk("fallback")])
+
+    async def fake_rate_limiter(*args, **kwargs):
+        return None
+
+    monkeypatch.setattr(litellm_transport, "aresponses", fake_aresponses)
+    monkeypatch.setattr(litellm_transport, "acompletion", fake_acompletion)
+    monkeypatch.setattr(models, "apply_rate_limiter", fake_rate_limiter)
+
+    wrapper = models.LiteLLMChatWrapper(
+        model="venice-model",
+        provider="openai",
+        model_config=None,
+    )
+
+    async def response_callback(chunk: str, full: str):
+        return None
+
+    response, reasoning = await wrapper.unified_call(
+        messages=[
+            HumanMessage(
+                content=[
+                    {"type": "text", "text": "describe it"},
+                    {
+                        "type": "image_url",
+                        "image_url": {"url": "https://example.test/a.png"},
+                    },
+                ]
+            )
+        ],
         response_callback=response_callback,
     )
 

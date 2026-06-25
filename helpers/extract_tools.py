@@ -8,15 +8,22 @@ def json_parse_dirty(json: str) -> dict[str, Any] | None:
     if not json or not isinstance(json, str):
         return None
 
-    ext_json = extract_json_object_string(json.strip())
-    if ext_json:
+    parsed_candidates: list[dict[str, Any]] = []
+    for ext_json in extract_json_root_strings(json.strip()):
         try:
             data = DirtyJson.parse_string(ext_json)
             if isinstance(data, dict):
-                return data
+                parsed_candidates.append(data)
         except Exception:
-            # If parsing fails, return None instead of crashing
-            return None
+            continue
+    for data in parsed_candidates:
+        try:
+            normalize_tool_request(data)
+            return data
+        except ValueError:
+            continue
+    if parsed_candidates:
+        return parsed_candidates[0]
     return None
 
 
@@ -46,26 +53,34 @@ def normalize_tool_request(tool_request: Any) -> tuple[str, dict]:
 
 
 def extract_json_root_string(content: str) -> str | None:
+    for root in extract_json_root_strings(content):
+        return root
+    return None
+
+
+def extract_json_root_strings(content: str) -> list[str]:
     if not content or not isinstance(content, str):
-        return None
+        return []
 
-    start = content.find("{")
-    if start == -1:
-        return None
-    first_array = content.find("[")
-    if first_array != -1 and first_array < start:
-        return None
+    if content.lstrip().startswith("["):
+        return []
 
-    parser = DirtyJson()
-    try:
-        parser.parse(content[start:])
-    except Exception:
-        return None
+    roots: list[str] = []
+    for start, char in enumerate(content):
+        if char != "{":
+            continue
 
-    if not parser.completed:
-        return None
+        parser = DirtyJson()
+        try:
+            parser.parse(content[start:])
+        except Exception:
+            continue
 
-    return content[start : start + parser.index]
+        if not parser.completed:
+            continue
+
+        roots.append(content[start : start + parser.index])
+    return roots
 
 
 def extract_json_object_string(content):
