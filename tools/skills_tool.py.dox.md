@@ -29,6 +29,7 @@
 - Loading a skill appends the full skill body as a normal tool-result history message with `skill_instructions` metadata containing name, path, source, and content visibility.
 - Loaded skill IDs are stored in chat-wide context data.
 - Duplicate loads omit the full body when the same skill name remains visible in model history.
+- Missing or empty `action` defaults to `list`, and legacy `method` is accepted as a deprecated alias when `action` is absent.
 - Observed side-effect areas: filesystem reads, filesystem deletion, settings/state persistence, chat history persistence.
 - Imported dependency areas include: `__future__`, `helpers`, `helpers.print_style`, `helpers.tool`, `pathlib`, `typing`.
 

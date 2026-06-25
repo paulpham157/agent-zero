@@ -331,6 +331,29 @@ def test_invalid_skill_frontmatter_reports_yaml_errors():
     assert errors[0].startswith("Invalid YAML frontmatter")
 
 
+def test_invalid_skill_frontmatter_warns_when_skill_is_skipped(monkeypatch, tmp_path: Path):
+    skills_root = tmp_path / "skills"
+    broken = skills_root / "broken-skill"
+    broken.mkdir(parents=True)
+    (broken / "SKILL.md").write_text(
+        "---\nname: broken-skill\ndescription: missing closing fence\nBody\n",
+        encoding="utf-8",
+    )
+
+    warnings: list[str] = []
+    runtime._SKILL_PARSE_WARNINGS.clear()
+    monkeypatch.setattr(runtime, "get_skill_roots", lambda agent=None: [str(skills_root)])
+    monkeypatch.setattr(runtime, "_emit_skill_scan_warning", warnings.append)
+
+    assert runtime.list_skills() == []
+    assert len(warnings) == 1
+    assert "skill broken-skill skipped: invalid frontmatter at line 4" in warnings[0]
+    assert "Unterminated YAML frontmatter" in warnings[0]
+
+    assert runtime.list_skills() == []
+    assert len(warnings) == 1
+
+
 def test_a0_manage_plugin_skill_frontmatter_is_valid_yaml():
     text = (PROJECT_ROOT / "skills" / "a0-manage-plugin" / "SKILL.md").read_text(
         encoding="utf-8"

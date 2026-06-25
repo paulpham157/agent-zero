@@ -25,6 +25,7 @@ CONTEXT_DATA_NAME_LOADED_SKILLS = AGENT_DATA_NAME_LOADED_SKILLS
 CONTEXT_DATA_NAME_CHAT_ACTIVE_SKILLS = "skills_chat_active"
 CONTEXT_DATA_NAME_CHAT_DISABLED_SKILLS = "skills_chat_disabled"
 CONTEXT_DATA_NAME_CHAT_VISIBLE_SKILLS = "skills_chat_visible"
+_SKILL_PARSE_WARNINGS: set[str] = set()
 
 
 class ActiveSkillEntry(TypedDict, total=False):
@@ -254,6 +255,57 @@ def parse_frontmatter(frontmatter_text: str) -> Tuple[Dict[str, Any], List[str]]
     return parsed, errors
 
 
+def _emit_skill_scan_warning(message: str) -> None:
+    try:
+        from helpers.print_style import PrintStyle
+
+        PrintStyle.warning(message)
+    except Exception:
+        print(f"Warning: {message}")
+
+
+def _frontmatter_error_line(markdown: str, error: str) -> int:
+    text = markdown or ""
+    lines = text.splitlines()
+    if not lines:
+        return 1
+
+    if error.startswith("Frontmatter must start"):
+        for index, line in enumerate(lines, start=1):
+            if line.strip():
+                return index
+        return 1
+    if error.startswith("Missing YAML frontmatter"):
+        return 1
+    if error.startswith("Unterminated YAML frontmatter"):
+        return max(len(lines), 1)
+
+    match = re.search(r"line\s+(\d+)", error, flags=re.IGNORECASE)
+    if match:
+        start_idx = 0
+        for index, line in enumerate(lines):
+            if line.strip() == "---":
+                start_idx = index
+                break
+        return start_idx + int(match.group(1)) + 1
+    return 1
+
+
+def _warn_skill_skipped(skill_md_path: Path, markdown: str, errors: List[str]) -> None:
+    if not errors:
+        return
+    error = str(errors[0] or "invalid frontmatter").strip()
+    line = _frontmatter_error_line(markdown, error)
+    key = f"{skill_md_path}:{line}:{error}"
+    if key in _SKILL_PARSE_WARNINGS:
+        return
+    _SKILL_PARSE_WARNINGS.add(key)
+    skill_label = skill_md_path.parent.name or str(skill_md_path)
+    _emit_skill_scan_warning(
+        f"skill {skill_label} skipped: invalid frontmatter at line {line}: {error}"
+    )
+
+
 def skill_from_markdown(
     skill_md_path: Path,
     *,
@@ -267,6 +319,7 @@ def skill_from_markdown(
 
     fm, body, fm_errors = split_frontmatter(text)
     if fm_errors:
+        _warn_skill_skipped(skill_md_path, text, fm_errors)
         return None
     skill_dir = Path(files.normalize_a0_path(str(skill_md_path.parent)))
 

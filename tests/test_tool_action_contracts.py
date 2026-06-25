@@ -273,6 +273,42 @@ def test_skills_tool_accepts_action_alias_for_search(monkeypatch, tmp_path: Path
     assert "browser-form-workflows" in response.message
 
 
+def test_skills_tool_accepts_method_as_deprecated_action_alias(
+    monkeypatch, tmp_path: Path
+):
+    module = _load_skills_tool(monkeypatch, tmp_path)
+    tool = module.SkillsTool(
+        _FakeAgent(),
+        "skills_tool",
+        None,
+        {"method": "search", "query": "browser forms"},
+        "",
+        None,
+    )
+
+    response = asyncio.run(tool.execute(**tool.args))
+
+    assert "browser-form-workflows" in response.message
+    assert tool.args["action"] == "search"
+
+
+def test_skills_tool_defaults_missing_action_to_list(monkeypatch, tmp_path: Path):
+    module = _load_skills_tool(monkeypatch, tmp_path)
+    tool = module.SkillsTool(
+        _FakeAgent(),
+        "skills_tool",
+        None,
+        {},
+        "",
+        None,
+    )
+
+    response = asyncio.run(tool.execute())
+
+    assert "Available skills" in response.message
+    assert "browser-form-workflows" in response.message
+
+
 def test_skills_tool_load_appends_skill_instructions_as_tool_result(
     monkeypatch, tmp_path: Path
 ):

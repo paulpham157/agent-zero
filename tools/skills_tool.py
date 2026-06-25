@@ -24,15 +24,24 @@ class SkillsTool(Tool):
     Script execution is handled by code_execution_tool directly.
     """
 
-    def _current_action(self) -> str:
+    @staticmethod
+    def _normalize_action(action: object) -> str:
         return (
             str(
-                self.args.get("action")
-                or ""
+                action
+                or "list"
             )
             .strip()
             .lower()
             .replace("-", "_")
+        )
+
+    def _current_action(self, **kwargs) -> str:
+        return self._normalize_action(
+            kwargs.get("action")
+            or self.args.get("action")
+            or kwargs.get("method")
+            or self.args.get("method")
         )
 
     @staticmethod
@@ -65,14 +74,14 @@ class SkillsTool(Tool):
         return super().get_log_object()
 
     async def before_execution(self, **kwargs):
-        if self._current_action() != "load":
+        if self._current_action(**kwargs) != "load":
             await super().before_execution(**kwargs)
             return
 
         skill_name = self._normalize_skill_name(
             str(kwargs.get("skill_name") or self.args.get("skill_name") or "")
         )
-        label = f"{self.name} action {self._current_action()}"
+        label = f"{self.name} action {self._current_action(**kwargs)}"
         if skill_name:
             PrintStyle(
                 font_color="#1B4F72",
@@ -90,35 +99,29 @@ class SkillsTool(Tool):
         self.log = self.get_log_object()
 
     async def execute(self, **kwargs) -> Response:
-        action = (
-            str(
-                kwargs.get("action")
-                or self.args.get("action")
-                or ""
-            )
-            .strip()
-            .lower()
-            .replace("-", "_")
+        action = self._current_action(**kwargs)
+
+        query = str(kwargs.get("query") or self.args.get("query") or "").strip()
+        skill_name = self._normalize_skill_name(
+            str(kwargs.get("skill_name") or self.args.get("skill_name") or "")
         )
+        file_path = str(
+            kwargs.get("file_path") or self.args.get("file_path") or ""
+        ).strip()
+
+        if "action" not in kwargs and "action" not in self.args and "method" in kwargs:
+            kwargs["action"] = action
+        if "action" not in self.args and "method" in self.args:
+            self.args["action"] = action
 
         try:
             if action == "list":
                 return Response(message=self._list(), break_loop=False)
             if action == "search":
-                query = str(kwargs.get("query") or self.args.get("query") or "").strip()
                 return Response(message=self._search(query), break_loop=False)
             if action == "load":
-                skill_name = self._normalize_skill_name(
-                    str(kwargs.get("skill_name") or self.args.get("skill_name") or "")
-                )
                 return self._load(skill_name)
             if action == "read_file":
-                skill_name = self._normalize_skill_name(
-                    str(kwargs.get("skill_name") or self.args.get("skill_name") or "")
-                )
-                file_path = str(
-                    kwargs.get("file_path") or self.args.get("file_path") or ""
-                ).strip()
                 return Response(
                     message=self._read_file(skill_name, file_path),
                     break_loop=False,
