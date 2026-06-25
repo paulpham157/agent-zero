@@ -8,20 +8,16 @@ def json_parse_dirty(json: str) -> dict[str, Any] | None:
     if not json or not isinstance(json, str):
         return None
 
-    parsed_candidates: list[dict[str, Any]] = []
+    first_data: dict[str, Any] | None = None
     for ext_json in extract_json_root_strings(json.strip()):
         data = _parse_json_root_object(ext_json)
-        if data is not None:
-            parsed_candidates.append(data)
-    for data in parsed_candidates:
-        try:
-            normalize_tool_request(data)
-            return data
-        except ValueError:
+        if data is None:
             continue
-    if parsed_candidates:
-        return parsed_candidates[0]
-    return None
+        if first_data is None:
+            first_data = data
+        if _is_tool_request(data):
+            return data
+    return first_data
 
 
 def normalize_tool_request(tool_request: Any) -> tuple[str, dict]:
@@ -50,17 +46,14 @@ def normalize_tool_request(tool_request: Any) -> tuple[str, dict]:
 
 
 def extract_json_root_string(content: str) -> str | None:
-    roots = extract_json_root_strings(content)
-    for root in roots:
+    first_root: str | None = None
+    for root in extract_json_root_strings(content):
+        if first_root is None:
+            first_root = root
         data = _parse_json_root_object(root)
-        if data is None:
-            continue
-        try:
-            normalize_tool_request(data)
-        except ValueError:
-            continue
-        return root
-    return roots[0] if roots else None
+        if data is not None and _is_tool_request(data):
+            return root
+    return first_root
 
 
 def extract_json_root_strings(content: str) -> list[str]:
@@ -94,6 +87,14 @@ def _parse_json_root_object(root: str) -> dict[str, Any] | None:
     except Exception:
         return None
     return data if isinstance(data, dict) else None
+
+
+def _is_tool_request(data: dict[str, Any]) -> bool:
+    try:
+        normalize_tool_request(data)
+    except ValueError:
+        return False
+    return True
 
 
 def extract_json_object_string(content):
