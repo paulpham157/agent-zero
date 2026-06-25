@@ -166,23 +166,45 @@ class MCPTool(Tool):
         encoded: str,
         mime_type: str,
         label: str,
-    ) -> tuple[str, dict[str, Any] | None]:
+        index: int,
+        preferred_name: str = "",
+    ) -> tuple[str, dict[str, Any] | None, str]:
         try:
-            image = media_artifacts.image_data_url_from_base64(
+            safe_mime = media_artifacts.normalize_mime(
+                mime_type,
+                default="image/png",
+                required_prefix="image/",
+            )
+            artifact = media_artifacts.save_base64_artifact(
                 encoded,
-                mime_type=mime_type,
+                mime_type=safe_mime,
+                directory_parts=self._artifact_directory_parts(),
+                preferred_name=preferred_name,
+                default_filename=self._default_artifact_filename(
+                    label=label,
+                    index=index,
+                    mime_type=safe_mime,
+                ),
             )
         except media_artifacts.EmptyBase64Data:
-            return f"MCP returned an empty {label} attachment.", None
+            return f"MCP returned an empty {label} attachment.", None, ""
         except media_artifacts.InvalidBase64Data:
-            return f"MCP returned a {label} attachment that could not be decoded.", None
+            return (
+                f"MCP returned a {label} attachment that could not be decoded.",
+                None,
+                "",
+            )
 
         return (
-            f"MCP returned {label} attachment ({image.mime}, {image.size} bytes).",
+            (
+                f"Saved MCP {label} attachment "
+                f"({artifact.mime}, {artifact.size} bytes) to {artifact.path}."
+            ),
             {
                 "type": "image_url",
-                "image_url": {"url": image.url},
+                "image_url": {"url": artifact.path},
             },
+            artifact.path,
         )
 
     def _materialize_binary_content(
@@ -266,6 +288,7 @@ class MCPTool(Tool):
         text_parts: list[str] = []
         notes: list[str] = []
         raw_images: list[dict[str, Any]] = []
+        image_paths: list[str] = []
         content_items = list(getattr(response, "content", []) or [])
 
         for index, item in enumerate(content_items, start=1):
@@ -278,14 +301,17 @@ class MCPTool(Tool):
                 continue
 
             if item_type == "image":
-                note, raw_content = self._format_image_content(
+                note, raw_content, path = self._format_image_content(
                     encoded=str(_mcp_get(item, "data", "") or ""),
                     mime_type=str(_mcp_get(item, "mimeType", "") or "image/png"),
                     label="image",
+                    index=index,
                 )
                 notes.append(note)
                 if raw_content:
                     raw_images.append(raw_content)
+                if path:
+                    image_paths.append(path)
                 continue
 
             if item_type == "audio":
@@ -312,10 +338,12 @@ class MCPTool(Tool):
                         _mcp_get(resource, "mimeType", "") or "application/octet-stream"
                     ).strip().lower()
                     if mime_type.startswith("image/"):
-                        note, raw_content = self._format_image_content(
+                        note, raw_content, path = self._format_image_content(
                             encoded=blob,
                             mime_type=mime_type,
                             label="resource image",
+                            index=index,
+                            preferred_name=uri,
                         )
                     else:
                         note = self._materialize_binary_content(
@@ -326,9 +354,12 @@ class MCPTool(Tool):
                             preferred_name=uri,
                         )
                         raw_content = None
+                        path = ""
                     notes.append(note)
                     if raw_content:
                         raw_images.append(raw_content)
+                    if path:
+                        image_paths.append(path)
                     continue
 
                 if uri:
@@ -356,6 +387,8 @@ class MCPTool(Tool):
                 "raw_content": raw_images,
                 "preview": f"<MCP image attachments: {len(raw_images)}>",
                 "_tokens": MCP_MEDIA_TOKENS_ESTIMATE * len(raw_images),
+                "attachments": image_paths,
+                "media_paths": image_paths,
             }
 
         return message, additional

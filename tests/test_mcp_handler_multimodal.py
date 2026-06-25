@@ -443,7 +443,7 @@ def test_mcp_isolated_operation_timeout_returns_control(mcp_handler_module):
 
 
 def test_mcp_image_content_becomes_history_image_attachment(mcp_handler_module, monkeypatch):
-    module, _tmp_path = mcp_handler_module
+    module, tmp_path = mcp_handler_module
     agent, log, tool_results, messages, updates, warnings = _agent_recorder()
     image_b64 = base64.b64encode(b"image-bytes").decode("ascii")
     result = _FakeCallToolResult(
@@ -470,16 +470,24 @@ def test_mcp_image_content_becomes_history_image_attachment(mcp_handler_module, 
     response = asyncio.run(tool.execute())
 
     assert "[Tool returned no textual content]" not in response.message
-    assert response.message == "MCP returned image attachment (image/webp, 11 bytes)."
+    assert (
+        "Saved MCP image attachment (image/webp, 11 bytes) to "
+        "/a0/tmp/mcp/ctx_mcp/venice_image/"
+    ) in response.message
     assert response.additional is not None
-    data_url = response.additional["raw_content"][0]["image_url"]["url"]
-    assert data_url == f"data:image/webp;base64,{image_b64}"
+    image_path = response.additional["raw_content"][0]["image_url"]["url"]
+    assert image_path.startswith("/a0/tmp/mcp/ctx_mcp/venice_image/")
+    assert response.additional["attachments"] == [image_path]
+    assert response.additional["media_paths"] == [image_path]
+    assert (tmp_path / image_path.removeprefix("/a0/")).exists()
 
     asyncio.run(tool.after_execution(response))
 
     assert tool_results[0][0] == ("venice_image", response.message)
+    assert tool_results[0][1]["attachments"] == [image_path]
+    assert tool_results[0][1]["media_paths"] == [image_path]
     raw_message = messages[0][1]["content"]
-    assert raw_message["raw_content"][0]["image_url"]["url"] == data_url
+    assert raw_message["raw_content"][0]["image_url"]["url"] == image_path
     assert messages[0][1]["tokens"] == module.MCP_MEDIA_TOKENS_ESTIMATE
     assert updates[-1]["content"] == response.message
     assert warnings == []
@@ -527,7 +535,7 @@ def test_mcp_audio_content_is_saved_instead_of_discarded(mcp_handler_module, mon
 
 
 def test_mcp_image_resource_blob_becomes_history_image_attachment(mcp_handler_module, monkeypatch):
-    module, _tmp_path = mcp_handler_module
+    module, tmp_path = mcp_handler_module
     agent, log, tool_results, messages, updates, warnings = _agent_recorder()
     image_b64 = base64.b64encode(b"resource-image").decode("ascii")
     result = _FakeCallToolResult(
@@ -562,16 +570,21 @@ def test_mcp_image_resource_blob_becomes_history_image_attachment(mcp_handler_mo
 
     response = asyncio.run(tool.execute())
 
-    assert response.message == "MCP returned resource image attachment (image/webp, 14 bytes)."
+    assert (
+        "Saved MCP resource image attachment (image/webp, 14 bytes) to "
+        "/a0/tmp/mcp/ctx_mcp/venice_resource_image/"
+    ) in response.message
     assert response.additional is not None
-    data_url = response.additional["raw_content"][0]["image_url"]["url"]
-    assert data_url == f"data:image/webp;base64,{image_b64}"
+    image_path = response.additional["raw_content"][0]["image_url"]["url"]
+    assert image_path.startswith("/a0/tmp/mcp/ctx_mcp/venice_resource_image/")
+    assert response.additional["attachments"] == [image_path]
+    assert (tmp_path / image_path.removeprefix("/a0/")).exists()
 
     asyncio.run(tool.after_execution(response))
 
     assert tool_results[0][0] == ("venice_resource_image", response.message)
     raw_message = messages[0][1]["content"]
-    assert raw_message["raw_content"][0]["image_url"]["url"] == data_url
+    assert raw_message["raw_content"][0]["image_url"]["url"] == image_path
     assert updates[-1]["content"] == response.message
     assert warnings == []
 
