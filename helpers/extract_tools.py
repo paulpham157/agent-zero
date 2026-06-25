@@ -10,12 +10,9 @@ def json_parse_dirty(json: str) -> dict[str, Any] | None:
 
     parsed_candidates: list[dict[str, Any]] = []
     for ext_json in extract_json_root_strings(json.strip()):
-        try:
-            data = DirtyJson.parse_string(ext_json)
-            if isinstance(data, dict):
-                parsed_candidates.append(data)
-        except Exception:
-            continue
+        data = _parse_json_root_object(ext_json)
+        if data is not None:
+            parsed_candidates.append(data)
     for data in parsed_candidates:
         try:
             normalize_tool_request(data)
@@ -53,9 +50,17 @@ def normalize_tool_request(tool_request: Any) -> tuple[str, dict]:
 
 
 def extract_json_root_string(content: str) -> str | None:
-    for root in extract_json_root_strings(content):
+    roots = extract_json_root_strings(content)
+    for root in roots:
+        data = _parse_json_root_object(root)
+        if data is None:
+            continue
+        try:
+            normalize_tool_request(data)
+        except ValueError:
+            continue
         return root
-    return None
+    return roots[0] if roots else None
 
 
 def extract_json_root_strings(content: str) -> list[str]:
@@ -81,6 +86,14 @@ def extract_json_root_strings(content: str) -> list[str]:
 
         roots.append(content[start : start + parser.index])
     return roots
+
+
+def _parse_json_root_object(root: str) -> dict[str, Any] | None:
+    try:
+        data = DirtyJson.parse_string(root)
+    except Exception:
+        return None
+    return data if isinstance(data, dict) else None
 
 
 def extract_json_object_string(content):

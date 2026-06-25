@@ -90,6 +90,20 @@ def test_json_parse_dirty_prefers_valid_tool_request_after_preamble_object():
     }
 
 
+def test_extract_json_root_string_prefers_valid_tool_request():
+    text = (
+        'I will call the tool after this note {"note":"not the tool"}.\n'
+        '{"tool_name":"response","tool_args":{"text":"ok"}} trailing text'
+    )
+
+    assert extract_tools.extract_json_root_string(text) == (
+        '{"tool_name":"response","tool_args":{"text":"ok"}}'
+    )
+    assert extract_tools.extract_json_root_string(
+        'Only a note {"note":"not the tool"}'
+    ) == '{"note":"not the tool"}'
+
+
 def test_litellm_global_kwargs_merge_defaults_and_config(monkeypatch):
     monkeypatch.setattr(
         models.settings,
@@ -240,6 +254,76 @@ async def test_unified_call_stops_after_canonical_root_snapshot(monkeypatch):
     assert stream.closed is True
     assert len(seen) == 1
     assert seen[0][1] == '{"tool_name":"response","tool_args":{"text":"hello"}} trailing text'
+
+
+@pytest.mark.asyncio
+async def test_unified_call_stops_after_tool_root_with_incidental_json(monkeypatch):
+    stream = _AsyncChunkStream(
+        [
+            {"type": "response.created"},
+            _response_event('Preamble {"note":"not the tool"}.\n'),
+            _response_event(
+                '{"tool_name":"response","tool_args":{"text":"ok"}} trailing text'
+            ),
+            _response_event(" unreachable"),
+        ]
+    )
+
+    async def fake_aresponses(*args, **kwargs):
+        assert kwargs["stream"] is True
+        assert kwargs["input"] == ""
+        assert kwargs["store"] is True
+        return stream
+
+    async def fake_rate_limiter(*args, **kwargs):
+        return None
+
+    monkeypatch.setattr(litellm_transport, "aresponses", fake_aresponses)
+    monkeypatch.setattr(models, "apply_rate_limiter", fake_rate_limiter)
+    monkeypatch.setattr(
+        models.settings,
+        "get_settings",
+        lambda: {"litellm_global_kwargs": {}},
+    )
+
+    wrapper = models.LiteLLMChatWrapper(
+        model="test-model",
+        provider="openai",
+        model_config=None,
+    )
+
+    seen: list[tuple[str, str]] = []
+
+    async def response_callback(chunk: str, full: str):
+        seen.append((chunk, full))
+        snapshot = extract_tools.extract_json_root_string(full)
+        if not snapshot:
+            return None
+        parsed_snapshot = extract_tools.json_parse_dirty(snapshot)
+        if parsed_snapshot is None:
+            return None
+        try:
+            extract_tools.normalize_tool_request(parsed_snapshot)
+        except ValueError:
+            return None
+        return snapshot
+
+    response, reasoning = await wrapper.unified_call(
+        messages=[],
+        response_callback=response_callback,
+    )
+
+    assert response == '{"tool_name":"response","tool_args":{"text":"ok"}}'
+    assert reasoning == ""
+    assert stream.index == 3
+    assert stream.closed is True
+    assert len(seen) == 2
+    assert seen[0][1] == 'Preamble {"note":"not the tool"}.\n'
+    assert (
+        seen[1][1]
+        == 'Preamble {"note":"not the tool"}.\n'
+        '{"tool_name":"response","tool_args":{"text":"ok"}} trailing text'
+    )
 
 
 @pytest.mark.asyncio
