@@ -56,7 +56,7 @@
 - Helper modules own reusable framework APIs and must preserve public callers unless all callers, tests, and docs are updated together.
 - Update this file whenever public functions, classes, persistence behavior, path/security assumptions, side effects, or cross-module contracts change.
 - Loaded skill names are chat-wide context data under `CONTEXT_DATA_NAME_LOADED_SKILLS`; legacy agent-local `loaded_skills` lists are migrated into context data and cleared when read.
-- Invalid `SKILL.md` frontmatter emits a deduplicated scan warning with the skipped skill path/name and best-effort line number instead of disappearing silently from lists, search, catalog, and load.
+- Invalid `SKILL.md` frontmatter emits a once-per-path scan warning with the skipped skill path/name and a line number when the parser can identify one directly.
 - Observed side-effect areas: filesystem reads, filesystem deletion, plugin state, settings/state persistence, context data, secret handling.
 - Imported dependency areas include: `__future__`, `dataclasses`, `helpers`, `os`, `pathlib`, `re`, `typing`.
 

@@ -341,14 +341,15 @@ def test_invalid_skill_frontmatter_warns_when_skill_is_skipped(monkeypatch, tmp_
     )
 
     warnings: list[str] = []
-    runtime._SKILL_PARSE_WARNINGS.clear()
+    runtime._WARNED_SKILL_PARSE_PATHS.clear()
     monkeypatch.setattr(runtime, "get_skill_roots", lambda agent=None: [str(skills_root)])
     monkeypatch.setattr(runtime, "_emit_skill_scan_warning", warnings.append)
 
     assert runtime.list_skills() == []
-    assert len(warnings) == 1
-    assert "skill broken-skill skipped: invalid frontmatter at line 4" in warnings[0]
-    assert "Unterminated YAML frontmatter" in warnings[0]
+    assert warnings == [
+        "skill broken-skill skipped: invalid frontmatter at line 4: "
+        "Unterminated YAML frontmatter"
+    ]
 
     assert runtime.list_skills() == []
     assert len(warnings) == 1

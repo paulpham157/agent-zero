@@ -25,7 +25,7 @@ CONTEXT_DATA_NAME_LOADED_SKILLS = AGENT_DATA_NAME_LOADED_SKILLS
 CONTEXT_DATA_NAME_CHAT_ACTIVE_SKILLS = "skills_chat_active"
 CONTEXT_DATA_NAME_CHAT_DISABLED_SKILLS = "skills_chat_disabled"
 CONTEXT_DATA_NAME_CHAT_VISIBLE_SKILLS = "skills_chat_visible"
-_SKILL_PARSE_WARNINGS: set[str] = set()
+_WARNED_SKILL_PARSE_PATHS: set[Path] = set()
 
 
 class ActiveSkillEntry(TypedDict, total=False):
@@ -264,9 +264,7 @@ def _emit_skill_scan_warning(message: str) -> None:
         print(f"Warning: {message}")
 
 
-def _frontmatter_error_line(markdown: str, error: str) -> int:
-    text = markdown or ""
-    lines = text.splitlines()
+def _frontmatter_error_line(lines: List[str], error: str) -> int | None:
     if not lines:
         return 1
 
@@ -279,30 +277,22 @@ def _frontmatter_error_line(markdown: str, error: str) -> int:
         return 1
     if error.startswith("Unterminated YAML frontmatter"):
         return max(len(lines), 1)
-
-    match = re.search(r"line\s+(\d+)", error, flags=re.IGNORECASE)
-    if match:
-        start_idx = 0
-        for index, line in enumerate(lines):
-            if line.strip() == "---":
-                start_idx = index
-                break
-        return start_idx + int(match.group(1)) + 1
-    return 1
+    return None
 
 
 def _warn_skill_skipped(skill_md_path: Path, markdown: str, errors: List[str]) -> None:
     if not errors:
         return
-    error = str(errors[0] or "invalid frontmatter").strip()
-    line = _frontmatter_error_line(markdown, error)
-    key = f"{skill_md_path}:{line}:{error}"
-    if key in _SKILL_PARSE_WARNINGS:
+    if skill_md_path in _WARNED_SKILL_PARSE_PATHS:
         return
-    _SKILL_PARSE_WARNINGS.add(key)
+    _WARNED_SKILL_PARSE_PATHS.add(skill_md_path)
+
+    error = str(errors[0] or "invalid frontmatter").strip()
+    line = _frontmatter_error_line((markdown or "").splitlines(), error)
     skill_label = skill_md_path.parent.name or str(skill_md_path)
+    location = f" at line {line}" if line is not None else ""
     _emit_skill_scan_warning(
-        f"skill {skill_label} skipped: invalid frontmatter at line {line}: {error}"
+        f"skill {skill_label} skipped: invalid frontmatter{location}: {error}"
     )
 
 
