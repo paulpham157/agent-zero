@@ -137,6 +137,9 @@ export async function getMessageHandler(type) {
 // entrypoint called from poll/WS communication, this is how all messages are rendered and updated
 // input is raw log format
 export async function setMessages(messages) {
+  messages = Array.isArray(messages) ? [...messages].filter(Boolean) : [];
+  messages.sort((a, b) => (a.no ?? Number.MAX_SAFE_INTEGER) - (b.no ?? Number.MAX_SAFE_INTEGER));
+
   const context = {
     messages,
     history: getChatHistoryEl(),

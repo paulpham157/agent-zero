@@ -348,6 +348,10 @@ export async function applySnapshot(snapshot, options = {}) {
 
   if (lastLogVersion != snapshot.log_version) {
     updated = true;
+    if (snapshot.logs?.[0]?.no === 0) {
+      const chatHistoryEl = document.getElementById("chat-history");
+      if (chatHistoryEl) chatHistoryEl.innerHTML = "";
+    }
     await setMessages(snapshot.logs);
     afterMessagesUpdate(snapshot.logs);
   }
