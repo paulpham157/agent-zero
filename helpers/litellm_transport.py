@@ -640,13 +640,11 @@ class ResponsesTransport:
         response_builtin_tools: Any = None,
     ) -> list[Any]:
         merged: list[Any] = []
-        if isinstance(tools, list):
-            merged.extend(tools)
-        elif tools:
-            merged.append(tools)
-
-        for source in (response_function_tools, response_builtin_tools):
-            for tool in _as_list(source):
+        for source in (tools, response_function_tools, response_builtin_tools):
+            source_tools = (
+                source if isinstance(source, list) else [source] if source else []
+            )
+            for tool in source_tools:
                 normalized = cls.normalize_response_tool(tool)
                 if normalized:
                     merged.append(normalized)
@@ -658,7 +656,12 @@ class ResponsesTransport:
             tool = {"type": tool}
         if not isinstance(tool, dict):
             return None
-        return dict(tool)
+        normalized = dict(tool)
+        if normalized.get("type") == "function":
+            normalized["parameters"] = _normalize_function_parameters(
+                normalized.get("parameters")
+            )
+        return normalized
 
     @staticmethod
     def prepare_prompt_caching(
@@ -800,7 +803,9 @@ class ResponsesTransport:
                     "type": "function",
                     "name": function.get("name", ""),
                     "description": function.get("description", ""),
-                    "parameters": function.get("parameters", {}),
+                    "parameters": _normalize_function_parameters(
+                        function.get("parameters")
+                    ),
                 }
                 if "strict" in function:
                     response_tool["strict"] = function["strict"]
@@ -1204,6 +1209,23 @@ def _response_tool_type(tool: Any) -> str:
     if isinstance(tool, dict):
         return str(tool.get("type") or "")
     return ""
+
+
+def _normalize_function_parameters(parameters: Any) -> dict[str, Any]:
+    if not isinstance(parameters, dict):
+        return _permissive_function_parameters()
+
+    normalized = dict(parameters)
+    normalized.setdefault("type", "object")
+    if normalized.get("type") == "object" and not isinstance(
+        normalized.get("properties"), dict
+    ):
+        normalized["properties"] = {}
+    return normalized or _permissive_function_parameters()
+
+
+def _permissive_function_parameters() -> dict[str, Any]:
+    return {"type": "object", "properties": {}, "additionalProperties": True}
 
 
 def apply_chat_prompt_cache_markers(

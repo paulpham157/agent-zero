@@ -217,13 +217,17 @@ def _schema_from_any(schema: Any) -> dict[str, Any]:
     if isinstance(schema, dict):
         normalized = dict(schema)
         normalized.setdefault("type", "object")
+        if normalized.get("type") == "object" and not isinstance(
+            normalized.get("properties"), dict
+        ):
+            normalized["properties"] = {}
         normalized.setdefault("additionalProperties", True)
         return normalized
     return _permissive_schema()
 
 
 def _permissive_schema() -> dict[str, Any]:
-    return {"type": "object", "additionalProperties": True}
+    return {"type": "object", "properties": {}, "additionalProperties": True}
 
 
 def _balanced_json_object(text: str) -> str:

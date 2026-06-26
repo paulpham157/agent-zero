@@ -780,7 +780,7 @@ def test_responses_request_translates_messages_and_params():
             "type": "function",
             "name": "lookup",
             "description": "Search",
-            "parameters": {"type": "object"},
+            "parameters": {"type": "object", "properties": {}},
             "strict": True,
         }
     ]
@@ -837,6 +837,61 @@ def test_responses_request_normalizes_reasoning_and_orphan_tool_choice():
     )
 
     assert "reasoning" not in request
+
+
+def test_responses_request_normalizes_function_tool_parameter_shapes():
+    request = litellm_transport.ResponsesTransport.from_chat(
+        [],
+        {
+            "functions": [
+                {
+                    "name": "legacy_noop",
+                    "description": "Legacy function",
+                    "parameters": {},
+                }
+            ],
+        },
+    )
+
+    assert request["tools"] == [
+        {
+            "type": "function",
+            "name": "legacy_noop",
+            "description": "Legacy function",
+            "parameters": {
+                "type": "object",
+                "properties": {},
+            },
+        }
+    ]
+
+    request = litellm_transport.ResponsesTransport.from_chat(
+        [],
+        {
+            "a0_responses_function_tools": [
+                {
+                    "type": "function",
+                    "name": "native_noop",
+                    "description": "Native function",
+                    "parameters": {"type": "object"},
+                }
+            ],
+            "responses_builtin_tools": [{"type": "web_search"}],
+        },
+    )
+
+    assert request["tools"] == [
+        {
+            "type": "function",
+            "name": "native_noop",
+            "description": "Native function",
+            "parameters": {
+                "type": "object",
+                "properties": {},
+            },
+        },
+        {"type": "web_search"},
+    ]
 
 
 def test_chat_completions_kwargs_omit_empty_tools():

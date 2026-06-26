@@ -101,3 +101,48 @@ def test_responses_function_tools_use_prompt_declared_names(monkeypatch, tmp_pat
     assert name_map["call_subordinate"] == "call_subordinate"
     assert name_map["behaviour_adjustment"] == "behaviour_adjustment"
     assert name_map["filename_only"] == "filename_only"
+    assert all(isinstance(tool["parameters"].get("properties"), dict) for tool in tools)
+
+
+def test_responses_function_tools_add_empty_properties_to_mcp_schemas(
+    monkeypatch,
+    tmp_path,
+):
+    prompt_root = tmp_path / "prompts"
+    prompt_root.mkdir()
+
+    monkeypatch.setattr(
+        responses_tools.subagents,
+        "get_paths",
+        lambda *args, **kwargs: [str(prompt_root)],
+    )
+    monkeypatch.setattr(
+        responses_tools,
+        "_mcp_tools",
+        lambda agent: [
+            (
+                "remote_noop",
+                {
+                    "description": "Remote noop",
+                    "input_schema": {"type": "object"},
+                },
+            )
+        ],
+    )
+
+    tools, _name_map = responses_tools.build_responses_function_tools(
+        FakeAgent(prompt_root)
+    )
+
+    assert tools == [
+        {
+            "type": "function",
+            "name": "remote_noop",
+            "description": "Remote noop",
+            "parameters": {
+                "type": "object",
+                "properties": {},
+                "additionalProperties": True,
+            },
+        }
+    ]
