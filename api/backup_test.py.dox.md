@@ -25,6 +25,7 @@
 - `BackupTest` defines `requires_auth(...)`.
 - `BackupTest` defines `requires_loopback(...)`.
 - Imported dependency areas include: `helpers.api`, `helpers.backup`.
+- The `truncated` response flag is true only when a finite `max_files` limit is supplied and the result reaches that limit.
 
 ## Key Concepts
 

@@ -13,7 +13,7 @@
 - Classes:
 - `BackupService` (no explicit base class)
   - `get_default_backup_metadata(self) -> Dict[str, Any]`
-  - `async test_patterns(self, metadata: Dict[str, Any], max_files: int=...) -> List[Dict[str, Any]]`
+  - `async test_patterns(self, metadata: Dict[str, Any], max_files: Optional[int]=...) -> List[Dict[str, Any]]`
   - `async create_backup(self, include_patterns: List[str], exclude_patterns: List[str], include_hidden: bool=..., backup_name: str=...) -> str`
   - `async inspect_backup(self, backup_file) -> Dict[str, Any]`
   - `async preview_restore(self, backup_file, restore_include_patterns: Optional[List[str]]=..., restore_exclude_patterns: Optional[List[str]]=..., overwrite_policy: str=..., clean_before_restore: bool=..., user_edited_metadata: Optional[Dict[str, Any]]=...) -> Dict[str, Any]`
@@ -25,6 +25,7 @@
 - Update this file whenever public functions, classes, persistence behavior, path/security assumptions, side effects, or cross-module contracts change.
 - Observed side-effect areas: filesystem reads, filesystem writes, filesystem deletion, settings/state persistence, secret handling.
 - Imported dependency areas include: `datetime`, `helpers`, `helpers.localization`, `helpers.print_style`, `json`, `os`, `pathspec`, `platform`, `tempfile`, `typing`, `zipfile`.
+- `test_patterns(..., max_files=None)` is the unlimited scan mode. UI preview and dry-run callers may pass bounded limits, but real backup creation and restore clean-before-restore must use unlimited matching so archives and cleanup are not silently truncated.
 
 ## Key Concepts
 
