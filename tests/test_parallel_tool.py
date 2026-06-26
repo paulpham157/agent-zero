@@ -103,6 +103,41 @@ def test_normalize_parallel_tool_calls_accepts_normal_tool_request_shapes() -> N
     assert calls[1].tool_args == {"method": "list_tasks", "action": "list_tasks"}
 
 
+def test_normalize_parallel_tool_calls_accepts_json_string_array() -> None:
+    calls = parallel_tools.normalize_parallel_tool_calls(
+        json.dumps(
+            [
+                {
+                    "tool_name": "call_subordinate",
+                    "tool_args": {
+                        "profile": "researcher",
+                        "reset": True,
+                        "message": "Research nuclear fusion news in French.",
+                    },
+                    "headline": "Researching nuclear fusion news in French",
+                },
+                {
+                    "tool_name": "call_subordinate",
+                    "tool_args": {
+                        "profile": "researcher",
+                        "reset": True,
+                        "message": "Research nuclear fusion news in Italian.",
+                    },
+                    "headline": "Researching nuclear fusion news in Italian",
+                },
+            ]
+        )
+    )
+
+    assert [call.tool_name for call in calls] == [
+        "call_subordinate",
+        "call_subordinate",
+    ]
+    assert calls[0].tool_args["profile"] == "researcher"
+    assert calls[0].tool_args["reset"] is True
+    assert calls[1].tool_args["message"] == "Research nuclear fusion news in Italian."
+
+
 def test_normalize_parallel_tool_calls_rejects_nested_parallel() -> None:
     with pytest.raises(ValueError, match="cannot be nested"):
         parallel_tools.normalize_parallel_tool_calls(

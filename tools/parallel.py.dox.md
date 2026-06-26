@@ -32,7 +32,7 @@
 
 ## Key Concepts
 
-- `tool_calls`, `calls`, and `items` are accepted aliases for the wrapped call list.
+- `tool_calls`, `calls`, and `items` are accepted aliases for the wrapped call list; a valid JSON string encoding of the list is tolerated for provider/model recovery.
 - Wrapped call items can use the same `tool_name`/`tool_args` shape as top-level agent replies; extra planning fields are ignored by normalization.
 - `job_ids` can be supplied as a string or list when awaiting, collecting, or canceling existing jobs.
 - The response is compact JSON intended for the model to read and continue with.

@@ -78,6 +78,13 @@ def extract_tool_calls(args: dict[str, Any]) -> Any:
 
 
 def normalize_parallel_tool_calls(raw_calls: Any) -> list[NormalizedToolCall]:
+    if isinstance(raw_calls, str):
+        try:
+            raw_calls = json.loads(raw_calls)
+        except json.JSONDecodeError as exc:
+            raise ValueError(
+                "`tool_calls` must be an array of normal tool-call objects."
+            ) from exc
     if not isinstance(raw_calls, list):
         raise ValueError("`tool_calls` must be an array of normal tool-call objects.")
     if not raw_calls:
