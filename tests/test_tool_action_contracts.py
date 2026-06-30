@@ -548,6 +548,54 @@ def test_memory_forget_tool_imports_plugin_memory_load(monkeypatch):
     ]
 
 
+def test_memory_load_coerces_numeric_string_args(monkeypatch):
+    _install_tool_stub(monkeypatch)
+    monkeypatch.syspath_prepend(str(Path.cwd()))
+
+    class FakeDb:
+        def __init__(self) -> None:
+            self.calls = []
+
+        async def search_similarity_threshold(self, **kwargs):
+            self.calls.append(kwargs)
+            return []
+
+    fake_db = FakeDb()
+
+    async def get_memory(_agent):
+        return fake_db
+
+    memory_stub = types.ModuleType("plugins._memory.helpers.memory")
+    memory_stub.Memory = types.SimpleNamespace(get=get_memory)
+    monkeypatch.setitem(sys.modules, "plugins._memory.helpers.memory", memory_stub)
+
+    sys.modules.pop("plugins._memory.tools.memory_load", None)
+    module = importlib.import_module("plugins._memory.tools.memory_load")
+    tool = module.MemoryLoad(
+        _FakeAgent(),
+        "memory_load",
+        None,
+        {
+            "query": "smoke test project context",
+            "threshold": "0.7",
+            "limit": "3",
+        },
+        "",
+        None,
+    )
+
+    asyncio.run(tool.execute(**tool.args))
+
+    assert fake_db.calls == [
+        {
+            "query": "smoke test project context",
+            "threshold": 0.7,
+            "limit": 3,
+            "filter": "",
+        }
+    ]
+
+
 def test_behaviour_adjustment_normalizes_duplicate_rules(monkeypatch):
     _install_tool_stub(monkeypatch)
     monkeypatch.syspath_prepend(str(Path.cwd()))
