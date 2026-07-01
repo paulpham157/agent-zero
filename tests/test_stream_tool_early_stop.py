@@ -62,6 +62,14 @@ class _FailingAsyncChunkStream:
         self.closed = True
 
 
+class _DumpOnly:
+    def __init__(self, **data):
+        self._data = data
+
+    def model_dump(self):
+        return dict(self._data)
+
+
 def test_extract_json_root_string_returns_canonical_snapshot():
     text = (
         'prefix {"tool_name":"response","tool_args":{"text":"brace } inside"}} '
@@ -536,6 +544,62 @@ async def test_unified_call_falls_back_when_litellm_hides_responses_404_url(
 
     wrapper = models.LiteLLMChatWrapper(
         model="claude-opus-4.7",
+        provider="openai",
+        model_config=None,
+    )
+
+    async def response_callback(chunk: str, full: str):
+        return None
+
+    response, reasoning = await wrapper.unified_call(
+        messages=[],
+        response_callback=response_callback,
+    )
+
+    assert response == "fallback"
+    assert reasoning == ""
+    assert calls == ["responses", "chat"]
+
+
+@pytest.mark.parametrize(
+    "responses_error",
+    [
+        "litellm.exceptions.APIError: Path /api/v1/responses is not "
+        "available through this proxy.",
+        "MaskedHTTPStatusError: Server error '500 Internal Server Error' "
+        "for url 'https://api.venice.ai/api/v1/responses'",
+        "InternalServerError: OpenAIException - '<=' not supported between "
+        "instances of 'str' and 'int' for url 'http://192.168.200.52:4000/responses'",
+        "ImportError Missing dependency No module named 'fastapi'. "
+        "Run `pip install 'litellm[proxy]'`",
+    ],
+)
+@pytest.mark.asyncio
+async def test_unified_call_falls_back_for_proxy_responses_failures(
+    monkeypatch,
+    responses_error,
+):
+    calls: list[str] = []
+
+    async def fake_aresponses(*args, **kwargs):
+        calls.append("responses")
+        raise RuntimeError(responses_error)
+
+    async def fake_acompletion(*args, **kwargs):
+        calls.append("chat")
+        assert kwargs["stream"] is True
+        assert kwargs["drop_params"] is True
+        return _AsyncChunkStream([_chunk("fallback")])
+
+    async def fake_rate_limiter(*args, **kwargs):
+        return None
+
+    monkeypatch.setattr(litellm_transport, "aresponses", fake_aresponses)
+    monkeypatch.setattr(litellm_transport, "acompletion", fake_acompletion)
+    monkeypatch.setattr(models, "apply_rate_limiter", fake_rate_limiter)
+
+    wrapper = models.LiteLLMChatWrapper(
+        model="test-model",
         provider="openai",
         model_config=None,
     )
@@ -1169,7 +1233,7 @@ def test_cache_control_policy_keeps_native_responses_first():
 def test_responses_fallback_does_not_mask_rate_limits():
     exc = RuntimeError(
         "RateLimitError: 429 Too Many Requests for url "
-        "https://api.openai.com/v1/responses"
+        "https://provider.example/v1/responses"
     )
 
     policy = litellm_transport.TransportPolicy(
@@ -1213,6 +1277,191 @@ def test_responses_response_parser_extracts_text_reasoning_and_function_calls():
         "tool_name": "lookup",
         "tool_args": {"q": "a0"},
     }
+
+
+def test_chat_completions_response_parser_extracts_tool_calls():
+    parsed = litellm_transport.ChatCompletionsTransport.parse(
+        {
+            "choices": [
+                {
+                    "message": {
+                        "tool_calls": [
+                            {
+                                "id": "call_1",
+                                "type": "function",
+                                "function": {
+                                    "name": "lookup",
+                                    "arguments": '{"q":"a0"}',
+                                },
+                            }
+                        ]
+                    }
+                }
+            ]
+        }
+    )
+
+    assert extract_tools.json_parse_dirty(parsed["response_delta"]) == {
+        "tool_name": "lookup",
+        "tool_args": {"q": "a0"},
+    }
+    assert parsed["_output_items"][0]["name"] == "lookup"
+
+
+def test_chat_completions_stream_parser_accumulates_tool_call_arguments():
+    parser = litellm_transport.ChatCompletionsStreamParser()
+
+    assert parser.parse(
+        {
+            "choices": [
+                {
+                    "delta": {
+                        "tool_calls": [
+                            {
+                                "index": 0,
+                                "id": "call_1",
+                                "type": "function",
+                                "function": {
+                                    "name": "lookup",
+                                    "arguments": '{"q":',
+                                },
+                            }
+                        ]
+                    }
+                }
+            ]
+        }
+    ) == {"reasoning_delta": "", "response_delta": ""}
+    parsed = parser.parse(
+        {
+            "choices": [
+                {
+                    "delta": {
+                        "tool_calls": [
+                            {
+                                "index": 0,
+                                "function": {"arguments": '"a0"}'},
+                            }
+                        ]
+                    },
+                    "finish_reason": "tool_calls",
+                }
+            ]
+        }
+    )
+
+    assert extract_tools.json_parse_dirty(parsed["response_delta"]) == {
+        "tool_name": "lookup",
+        "tool_args": {"q": "a0"},
+    }
+    assert parser.output_items()[0]["name"] == "lookup"
+    assert parser.flush() == {"reasoning_delta": "", "response_delta": ""}
+
+
+def test_chat_completions_stream_parser_reads_dumped_tool_calls():
+    parser = litellm_transport.ChatCompletionsStreamParser()
+
+    assert parser.parse(
+        _DumpOnly(
+            choices=[
+                _DumpOnly(
+                    delta=_DumpOnly(
+                        tool_calls=[
+                            {
+                                "index": 0,
+                                "id": "call_1",
+                                "type": "function",
+                                "function": _DumpOnly(
+                                    name="lookup",
+                                    arguments='{"q":"a0"}',
+                                ),
+                            }
+                        ]
+                    )
+                )
+            ]
+        )
+    ) == {"reasoning_delta": "", "response_delta": ""}
+
+    parsed = parser.parse(
+        _DumpOnly(choices=[_DumpOnly(delta=_DumpOnly(), finish_reason="tool_calls")])
+    )
+
+    assert extract_tools.json_parse_dirty(parsed["response_delta"]) == {
+        "tool_name": "lookup",
+        "tool_args": {"q": "a0"},
+    }
+
+
+@pytest.mark.asyncio
+async def test_unified_turn_preserves_chat_streaming_tool_calls(monkeypatch):
+    async def fake_acompletion(*args, **kwargs):
+        return _AsyncChunkStream(
+            [
+                {
+                    "choices": [
+                        {
+                            "delta": {
+                                "tool_calls": [
+                                    {
+                                        "index": 0,
+                                        "id": "call_1",
+                                        "type": "function",
+                                        "function": {
+                                            "name": "lookup",
+                                            "arguments": '{"q":',
+                                        },
+                                    }
+                                ]
+                            }
+                        }
+                    ]
+                },
+                {
+                    "choices": [
+                        {
+                            "delta": {
+                                "tool_calls": [
+                                    {
+                                        "index": 0,
+                                        "function": {"arguments": '"a0"}'},
+                                    }
+                                ]
+                            },
+                            "finish_reason": "tool_calls",
+                        }
+                    ]
+                },
+            ]
+        )
+
+    async def fake_rate_limiter(*args, **kwargs):
+        return None
+
+    monkeypatch.setattr(litellm_transport, "acompletion", fake_acompletion)
+    monkeypatch.setattr(models, "apply_rate_limiter", fake_rate_limiter)
+
+    wrapper = models.LiteLLMChatWrapper(
+        model="test-model",
+        provider="openai",
+        model_config=None,
+    )
+
+    async def response_callback(chunk: str, full: str):
+        return None
+
+    result = await wrapper.unified_turn(
+        messages=[],
+        response_callback=response_callback,
+        a0_api_mode="chat",
+    )
+
+    assert extract_tools.json_parse_dirty(result.response) == {
+        "tool_name": "lookup",
+        "tool_args": {"q": "a0"},
+    }
+    assert result.function_calls[0].name == "lookup"
+    assert result.function_calls[0].arguments == {"q": "a0"}
 
 
 def test_responses_stream_parser_accumulates_function_call_arguments():

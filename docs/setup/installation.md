@@ -546,6 +546,12 @@ Use the naming format required by your selected provider:
 > [!TIP]
 > If you see "Invalid model ID," verify the provider and naming format on the provider website, or search the web for "<name-of-ai-model> model naming".
 
+#### Local Model Server Addresses From Docker
+
+When Agent Zero runs in Docker, `localhost` and `127.0.0.1` inside an API base URL mean the Agent Zero container, not your host machine. For a model server running on the host, use `http://host.docker.internal:<port>` when available, or the Docker host gateway address such as `http://172.17.0.1:<port>` on the default Linux bridge.
+
+If the model server only listens on host loopback, for example `127.0.0.1:<port>`, the container still cannot reach it through the gateway. Configure the local server to listen on a Docker-reachable address such as `0.0.0.0`, and keep that port limited to trusted clients.
+
 #### Context Window & Memory Split
 
 - Set the **total context window** (e.g., 100k) first.

@@ -19,7 +19,7 @@
 
 - `LLMResult.metadata()` stores data under `RESPONSE_METADATA_KEY` so history can round-trip provider state.
 - `from_response(...)` must preserve provider `response_id`, `previous_response_id`, raw output items, usage, and capability metadata.
-- `from_chat(...)` must produce an equivalent chat-completions result with `mode="chat_completions"` and `state="off"`.
+- `from_chat(...)` must produce an equivalent chat-completions result with `mode="chat_completions"` and `state="off"`, preserving optional function-call output items when the chat transport supplies them.
 - Function-call output items must preserve `call_id` and optional acknowledged safety checks.
 - Argument parsing must tolerate JSON strings, dictionaries, and malformed values without throwing.
 

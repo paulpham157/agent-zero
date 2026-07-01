@@ -125,12 +125,13 @@ class LLMResult:
         response: str,
         reasoning: str = "",
         input_items: list[dict[str, Any]] | None = None,
+        output_items: list[dict[str, Any]] | None = None,
         provider_model_key: str = "",
         capability: dict[str, Any] | None = None,
     ) -> "LLMResult":
-        output_items = []
-        if response:
-            output_items.append(
+        items = [ResponseItem.from_any(item) for item in output_items or []]
+        if response and not items:
+            items.append(
                 ResponseItem(
                     type="message",
                     data={
@@ -141,7 +142,7 @@ class LLMResult:
                 )
             )
         if reasoning:
-            output_items.insert(
+            items.insert(
                 0,
                 ResponseItem(
                     type="reasoning",
@@ -151,16 +152,19 @@ class LLMResult:
                     },
                 ),
             )
-        return cls(
+        result = cls(
             response=response,
             reasoning=reasoning,
             input_items=list(input_items or []),
-            output_items=output_items,
+            output_items=items,
             provider_model_key=provider_model_key,
             mode="chat_completions",
             state="off",
             capability=dict(capability or {}),
         )
+        if not result.response and result.function_calls:
+            result.response = result.function_calls_text()
+        return result
 
     @property
     def function_calls(self) -> list[ResponseFunctionCall]:

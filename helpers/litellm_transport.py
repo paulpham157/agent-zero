@@ -260,11 +260,17 @@ class LiteLLMTransport:
             try:
                 if self.policy.mode is TransportMode.CHAT_COMPLETIONS:
                     iterator = completion(**self._chat_request(stream=True))
+                    parser = ChatCompletionsStreamParser()
                     for chunk in iterator:
-                        parsed = ChatCompletionsTransport.parse(chunk)
+                        parsed = parser.parse(chunk)
                         if _has_chunk_delta(parsed):
                             got_any_chunk = True
                             yield parsed
+                    parsed = parser.flush()
+                    if _has_chunk_delta(parsed):
+                        got_any_chunk = True
+                        yield parsed
+                    self.last_result = self._stream_result_from_chat_parser(parser)
                 else:
                     request = self._responses_request(stream=True)
                     iterator = responses(**request)
@@ -295,11 +301,17 @@ class LiteLLMTransport:
             try:
                 if self.policy.mode is TransportMode.CHAT_COMPLETIONS:
                     iterator = await acompletion(**self._chat_request(stream=True))
+                    parser = ChatCompletionsStreamParser()
                     async for chunk in iterator:  # type: ignore[union-attr]
-                        parsed = ChatCompletionsTransport.parse(chunk)
+                        parsed = parser.parse(chunk)
                         if _has_chunk_delta(parsed):
                             got_any_chunk = True
                             yield parsed
+                    parsed = parser.flush()
+                    if _has_chunk_delta(parsed):
+                        got_any_chunk = True
+                        yield parsed
+                    self.last_result = self._stream_result_from_chat_parser(parser)
                 else:
                     request = self._responses_request(stream=True)
                     iterator = await aresponses(**request)
@@ -393,6 +405,7 @@ class LiteLLMTransport:
             response=parsed["response_delta"],
             reasoning=parsed["reasoning_delta"],
             input_items=ResponsesTransport.input_from_messages(self.messages),
+            output_items=parsed.get("_output_items"),
             provider_model_key=self.model,
             capability=self._capability_metadata(),
         )
@@ -416,6 +429,20 @@ class LiteLLMTransport:
         if parser.completed_response is None:
             return None
         return self._llm_result_from_response(parser.completed_response, request)
+
+    def _stream_result_from_chat_parser(
+        self, parser: "ChatCompletionsStreamParser"
+    ) -> LLMResult | None:
+        output_items = parser.output_items()
+        if not output_items:
+            return None
+        return LLMResult.from_chat(
+            response=parser.function_calls_text(),
+            input_items=ResponsesTransport.input_from_messages(self.messages),
+            output_items=output_items,
+            provider_model_key=self.model,
+            capability=self._capability_metadata(),
+        )
 
     def _capability_metadata(self) -> dict[str, Any]:
         return {
@@ -489,7 +516,149 @@ class ChatCompletionsTransport:
         reasoning_delta = _get_value(delta, "reasoning_content") or _get_value(
             message, "reasoning_content"
         ) or ""
-        return {"reasoning_delta": reasoning_delta, "response_delta": response_delta}
+        parsed = {"reasoning_delta": reasoning_delta, "response_delta": response_delta}
+        if not response_delta:
+            tool_calls = _as_list(_get_value(message, "tool_calls"))
+            response_delta = ChatCompletionsTransport.tool_calls_text(tool_calls)
+            if response_delta:
+                parsed["response_delta"] = response_delta
+                parsed["_output_items"] = ChatCompletionsTransport.output_items(
+                    tool_calls
+                )
+        return parsed
+
+    @classmethod
+    def tool_calls_text(cls, tool_calls: Any) -> str:
+        calls = [cls.tool_call_object(call) for call in _as_list(tool_calls)]
+        calls = [call for call in calls if call]
+        if not calls:
+            return ""
+        if len(calls) == 1:
+            return json.dumps(calls[0])
+        return json.dumps(
+            {"tool_name": "parallel_tool_calls", "tool_args": {"calls": calls}}
+        )
+
+    @classmethod
+    def output_items(cls, tool_calls: Any) -> list[dict[str, Any]]:
+        items = []
+        for index, tool_call in enumerate(_as_list(tool_calls)):
+            item = cls.function_call_item(tool_call, fallback_index=index)
+            if item:
+                items.append(item)
+        return items
+
+    @classmethod
+    def function_call_item(
+        cls, tool_call: Any, *, fallback_index: int = 0
+    ) -> dict[str, Any]:
+        function = _get_value(tool_call, "function") or {}
+        name = _get_value(function, "name") or _get_value(tool_call, "name")
+        if not name:
+            return {}
+        raw_arguments = _get_value(function, "arguments")
+        if raw_arguments is None:
+            raw_arguments = _get_value(tool_call, "arguments") or "{}"
+        call_id = str(_get_value(tool_call, "id") or f"call_{fallback_index}")
+        return {
+            "type": "function_call",
+            "id": call_id,
+            "call_id": call_id,
+            "name": str(name),
+            "arguments": raw_arguments
+            if isinstance(raw_arguments, str)
+            else json.dumps(raw_arguments),
+        }
+
+    @classmethod
+    def tool_call_object(cls, tool_call: Any) -> dict[str, Any]:
+        item = cls.function_call_item(tool_call)
+        if not item:
+            return {}
+        return ResponsesTransport.function_call_object(item)
+
+
+class ChatCompletionsStreamParser:
+    def __init__(self) -> None:
+        self.tool_calls: dict[str, dict[str, Any]] = {}
+        self.order: list[str] = []
+        self.emitted = False
+
+    def parse(self, chunk: Any) -> ChatChunk:
+        parsed = ChatCompletionsTransport.parse(chunk)
+        choice = _first_choice(chunk)
+        delta = _get_value(choice, "delta") or {}
+        self._append_tool_calls(_get_value(delta, "tool_calls"))
+        self._append_legacy_function_call(_get_value(delta, "function_call"))
+
+        if _get_value(choice, "finish_reason") in {"tool_calls", "function_call"}:
+            text = self._emit()
+            if text and not parsed["response_delta"]:
+                parsed["response_delta"] = text
+        return parsed
+
+    def flush(self) -> ChatChunk:
+        return {"reasoning_delta": "", "response_delta": self._emit()}
+
+    def function_calls_text(self) -> str:
+        return ChatCompletionsTransport.tool_calls_text(self._ordered_tool_calls())
+
+    def output_items(self) -> list[dict[str, Any]]:
+        return ChatCompletionsTransport.output_items(self._ordered_tool_calls())
+
+    def _append_tool_calls(self, tool_calls: Any) -> None:
+        for fallback_index, tool_call in enumerate(_as_list(tool_calls)):
+            key = self._tool_call_key(tool_call, fallback_index)
+            current = self._current_tool_call(key)
+            if _get_value(tool_call, "id"):
+                current["id"] = _get_value(tool_call, "id")
+            if _get_value(tool_call, "type"):
+                current["type"] = _get_value(tool_call, "type")
+            self._append_function_delta(current, _get_value(tool_call, "function"))
+
+    def _append_legacy_function_call(self, function_call: Any) -> None:
+        if not function_call:
+            return
+        current = self._current_tool_call("0")
+        current["type"] = "function"
+        self._append_function_delta(current, function_call)
+
+    def _append_function_delta(self, tool_call: dict[str, Any], delta: Any) -> None:
+        if not delta:
+            return
+        function = tool_call.setdefault("function", {})
+        if _get_value(delta, "name"):
+            function["name"] = _get_value(delta, "name")
+        if _get_value(delta, "arguments") is not None:
+            function["arguments"] = str(function.get("arguments") or "") + str(
+                _get_value(delta, "arguments") or ""
+            )
+
+    def _current_tool_call(self, key: str) -> dict[str, Any]:
+        if key not in self.tool_calls:
+            self.tool_calls[key] = {"type": "function", "function": {}}
+            self.order.append(key)
+        return self.tool_calls[key]
+
+    def _ordered_tool_calls(self) -> list[dict[str, Any]]:
+        return [self.tool_calls[key] for key in self.order]
+
+    def _emit(self) -> str:
+        if self.emitted:
+            return ""
+        text = self.function_calls_text()
+        if text:
+            self.emitted = True
+        return text
+
+    @staticmethod
+    def _tool_call_key(tool_call: Any, fallback_index: int) -> str:
+        index = _get_value(tool_call, "index")
+        if index is not None:
+            return str(index)
+        if _get_value(tool_call, "id"):
+            return str(_get_value(tool_call, "id"))
+        return str(fallback_index)
 
 
 class ResponsesTransport:
@@ -1548,6 +1717,8 @@ def _is_responses_not_supported_error(exc: Exception) -> bool:
         return False
     if _is_bad_request_error(exc) and _looks_like_responses_request_rejected(text):
         return True
+    if _is_server_error(exc) and _looks_like_responses_endpoint(text):
+        return True
     if _is_not_found_error(exc) and _looks_like_responses_endpoint_not_found(text):
         return True
     if "/v1/responses" in text and any(
@@ -1565,6 +1736,9 @@ def _is_responses_not_supported_error(exc: Exception) -> bool:
             "no 'tools' defined while 'tool_choice' is specified",
             "tools` must not be an empty array",
             "tools must not be an empty array",
+            "not available through this proxy",
+            "litellm[proxy]",
+            "no module named 'fastapi'",
         )
     )
 
@@ -1583,6 +1757,24 @@ def _is_bad_request_error(exc: Exception) -> bool:
         return True
     text = _exception_text(exc).lower()
     return "400" in text and "bad request" in text
+
+
+def _is_server_error(exc: Exception) -> bool:
+    status_code = _exception_status_code(exc)
+    if isinstance(status_code, int) and 500 <= status_code < 600:
+        return True
+    type_chain = _exception_type_chain(exc).lower()
+    if "internalservererror" in type_chain:
+        return True
+    text = _exception_text(exc).lower()
+    return any(
+        marker in text
+        for marker in (
+            "500 internal server error",
+            "server error '500",
+            "internalservererror",
+        )
+    )
 
 
 def _looks_like_responses_request_rejected(text: str) -> bool:
@@ -1611,6 +1803,10 @@ def _looks_like_responses_endpoint_not_found(text: str) -> bool:
     if "openaiexception" in text:
         return True
     return "detail" in text and "not found" in text
+
+
+def _looks_like_responses_endpoint(text: str) -> bool:
+    return "/responses" in text or "path /api/v1/responses" in text
 
 
 def _is_responses_state_unsupported_error(exc: Exception) -> bool:
@@ -1742,7 +1938,10 @@ def _first_choice(chunk: Any) -> Any:
 def _get_value(obj: Any, key: str) -> Any:
     if isinstance(obj, dict):
         return obj.get(key)
-    return getattr(obj, key, None)
+    value = getattr(obj, key, None)
+    if value is not None:
+        return value
+    return _object_to_dict(obj).get(key)
 
 
 def _as_list(value: Any) -> list[Any]:
