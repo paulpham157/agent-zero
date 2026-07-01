@@ -26,6 +26,7 @@
 - Observed side-effect areas: settings/state persistence.
 - Dirty parsing scans complete JSON object roots in prose and prefers the first object that normalizes as a valid tool request, so a leading text preamble or incidental non-tool object does not force a misformat warning when a valid tool call follows.
 - Streaming tool snapshots use the same valid-tool preference through `extract_json_root_string`, while preserving the first complete object fallback when no valid tool-call object is present.
+- Root extraction ignores objects nested inside an open parent object, so streamed wrapper tools such as `parallel` cannot stop early on the first nested `tool_calls` item.
 - Imported dependency areas include: `dirty_json`, `helpers.modules`, `re`, `regex`, `typing`.
 
 ## Key Concepts

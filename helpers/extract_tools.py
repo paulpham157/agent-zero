@@ -64,10 +64,7 @@ def extract_json_root_strings(content: str) -> list[str]:
         return []
 
     roots: list[str] = []
-    for start, char in enumerate(content):
-        if char != "{":
-            continue
-
+    for start in _json_root_object_starts(content):
         parser = DirtyJson()
         try:
             parser.parse(content[start:])
@@ -79,6 +76,36 @@ def extract_json_root_strings(content: str) -> list[str]:
 
         roots.append(content[start : start + parser.index])
     return roots
+
+
+def _json_root_object_starts(content: str) -> list[int]:
+    starts: list[int] = []
+    depth = 0
+    quote: str | None = None
+    escaped = False
+
+    for index, char in enumerate(content):
+        if quote:
+            if escaped:
+                escaped = False
+            elif char == "\\":
+                escaped = True
+            elif char == quote:
+                quote = None
+            continue
+
+        if depth and char in ['"', "'", "`"]:
+            quote = char
+        elif char == "{":
+            if depth == 0:
+                starts.append(index)
+            depth += 1
+        elif depth and char == "[":
+            depth += 1
+        elif depth and char in ["}", "]"]:
+            depth -= 1
+
+    return starts
 
 
 def _parse_json_root_object(root: str) -> dict[str, Any] | None:

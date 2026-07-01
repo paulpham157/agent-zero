@@ -112,6 +112,32 @@ def test_extract_json_root_string_prefers_valid_tool_request():
     ) == '{"note":"not the tool"}'
 
 
+def test_extract_json_root_string_waits_for_complete_parallel_parent():
+    partial = (
+        '{"tool_name":"parallel","tool_args":{"tool_calls":['
+        '{"tool_name":"code_execution_tool","tool_args":{"code":"first"}}'
+    )
+
+    assert extract_tools.extract_json_root_string(partial) is None
+
+    full = (
+        partial
+        + ',{"tool_name":"code_execution_tool","tool_args":{"code":"second"}}'
+        '],"wait":true}} trailing text'
+    )
+
+    root = extract_tools.extract_json_root_string(full)
+    assert root == (
+        '{"tool_name":"parallel","tool_args":{"tool_calls":['
+        '{"tool_name":"code_execution_tool","tool_args":{"code":"first"}},'
+        '{"tool_name":"code_execution_tool","tool_args":{"code":"second"}}'
+        '],"wait":true}}'
+    )
+    parsed = extract_tools.json_parse_dirty(root)
+    assert parsed["tool_name"] == "parallel"
+    assert len(parsed["tool_args"]["tool_calls"]) == 2
+
+
 def test_litellm_global_kwargs_merge_defaults_and_config(monkeypatch):
     monkeypatch.setattr(
         models.settings,
