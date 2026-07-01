@@ -123,9 +123,30 @@ def test_file_browser_editor_picker_modes_have_primary_footer_actions() -> None:
     assert "Open in Editor action visible outside the overflow menu" in dox
 
     editor_button_index = html.index("file-editor-open-action")
-    dropdown_menu_index = html.index('class="dropdown-menu"')
+    dropdown_menu_index = html.index('class="dropdown-menu file-actions-menu"')
     assert editor_button_index < dropdown_menu_index
     assert 'x-show="$store.fileBrowser.canOpenInActionMenu(file)"' in html
+
+
+def test_file_browser_dropdown_escapes_scroll_container_and_header_is_opaque() -> None:
+    html = read("webui", "components", "modals", "file-browser", "file-browser.html")
+    store = read("webui", "components", "modals", "file-browser", "file-browser-store.js")
+
+    assert '<div class="files-list" @scroll="$store.fileBrowser.closeDropdown()">' in html
+    assert 'overflow: auto;' in html
+    assert 'x-teleport="body"' in html
+    assert 'class="dropdown-menu file-actions-menu"' in html
+    assert ':style="$store.fileBrowser.dropdownStyle"' in html
+    assert '@click.stop="$store.fileBrowser.toggleDropdown(file.path, $event.currentTarget)"' in html
+    assert "getDropdownStyle(triggerElement)" in store
+    assert 'position: "fixed"' in store
+    assert 'zIndex: "6000"' in store
+
+    assert "var(--secondary-bg)" not in html
+    assert "var(--border-color)" not in html
+    assert "var(--text-secondary)" not in html
+    assert "background: color-mix(in srgb, var(--color-panel) 88%, var(--color-background) 12%);" in html
+    assert "border-bottom: 1px solid var(--color-border);" in html
 
 
 def test_file_browser_empty_api_path_uses_default_workdir_contract() -> None:

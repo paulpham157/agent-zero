@@ -50,10 +50,12 @@ export async function importComponent(path, targetElement) {
     const parser = new DOMParser();
     const doc = parser.parseFromString(html, "text/html");
 
+    const componentAssetSelector = "style, script, link[rel='stylesheet']";
     const allNodes = [
-      ...doc.querySelectorAll("style"),
-      ...doc.querySelectorAll("script"),
-      ...doc.body.childNodes,
+      ...doc.querySelectorAll(componentAssetSelector),
+      ...Array.from(doc.body.childNodes).filter(
+        (node) => !node.matches?.(componentAssetSelector)
+      ),
     ];
 
     const loadPromises = [];

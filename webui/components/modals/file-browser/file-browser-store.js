@@ -88,6 +88,7 @@ const model = {
   renamePerformAction: null,
   renameValidateName: null,
   openDropdownPath: null, // Track which dropdown is currently open
+  dropdownStyle: {},
   searchQuery: "",
   isBulkBusy: false,
   pickerMode: PICKER_MODE_NONE,
@@ -783,9 +784,14 @@ const model = {
   },
 
   // --- Dropdown Management -------------------------------------------------
-  toggleDropdown(filePath) {
+  toggleDropdown(filePath, triggerElement = null) {
     // Toggle: if already open, close it; otherwise open this one (closing any other)
-    this.openDropdownPath = this.openDropdownPath === filePath ? null : filePath;
+    if (this.openDropdownPath === filePath) {
+      this.closeDropdown();
+      return;
+    }
+    this.openDropdownPath = filePath;
+    this.dropdownStyle = this.getDropdownStyle(triggerElement);
   },
 
   isDropdownOpen(filePath) {
@@ -794,6 +800,33 @@ const model = {
 
   closeDropdown() {
     this.openDropdownPath = null;
+    this.dropdownStyle = {};
+  },
+
+  getDropdownStyle(triggerElement) {
+    if (!triggerElement) return {};
+
+    const rect = triggerElement.getBoundingClientRect();
+    const gap = 6;
+    const padding = 8;
+    const minWidth = 180;
+    const spaceBelow = window.innerHeight - rect.bottom - gap - padding;
+    const spaceAbove = rect.top - gap - padding;
+    const openUp = spaceBelow < 160 && spaceAbove > spaceBelow;
+    const maxHeight = Math.max(96, openUp ? spaceAbove : spaceBelow);
+    const maxLeft = Math.max(padding, window.innerWidth - minWidth - padding);
+    const left = Math.min(Math.max(rect.right - minWidth, padding), maxLeft);
+
+    return {
+      position: "fixed",
+      left: `${Math.round(left)}px`,
+      right: "auto",
+      top: openUp ? "auto" : `${Math.round(rect.bottom + gap)}px`,
+      bottom: openUp ? `${Math.round(window.innerHeight - rect.top + gap)}px` : "auto",
+      minWidth: `${minWidth}px`,
+      maxHeight: `${Math.round(maxHeight)}px`,
+      zIndex: "6000",
+    };
   },
 
   // --- Navigation ----------------------------------------------------------
