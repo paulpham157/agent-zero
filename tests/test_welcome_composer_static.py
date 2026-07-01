@@ -145,13 +145,18 @@ def test_welcome_hover_and_focus_borders_use_neutral_tokens() -> None:
     assert "border-color: color-mix(in srgb, var(--color-border) 88%, var(--color-text) 12%)" in surfaces
 
 
-def test_composer_uses_rubik_until_caret_enters_fenced_code() -> None:
+def test_composer_creates_visual_code_blocks_from_entered_fence() -> None:
     chat_bar = _read("webui/components/chat/input/chat-bar-input.html")
     input_store = _read("webui/components/chat/input/input-store.js")
 
+    assert 'contenteditable="true"' in chat_bar
     assert "font-family: var(--font-family-main" in chat_bar
-    assert "#chat-input.is-code-context" in chat_bar
+    assert ".composer-code-content" in chat_bar
     assert "font-family: var(--font-family-code" in chat_bar
-    assert "'is-code-context': $store.chatInput.isCodeContext" in chat_bar
-    assert "_isCaretInsideFence(text, index)" in input_store
-    assert "matches.length % 2 === 1" in input_store
+    assert "FENCE_LINE_RE" in input_store
+    assert "_tryCreateCodeBlock($event)" in input_store
+    assert 'data-code-block' in input_store
+    assert "handlePaste($event)" in input_store
+    assert "_insertPlainText(text)" in input_store
+    assert "is-code-context" not in chat_bar
+    assert "_isCaretInsideFence" not in input_store

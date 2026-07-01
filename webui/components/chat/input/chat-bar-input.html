@@ -24,17 +24,16 @@
         </div>
       </div>
 
-      <!-- Container for textarea and expand button -->
+      <!-- Container for composer and expand button -->
       <div id="chat-input-container">
-        <textarea id="chat-input" :placeholder="$store.chatInput.inputPlaceholder" rows="1"
-          @keydown.enter="if (!$event.shiftKey && !$event.isComposing && $event.keyCode !== 229) { $event.preventDefault(); $store.chatInput.sendMessage(); }"
-          @keydown.up="$store.chatInput.historyPrev($event)" @keydown.down="$store.chatInput.historyNext($event)"
+        <div id="chat-input" role="textbox" aria-label="Message" aria-multiline="true" contenteditable="true"
+          spellcheck="true" :data-placeholder="$store.chatInput.inputPlaceholder"
+          @keydown="$store.chatInput.handleKeydown($event)"
           @input="$store.chatInput.handleInput($event)"
-          @keyup="$store.chatInput._syncCaretFromEvent($event)"
-          @click="$store.chatInput._syncCaretFromEvent($event)"
-          @select="$store.chatInput._syncCaretFromEvent($event)"
-          :class="{ 'progress-active': $store.chatInput.progressActive, 'is-code-context': $store.chatInput.isCodeContext }"
-          x-model="$store.chatInput.message"></textarea>
+          @paste="$store.chatInput.handlePaste($event)"
+          :class="{ 'progress-active': $store.chatInput.progressActive, 'is-empty': !$store.chatInput.message }"
+          x-create="$store.chatInput.mountEditor($el)"
+          x-destroy="$store.chatInput.unmountEditor($el)"></div>
         <div id="chat-input-progress-placeholder" x-show="$store.chatInput.showProgressPlaceholder"
           x-html="$store.chatInput.progressPlaceholderHtml"
           :class="{ 'progress-active': $store.chatInput.progressActive }" aria-hidden="true" style="display: none;">
@@ -174,6 +173,8 @@
       padding: 0.68rem 2.2rem 0.68rem 0.1rem;
       margin: 0;
       overflow-y: auto;
+      white-space: pre-wrap;
+      word-break: break-word;
       scroll-behavior: smooth;
       resize: none;
       align-content: center;
@@ -183,10 +184,30 @@
       -webkit-transition: color 0.16s ease, background-color 0.16s ease;
     }
 
-    #chat-input.is-code-context {
+    #chat-input.is-empty::before {
+      content: attr(data-placeholder);
+      color: color-mix(in srgb, var(--color-text) 62%, transparent);
+      opacity: 0.78;
+      pointer-events: none;
+    }
+
+    #chat-input .composer-code-block {
+      display: block;
+      margin: 0.48rem 0;
+      padding: 0.56rem 0.7rem;
+      border-radius: 6px;
+      background: color-mix(in srgb, var(--color-border) 28%, transparent);
+    }
+
+    #chat-input .composer-code-content {
+      min-height: 1.35rem;
+      margin: 0;
+      outline: none;
+      white-space: pre-wrap;
+      word-break: break-word;
       font-family: var(--font-family-code, "Roboto Mono", monospace);
       font-size: 0.94rem;
-      align-content: start;
+      line-height: 1.45;
     }
 
     #chat-input::-webkit-scrollbar {
@@ -216,14 +237,8 @@
       background-color: transparent;
     }
 
-    #chat-input::placeholder {
-      color: color-mix(in srgb, var(--color-text) 62%, transparent);
-      opacity: 0.78;
-      transition: color 0.16s ease;
-    }
-
     /* Progress ghost text animation — gentle pulse on placeholder */
-    #chat-input.progress-active::placeholder {
+    #chat-input.progress-active.is-empty::before {
       animation: placeholder-pulse 2s ease-in-out infinite;
     }
 

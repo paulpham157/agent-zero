@@ -862,12 +862,12 @@
                 align-content: center;
             }
 
-            .welcome-composer #chat-input:placeholder-shown {
+            .welcome-composer #chat-input.is-empty {
                 overflow-y: hidden;
                 scrollbar-width: none;
             }
 
-            .welcome-composer #chat-input:placeholder-shown::-webkit-scrollbar {
+            .welcome-composer #chat-input.is-empty::-webkit-scrollbar {
                 display: none;
             }
 
@@ -938,7 +938,7 @@
         }
 
         @media (max-width: 420px) {
-            .welcome-composer #chat-input:placeholder-shown {
+            .welcome-composer #chat-input.is-empty {
                 min-height: 5rem;
                 padding-top: 0.52rem;
                 padding-bottom: 0.52rem;

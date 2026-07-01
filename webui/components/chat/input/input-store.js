@@ -7,6 +7,8 @@ import { store as attachmentsStore } from "/components/chat/attachments/attachme
 import { store as chatsStore } from "/components/sidebar/chats/chats-store.js";
 
 const ICON_MARKER_RE = /icon:\/\/([a-zA-Z0-9_]+)(\[(?:\\.|[^\]])*\])?/g;
+const FENCE_LINE_RE = /^```([A-Za-z0-9_-]*)?$/;
+const BLOCK_TAGS = new Set(["DIV", "P", "LI"]);
 
 function escapeHTML(value) {
   return String(value ?? "")
@@ -48,7 +50,8 @@ function convertIconMarkersToHtml(value) {
 
 const model = {
   paused: false,
-  message: "",
+  _message: "",
+  _editorEl: null,
   _history: [],
   _historyIndex: null,
   _draft: "",
@@ -57,7 +60,15 @@ const model = {
   chatMoreMenuOpen: false,
   progressText: "",
   progressActive: false,
-  _caretIndex: 0,
+
+  get message() {
+    return this._message;
+  },
+
+  set message(value) {
+    this._message = String(value ?? "");
+    this._renderEditorFromText(this._message);
+  },
 
   toggleChatMoreMenu() {
     this.chatMoreMenuOpen = !this.chatMoreMenuOpen;
@@ -83,10 +94,6 @@ const model = {
     if (state === "all") return "Press Enter to send queued messages";
     if (this.showProgressPlaceholder) return "";
     return "Type your message here...";
-  },
-
-  get isCodeContext() {
-    return this._isCaretInsideFence(this.message, this._caretIndex);
   },
 
   get showProgressPlaceholder() {
@@ -135,6 +142,8 @@ const model = {
   },
 
   async sendMessage() {
+    this._syncMessageFromEditor();
+
     // Capture sent prompt to per-chat history (bash-style)
     try { this._pushHistory(this.message); } catch (_e) { /* ignore */ }
 
@@ -149,48 +158,244 @@ const model = {
     }
   },
 
+  mountEditor(editor) {
+    this._editorEl = editor;
+    this._renderEditorFromText(this._message);
+    this.adjustTextareaHeight({ target: editor });
+  },
+
+  unmountEditor(editor) {
+    if (this._editorEl === editor) this._editorEl = null;
+  },
+
   _composerTextareas(target = null) {
-    if (target?.tagName === "TEXTAREA") return [target];
-    return ["chat-input"]
-      .map((id) => document.getElementById(id))
-      .filter(Boolean);
+    const editor = target?.closest?.("#chat-input") || this._editorEl || document.getElementById("chat-input");
+    return editor ? [editor] : [];
   },
 
   _activeTextarea() {
     const active = document.activeElement;
-    if (active?.id === "chat-input") {
-      return active;
+    const activeEditor = active?.closest?.("#chat-input");
+    if (activeEditor) {
+      return activeEditor;
     }
-    return document.getElementById("chat-input");
+    return this._editorEl || document.getElementById("chat-input");
   },
 
-  _syncCaretFromEvent($event = null) {
-    const ta = ($event && $event.target?.tagName === "TEXTAREA")
-      ? $event.target
-      : this._activeTextarea();
-    if (!ta) {
-      this._caretIndex = this.message.length;
-      return;
+  _renderEditorFromText(text) {
+    const editor = this._editorEl;
+    if (!editor) return;
+    if (editor.textContent !== text || editor.querySelector("[data-code-block]")) {
+      editor.textContent = text;
     }
-    this._caretIndex = Number.isFinite(ta.selectionStart) ? ta.selectionStart : this.message.length;
+    this._setEditorEmptyState();
   },
 
-  _isCaretInsideFence(text, index) {
-    const source = String(text || "");
-    const caret = Math.max(0, Math.min(source.length, Number(index) || 0));
-    const matches = source.slice(0, caret).match(/```/g);
-    return Boolean(matches && matches.length % 2 === 1);
+  _setEditorEmptyState() {
+    const editor = this._editorEl;
+    if (editor) editor.classList.toggle("is-empty", !this._message);
+  },
+
+  _createCodeBlock(lang = "") {
+    const block = document.createElement("div");
+    block.className = "composer-code-block";
+    block.dataset.codeBlock = "true";
+    block.dataset.lang = lang;
+    block.contentEditable = "false";
+
+    const code = document.createElement("pre");
+    code.className = "composer-code-content";
+    code.dataset.codeContent = "true";
+    code.contentEditable = "true";
+    code.spellcheck = false;
+    code.setAttribute("aria-label", "Code block");
+    block.append(code);
+
+    return block;
+  },
+
+  _plainText(node) {
+    if (!node) return "";
+    if (node.nodeType === Node.TEXT_NODE) return node.nodeValue || "";
+    if (node.nodeType !== Node.ELEMENT_NODE) return "";
+    if (node.matches?.("[data-code-block]")) {
+      const lang = node.dataset.lang || "";
+      const code = this._plainText(node.querySelector("[data-code-content]")).replace(/\n$/, "");
+      return "```" + lang + "\n" + code + "\n```";
+    }
+    if (node.tagName === "BR") return "\n";
+
+    let text = "";
+    for (const child of node.childNodes) text += this._plainText(child);
+    if (node !== this._editorEl && BLOCK_TAGS.has(node.tagName) && text && !text.endsWith("\n")) {
+      text += "\n";
+    }
+    return text;
+  },
+
+  _editorToMarkdown() {
+    return this._plainText(this._editorEl).replace(/\n$/, "");
+  },
+
+  _syncMessageFromEditor() {
+    if (!this._editorEl) return;
+    this._message = this._editorToMarkdown();
+    this._setEditorEmptyState();
+  },
+
+  _isInCodeBlock(target) {
+    return Boolean(target?.closest?.("[data-code-content]"));
+  },
+
+  _selectionOffsets(editor) {
+    const selection = document.getSelection?.();
+    if (!selection || selection.rangeCount === 0 || !editor) {
+      return { start: this._message.length, end: this._message.length };
+    }
+    const range = selection.getRangeAt(0);
+    if (!editor.contains(range.startContainer) || !editor.contains(range.endContainer)) {
+      return { start: this._message.length, end: this._message.length };
+    }
+
+    const before = range.cloneRange();
+    before.selectNodeContents(editor);
+    before.setEnd(range.startContainer, range.startOffset);
+
+    const selected = range.cloneRange();
+    return {
+      start: before.toString().length,
+      end: before.toString().length + selected.toString().length,
+    };
+  },
+
+  _setEditorCaret(offset) {
+    const editor = this._activeTextarea();
+    const selection = document.getSelection?.();
+    if (!editor || !selection) return;
+
+    editor.focus();
+    const range = document.createRange();
+    let remaining = Math.max(0, Number(offset) || 0);
+    const walker = document.createTreeWalker(editor, NodeFilter.SHOW_TEXT);
+    let node = walker.nextNode();
+
+    while (node) {
+      const length = node.nodeValue.length;
+      if (remaining <= length) {
+        range.setStart(node, remaining);
+        range.collapse(true);
+        selection.removeAllRanges();
+        selection.addRange(range);
+        return;
+      }
+      remaining -= length;
+      node = walker.nextNode();
+    }
+
+    range.selectNodeContents(editor);
+    range.collapse(false);
+    selection.removeAllRanges();
+    selection.addRange(range);
+  },
+
+  _focusCodeBlock(block) {
+    queueMicrotask(() => {
+      const code = block.querySelector("[data-code-content]");
+      const selection = document.getSelection?.();
+      if (!code || !selection) return;
+      code.focus();
+      const range = document.createRange();
+      range.selectNodeContents(code);
+      range.collapse(false);
+      selection.removeAllRanges();
+      selection.addRange(range);
+    });
+  },
+
+  _insertPlainText(text) {
+    const selection = document.getSelection?.();
+    if (!selection || selection.rangeCount === 0) return false;
+    const range = selection.getRangeAt(0);
+    range.deleteContents();
+    const node = document.createTextNode(text);
+    range.insertNode(node);
+    range.setStart(node, node.nodeValue.length);
+    range.collapse(true);
+    selection.removeAllRanges();
+    selection.addRange(range);
+    return true;
+  },
+
+  _tryCreateCodeBlock($event) {
+    const editor = this._activeTextarea();
+    const selection = document.getSelection?.();
+    if (!editor || !selection || selection.rangeCount === 0) return false;
+
+    const range = selection.getRangeAt(0);
+    if (!range.collapsed || !editor.contains(range.startContainer)) return false;
+    if (this._isInCodeBlock(range.startContainer.parentElement)) return false;
+
+    const before = range.cloneRange();
+    before.selectNodeContents(editor);
+    before.setEnd(range.startContainer, range.startOffset);
+
+    const after = range.cloneRange();
+    after.selectNodeContents(editor);
+    after.setStart(range.startContainer, range.startOffset);
+
+    const lineBefore = before.toString().split("\n").pop() || "";
+    const lineAfter = (after.toString().split("\n")[0] || "");
+    const match = (lineBefore + lineAfter).match(FENCE_LINE_RE);
+    if (!match || lineAfter) return false;
+    if (range.startContainer.nodeType !== Node.TEXT_NODE || range.startOffset < lineBefore.length) return false;
+
+    $event.preventDefault();
+    const editRange = range.cloneRange();
+    editRange.setStart(range.startContainer, range.startOffset - lineBefore.length);
+    editRange.deleteContents();
+
+    const block = this._createCodeBlock(match[1] || "");
+    editRange.insertNode(block);
+    block.after(document.createTextNode("\n"));
+    this._focusCodeBlock(block);
+    this._syncMessageFromEditor();
+    this.adjustTextareaHeight({ target: editor });
+    return true;
   },
 
   handleInput($event) {
-    this._syncCaretFromEvent($event);
+    this._syncMessageFromEditor();
     this.adjustTextareaHeight($event);
+  },
+
+  handlePaste($event) {
+    const text = $event.clipboardData?.getData("text/plain");
+    if (text === undefined) return;
+    $event.preventDefault();
+    this._insertPlainText(text);
+    this.handleInput($event);
+  },
+
+  handleKeydown($event) {
+    if ($event.isComposing || $event.keyCode === 229) return;
+
+    if ($event.key === "Enter") {
+      if (this._isInCodeBlock($event.target)) return;
+      if (!$event.shiftKey) {
+        if (this._tryCreateCodeBlock($event)) return;
+        $event.preventDefault();
+        this.sendMessage();
+      }
+      return;
+    }
+
+    if ($event.key === "ArrowUp") this.historyPrev($event);
+    if ($event.key === "ArrowDown") this.historyNext($event);
   },
 
   adjustTextareaHeight($event = null) {
     const target = $event?.target || null;
     for (const chatInput of this._composerTextareas(target)) {
-      if (!this.message) chatInput.value = "";
       chatInput.style.height = "auto";
       chatInput.style.height = chatInput.scrollHeight + "px";
       // pick up any layout shift triggered by the height assignment
@@ -437,11 +642,10 @@ const model = {
 
   _setCaretStart() {
     queueMicrotask(() => {
-      const ta = this._activeTextarea();
-      if (ta) {
-        try { ta.setSelectionRange(0, 0); } catch (_e) { /* ignore */ }
-        try { ta.scrollTop = 0; } catch (_e) { /* ignore */ }
-        this._syncCaretFromEvent({ target: ta });
+      const editor = this._activeTextarea();
+      if (editor) {
+        this._setEditorCaret(0);
+        try { editor.scrollTop = 0; } catch (_e) { /* ignore */ }
       }
       this.adjustTextareaHeight();
     });
@@ -449,12 +653,10 @@ const model = {
 
   _setCaretEnd() {
     queueMicrotask(() => {
-      const ta = this._activeTextarea();
-      if (ta) {
-        const end = ta.value.length;
-        try { ta.setSelectionRange(end, end); } catch (_e) { /* ignore */ }
-        try { ta.scrollTop = ta.scrollHeight; } catch (_e) { /* ignore */ }
-        this._syncCaretFromEvent({ target: ta });
+      const editor = this._activeTextarea();
+      if (editor) {
+        this._setEditorCaret(editor.innerText.length);
+        try { editor.scrollTop = editor.scrollHeight; } catch (_e) { /* ignore */ }
       }
       this.adjustTextareaHeight();
     });
@@ -462,10 +664,10 @@ const model = {
 
   historyPrev($event) {
     if ($event && ($event.isComposing || $event.keyCode === 229)) return;
-    const ta = ($event && $event.target) ? $event.target : this._activeTextarea();
-    if (!ta) return;
-    const start = ta.selectionStart;
-    const end = ta.selectionEnd;
+    if (this._isInCodeBlock($event?.target)) return;
+    const editor = this._activeTextarea();
+    if (!editor) return;
+    const { start, end } = this._selectionOffsets(editor);
     if (start !== 0 || end !== 0) return;
     $event.preventDefault();
     this._ensureHistoryLoaded();
@@ -484,12 +686,12 @@ const model = {
 
   historyNext($event) {
     if ($event && ($event.isComposing || $event.keyCode === 229)) return;
-    const ta = ($event && $event.target) ? $event.target : this._activeTextarea();
-    if (!ta) return;
-    const value = ta.value;
-    const start = ta.selectionStart;
-    const end = ta.selectionEnd;
-    if (start !== value.length || end !== value.length) return;
+    if (this._isInCodeBlock($event?.target)) return;
+    const editor = this._activeTextarea();
+    if (!editor) return;
+    const { start, end } = this._selectionOffsets(editor);
+    const valueLength = editor.innerText.length;
+    if (start !== valueLength || end !== valueLength) return;
     $event.preventDefault();
     if (this._historyIndex === null) return;
     if (this._historyIndex < this._history.length - 1) {
@@ -507,7 +709,6 @@ const model = {
     this.message = "";
     attachmentsStore.clearAttachments();
     this.chatMoreMenuOpen = false;
-    this._caretIndex = 0;
     this._historyIndex = null;
     this._draft = "";
     this.adjustTextareaHeight();
