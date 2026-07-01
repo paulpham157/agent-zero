@@ -1715,6 +1715,8 @@ def _is_responses_not_supported_error(exc: Exception) -> bool:
     text = _exception_text(exc).lower()
     if any(marker in text for marker in ("429", "too many requests", "rate limit")):
         return False
+    if _is_sse_json_decode_error(exc):
+        return True
     if _is_bad_request_error(exc) and _looks_like_responses_request_rejected(text):
         return True
     if _is_server_error(exc) and _looks_like_responses_endpoint(text):
@@ -1775,6 +1777,26 @@ def _is_server_error(exc: Exception) -> bool:
             "internalservererror",
         )
     )
+
+
+def _is_sse_json_decode_error(exc: Exception) -> bool:
+    current: BaseException | None = exc
+    while current is not None:
+        if isinstance(current, json.JSONDecodeError) and _looks_like_sse_payload(
+            current.doc
+        ):
+            return True
+        current = current.__cause__ or (
+            current.__context__ if current.__context__ is not current.__cause__ else None
+        )
+    return _looks_like_sse_payload(_exception_text(exc))
+
+
+def _looks_like_sse_payload(text: Any) -> bool:
+    if not isinstance(text, str):
+        return False
+    lowered = text.lstrip().lower()
+    return lowered.startswith("event:") and "\ndata:" in lowered
 
 
 def _looks_like_responses_request_rejected(text: str) -> bool:

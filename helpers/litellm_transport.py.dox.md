@@ -29,6 +29,7 @@
 - Prefer Responses API when configured, but fallback to Chat Completions when the provider does not support Responses.
 - Fall back to Chat Completions when a Responses request is rejected before any output by an endpoint-specific or shape-specific Bad Request indicating the provider cannot parse Responses payloads.
 - Fall back to Chat Completions when a Responses endpoint fails before output with an endpoint-specific server error, proxy path-unavailable error, or LiteLLM proxy-extra import error.
+- Fall back to Chat Completions when LiteLLM's Responses mock streaming path tries to JSON-decode a real SSE stream before any output.
 - Preserve Chat Completions tool calls from both non-streaming responses and streaming deltas as canonical `LLMResult` function-call items.
 - Preserve provider-state metadata when Responses API calls succeed, and fall back to local replay when provider state is unsupported.
 - Keep prompt-cache markers only for providers that accept them.

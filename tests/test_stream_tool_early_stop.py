@@ -1,3 +1,4 @@
+import json
 import sys
 from pathlib import Path
 
@@ -641,6 +642,55 @@ async def test_unified_call_falls_back_for_proxy_responses_failures(
     assert response == "fallback"
     assert reasoning == ""
     assert calls == ["responses", "chat"]
+
+
+@pytest.mark.asyncio
+async def test_unified_call_falls_back_when_responses_mock_reads_sse_as_json(
+    monkeypatch,
+):
+    calls: list[str] = []
+    sse_error = json.JSONDecodeError(
+        "Expecting value",
+        'event: response.output_text.delta\ndata: {"delta":"hello"}\n\n',
+        0,
+    )
+    failing_stream = _FailingAsyncChunkStream(sse_error)
+
+    async def fake_aresponses(*args, **kwargs):
+        calls.append("responses")
+        return failing_stream
+
+    async def fake_acompletion(*args, **kwargs):
+        calls.append("chat")
+        assert kwargs["stream"] is True
+        assert kwargs["drop_params"] is True
+        return _AsyncChunkStream([_chunk("fallback")])
+
+    async def fake_rate_limiter(*args, **kwargs):
+        return None
+
+    monkeypatch.setattr(litellm_transport, "aresponses", fake_aresponses)
+    monkeypatch.setattr(litellm_transport, "acompletion", fake_acompletion)
+    monkeypatch.setattr(models, "apply_rate_limiter", fake_rate_limiter)
+
+    wrapper = models.LiteLLMChatWrapper(
+        model="omniroute/test-model",
+        provider="openai",
+        model_config=None,
+    )
+
+    async def response_callback(chunk: str, full: str):
+        return None
+
+    response, reasoning = await wrapper.unified_call(
+        messages=[],
+        response_callback=response_callback,
+    )
+
+    assert response == "fallback"
+    assert reasoning == ""
+    assert calls == ["responses", "chat"]
+    assert failing_stream.closed is True
 
 
 @pytest.mark.asyncio
