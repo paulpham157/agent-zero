@@ -24,6 +24,8 @@
 - `export_json_chat(context: AgentContext)`: Export context as JSON string
 - `remove_chat(ctxid)`: Remove a chat or task context
 - `remove_msg_files(ctxid)`: Remove all message files for a chat or task context
+- `mark_chat_saved(context: AgentContext) -> None`
+- `saved_chat_ids() -> set[str]`
 - `_serialize_context(context: AgentContext)`
 - `_serialize_agent(agent: Agent)`
 - `_serialize_log(log: Log)`
@@ -32,7 +34,7 @@
 - `_deserialize_agents(agents: list[dict[str, Any]], config: AgentConfig, context: AgentContext) -> Agent`
 - `_deserialize_log(data: dict[str, Any]) -> 'Log'`
 - `_safe_json_serialize(obj, **kwargs)`
-- Notable constants/configuration names: `CHATS_FOLDER`, `LOG_SIZE`, `CHAT_FILE_NAME`.
+- Notable constants/configuration names: `CHATS_FOLDER`, `LOG_SIZE`, `CHAT_FILE_NAME`, `SAVED_CHAT_CONTEXT_DATA_KEY`.
 
 ## Runtime Contracts
 
@@ -43,6 +45,7 @@
 - Serialized chats store `agent_profile` both at the context level for the main chat and on each serialized agent so subordinate profiles survive server restart.
 - Deserialization must rebuild each agent with its serialized profile when present, falling back to the context profile for older chat files.
 - Chat loading skips directories that do not contain `chat.json`; malformed existing chat files still report load errors.
+- Contexts are marked with private `SAVED_CHAT_CONTEXT_DATA_KEY` only after a successful save or load from disk so snapshot code can detect deleted chat files without hiding fresh unsaved chats.
 
 ## Key Concepts
 

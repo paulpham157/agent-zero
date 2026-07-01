@@ -21,6 +21,7 @@
 - `_coerce_non_negative_int(value: Any, default: int=...) -> int`
 - `_get_agent_profile_labels() -> dict[str, str]`
 - `_apply_agent_profile_metadata(context_data: dict[str, Any], ctx: AgentContext, labels: dict[str, str]) -> None`
+- `_prune_missing_saved_contexts() -> None`
 - `parse_state_request_payload(payload: Mapping[str, Any]) -> StateRequestV1`
 - `_coerce_state_request_inputs(context: Any, log_from: Any, notifications_from: Any, timezone: Any) -> StateRequestV1`
 - `advance_state_request_after_snapshot(request: StateRequestV1, snapshot: Mapping[str, Any]) -> StateRequestV1`
@@ -33,12 +34,13 @@
 
 - Helper modules own reusable framework APIs and must preserve public callers unless all callers, tests, and docs are updated together.
 - Update this file whenever public functions, classes, persistence behavior, path/security assumptions, side effects, or cross-module contracts change.
-- Observed side-effect areas: plugin state, settings/state persistence, secret handling, scheduler state.
-- Imported dependency areas include: `__future__`, `agent`, `dataclasses`, `helpers.dotenv`, `helpers.localization`, `helpers.task_scheduler`, `pytz`, `types`, `typing`.
+- Observed side-effect areas: filesystem reads, plugin state, settings/state persistence, secret handling, scheduler state, in-memory context removal.
+- Imported dependency areas include: `__future__`, `agent`, `dataclasses`, `helpers.dotenv`, `helpers.localization`, `helpers.persist_chat`, `helpers.task_scheduler`, `pytz`, `types`, `typing`.
 
 ## Key Concepts
 
 - Important called helpers/classes observed in the source: `dataclass`, `_build_schema_from_typeddict`, `get_origin`, `timezone.strip`, `StateRequestV1`, `localization.get_timezone`, `localization.set_timezone`, `ctxid.strip`, `_coerce_non_negative_int`, `AgentContext.get_notification_manager`, `notification_manager.output`, `_get_agent_profile_labels`, `ctxs.sort`, `tasks.sort`, `validate_snapshot_schema_v1`, `_coerce_state_request_inputs`, `super.__init__`, `get_args`, `_annotation_to_isinstance_types`, `TypeError`.
+- Snapshot building prunes non-running in-memory contexts that were previously saved but no longer have a `chat.json`, preventing stale sidebar rows after chat files are deleted outside `/chat_remove`.
 - Keep request/response, tool, or helper semantics documented here at the same time as source changes.
 
 ## Work Guidance

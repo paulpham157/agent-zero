@@ -14,6 +14,7 @@ from helpers.log import Log, LogItem
 CHATS_FOLDER = "usr/chats"
 LOG_SIZE = 1000
 CHAT_FILE_NAME = "chat.json"
+SAVED_CHAT_CONTEXT_DATA_KEY = "_persist_chat_saved"
 
 
 def _fallback_datetime_iso() -> str:
@@ -54,6 +55,7 @@ def save_tmp_chat(context: AgentContext):
     data = _serialize_context(context)
     js = _safe_json_serialize(data, ensure_ascii=False)
     files.write_file(path, js)
+    mark_chat_saved(context)
 
 
 def save_tmp_chats():
@@ -81,6 +83,7 @@ def load_tmp_chats():
             js = files.read_file(file)
             data = json.loads(js)
             ctx = _deserialize_context(data)
+            mark_chat_saved(ctx)
             ctxids.append(ctx.id)
         except Exception as e:
             print(f"Error loading chat {file}: {e}")
@@ -89,6 +92,19 @@ def load_tmp_chats():
 
 def _get_chat_file_path(ctxid: str):
     return files.get_abs_path(CHATS_FOLDER, ctxid, CHAT_FILE_NAME)
+
+
+def mark_chat_saved(context: AgentContext) -> None:
+    context.data[SAVED_CHAT_CONTEXT_DATA_KEY] = True
+
+
+def saved_chat_ids() -> set[str]:
+    return {
+        files.basename(files.dirname(path))
+        for path in files.find_existing_paths_by_pattern(
+            files.get_abs_path(CHATS_FOLDER, "*", CHAT_FILE_NAME)
+        )
+    }
 
 
 def _convert_v080_chats():

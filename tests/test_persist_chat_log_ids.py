@@ -48,7 +48,7 @@ def test_load_tmp_chats_skips_directories_without_chat_json(monkeypatch, capsys)
     monkeypatch.setattr(
         persist_chat,
         "_deserialize_context",
-        lambda data: SimpleNamespace(id=data["id"]),
+        lambda data: SimpleNamespace(id=data["id"], data={}),
     )
 
     assert persist_chat.load_tmp_chats() == ["valid"]
