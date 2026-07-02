@@ -21,13 +21,6 @@ export const store = createStore("modelGate", {
   dispatching: false,
   _initialized: false,
 
-  get isBlockingSend() {
-    this.init();
-    if (!this.active || this.connected) return false;
-    const currentContext = globalThis.getContext?.();
-    return !this.pending?.context || !currentContext || this.pending.context === currentContext;
-  },
-
   get introText() {
     if (this.connected) {
       return `Model connected: ${this.connectedLabel || "ready"}`;

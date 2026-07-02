@@ -120,7 +120,6 @@ def test_welcome_composer_can_create_a_chat_before_sending() -> None:
     assert "this.choice = \"\";" in gate_store
     assert 'document.addEventListener("model-configured"' in gate_store
     assert 'document.addEventListener("model-setup-changed"' in gate_store
-    assert "const currentContext = globalThis.getContext?.();" in gate_store
     assert "bypassModelGate: true" in gate_store
     assert 'openPluginConfig("_model_config", "Advanced model configuration")' in gate_store
     assert 'openPluginConfig("_oauth"' not in gate_store
@@ -143,13 +142,18 @@ def test_welcome_composer_can_create_a_chat_before_sending() -> None:
       display: grid;
       gap: 0.75rem;
     }""" in gate_component
-    assert "Connect a model to send" in input_store
+    # The composer never hard-blocks sending: the in-chat gate guides users instead.
+    assert "Connect a model to send" not in input_store
+    assert "blocked" not in input_store
+    assert "sendDisabled" not in input_store
+    assert "isBlockingSend" not in gate_store
+    assert "isBlockingSend" not in index_js
 
 
 def test_welcome_composer_does_not_overlap_idle_progress_placeholder() -> None:
     input_store = _read("webui/components/chat/input/input-store.js")
 
-    assert "!!chatsStore.selected &&\n      ![\"all\", \"blocked\"].includes(this._getSendState())" in input_store
+    assert "!!chatsStore.selected &&\n      this._getSendState() !== \"all\"" in input_store
 
 
 def test_welcome_composer_buttons_keep_target_geometry_without_glow() -> None:

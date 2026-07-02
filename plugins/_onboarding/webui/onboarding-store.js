@@ -87,7 +87,6 @@ export const store = createStore("onboarding", {
   providerDetails: {},
   selectedProviderId: "",
   selectedProviderOrigin: "cloud",
-  sameAsMain: true,
   userTouchedModel: {
     chat_model: false,
     utility_model: false,
@@ -128,7 +127,6 @@ export const store = createStore("onboarding", {
     this.providerDetails = {};
     this.selectedProviderId = "";
     this.selectedProviderOrigin = "cloud";
-    this.sameAsMain = true;
     this.userTouchedModel = { chat_model: false, utility_model: false };
     this.modelDropdown = {
       chat_model: { models: [], open: false, loading: false, error: "", source: "" },
@@ -805,50 +803,34 @@ export const store = createStore("onboarding", {
     this.config[slotKey].name = modelName;
     this.userTouchedModel[slotKey] = true;
     this.modelDropdown[slotKey].open = false;
-    if (slotKey === "chat_model" && this.sameAsMain) {
-      this.syncUtilityWithMain();
-    }
   },
 
   markModelTouched(slotKey) {
     this.userTouchedModel[slotKey] = true;
-    if (slotKey === "chat_model" && this.sameAsMain) {
-      this.syncUtilityWithMain();
-    }
   },
 
   prepareUtilityDefaults() {
-    ensureSlot(this.config, "utility_model");
-    if (this.sameAsMain) {
-      this.syncUtilityWithMain();
-      return;
-    }
     const mainProvider = this.config.chat_model.provider;
-    const meta = this.providerMeta(mainProvider);
-    this.applyProviderToSlot("utility_model", mainProvider, meta);
-  },
-
-  syncUtilityWithMain() {
-    ensureSlot(this.config, "utility_model");
-    if (!this.sameAsMain || !this.config?.chat_model) return;
-    this.config.utility_model.provider = this.config.chat_model.provider;
-    this.config.utility_model.name = this.config.chat_model.name;
-    this.config.utility_model.api_base = this.config.chat_model.api_base || "";
-    this.config.utility_model.kwargs = clone(this.config.chat_model.kwargs || {});
+    this.applyProviderToSlot("utility_model", mainProvider, this.providerMeta(mainProvider));
+    if (!this.config.utility_model.api_base) {
+      this.config.utility_model.api_base = this.config.chat_model.api_base || "";
+    }
   },
 
   async utilityProviderChanged() {
     const providerId = this.config.utility_model.provider;
-    this.sameAsMain = providerId === this.config.chat_model.provider;
     this.userTouchedModel.utility_model = false;
+    this.config.utility_model.api_base = "";
     this.applyProviderToSlot("utility_model", providerId, this.providerMeta(providerId));
+    if (!this.config.utility_model.api_base && providerId === this.config.chat_model.provider) {
+      this.config.utility_model.api_base = this.config.chat_model.api_base || "";
+    }
     await this.loadModels("utility_model");
   },
 
   async completeSetup() {
     this.saving = true;
     try {
-      if (this.sameAsMain) this.syncUtilityWithMain();
       await modelConfigStore.persistApiKeysForConfig(this.config);
       const response = await fetchApi(`${MODEL_CONFIG_API}/model_config_set`, {
         method: "POST",

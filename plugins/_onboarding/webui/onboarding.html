@@ -821,13 +821,10 @@
 
                             <section x-show="$store.onboarding.isStep('utility')" x-transition.opacity>
                                 <div class="utility-panel field-stack">
-                                    <label class="soft-note">
-                                        <input type="checkbox" x-model="$store.onboarding.sameAsMain" @change="$store.onboarding.syncUtilityWithMain()">
-                                        Use same as Main Model
-                                    </label>
+                                    <div class="soft-note">The utility model handles quick internal tasks — summaries, naming, memory. A small, fast, cheap model works best here.</div>
                                     <div class="field">
                                         <label for="utility-provider">Utility provider</label>
-                                        <select id="utility-provider" x-model="$store.onboarding.config.utility_model.provider" @change="$store.onboarding.utilityProviderChanged()" :disabled="$store.onboarding.sameAsMain">
+                                        <select id="utility-provider" x-model="$store.onboarding.config.utility_model.provider" @change="$store.onboarding.utilityProviderChanged()">
                                             <template x-for="provider in $store.modelConfig.getProviders('utility_model')" :key="provider.value">
                                                 <option :value="provider.value" x-text="provider.label"></option>
                                             </template>
@@ -836,17 +833,16 @@
                                     <div class="field relative-field" @click.outside="$store.onboarding.closeModelDropdown('utility_model')">
                                         <label class="model-label" for="utility-model-input">Search or enter Utility Model</label>
                                         <div class="model-input-row">
-                                            <input id="utility-model-input" type="text" x-model="$store.onboarding.config.utility_model.name" @input="$store.onboarding.markModelTouched('utility_model')" @focus="$store.onboarding.openModelDropdown('utility_model')" :disabled="$store.onboarding.sameAsMain" placeholder="Search or enter a model">
+                                            <input id="utility-model-input" type="text" x-model="$store.onboarding.config.utility_model.name" @input="$store.onboarding.markModelTouched('utility_model')" @focus="$store.onboarding.openModelDropdown('utility_model')" placeholder="Search or enter a model">
                                             <button type="button"
                                                     class="model-refresh-button"
                                                     aria-label="Refresh utility model list"
                                                     title="Refresh model list"
-                                                    x-show="!$store.onboarding.sameAsMain"
                                                     @click="$store.onboarding.loadModels('utility_model')"
                                                     :disabled="$store.onboarding.modelDropdown.utility_model.loading">
                                                 <span class="material-symbols-outlined" x-text="$store.onboarding.modelDropdown.utility_model.loading ? 'progress_activity' : 'search'"></span>
                                             </button>
-                                            <div class="model-dropdown" x-show="!$store.onboarding.sameAsMain && $store.onboarding.modelDropdown.utility_model.open && !$store.onboarding.modelDropdown.utility_model.loading" x-transition.opacity>
+                                            <div class="model-dropdown" x-show="$store.onboarding.modelDropdown.utility_model.open && !$store.onboarding.modelDropdown.utility_model.loading" x-transition.opacity>
                                                 <template x-for="model in $store.onboarding.filteredModels('utility_model')" :key="model">
                                                     <button type="button" class="model-item" @click="$store.onboarding.selectModel('utility_model', model)" x-text="model"></button>
                                                 </template>

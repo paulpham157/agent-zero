@@ -59,6 +59,10 @@ def test_onboarding_contains_unified_provider_step():
     assert "Main model" in html
     assert "Refresh model list" in html
     assert "Search or enter Utility Model" in html
+
+    # The utility model is an intentional choice: no "same as main" shortcut.
+    assert "Use same as Main Model" not in html
+    assert "sameAsMain" not in html + store
     assert "Advanced Settings" in html
     assert "selectedProviderName() + ' Docs'" in html
     assert "openSelectedProviderDocs" in html + store

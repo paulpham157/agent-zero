@@ -42,8 +42,6 @@ let skipOneSpeech = false;
 
 export async function sendMessage(options = {}) {
   try {
-    if (!options.bypassModelGate && modelGateStore.isBlockingSend) return;
-
     const hasProvidedMessage = Object.prototype.hasOwnProperty.call(options, "message");
     let message = String(hasProvidedMessage ? options.message : inputStore.message).trim();
     let attachmentsWithUrls = options.attachments || attachmentsStore.getAttachmentsForSending();
