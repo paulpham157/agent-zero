@@ -35,7 +35,7 @@ except ImportError:
 AUTH_FILENAME = "auth.json"
 ACCESS_EXPIRY_MARGIN = timedelta(minutes=5)
 REFRESH_INTERVAL = timedelta(minutes=55)
-FALLBACK_CODEX_VERSION = "0.124.0"
+DEFAULT_CODEX_MODEL = "gpt-5.5"
 OAUTH_ERROR_KEYS = ("error_description", "error")
 DEVICE_CODE_TIMEOUT_SECONDS = 15 * 60
 WINDOWS_LOCK_RETRY_SECONDS = 0.05
@@ -590,9 +590,11 @@ def fetch_models() -> list[str]:
     if configured:
         return configured
 
+    client_version = resolve_codex_version()
+    params = {"client_version": client_version} if client_version else None
     response = request_codex(
         "/models",
-        params={"client_version": resolve_codex_version()},
+        params=params,
     )
     if not response.ok:
         raise RuntimeError(upstream_error_message(response, "Failed to load Codex models."))
@@ -772,7 +774,7 @@ def chat_messages_to_response_body(body: dict[str, Any]) -> dict[str, Any]:
         )
 
     response_body: dict[str, Any] = {
-        "model": body.get("model") or "gpt-5.2",
+        "model": body.get("model") or DEFAULT_CODEX_MODEL,
         "input": response_input,
         "instructions": "\n\n".join(instructions),
         "store": False,
@@ -980,7 +982,7 @@ def resolve_codex_version() -> str:
             return version
     except Exception:
         pass
-    return FALLBACK_CODEX_VERSION
+    return ""
 
 
 def resolve_auth_file_candidates() -> list[Path]:

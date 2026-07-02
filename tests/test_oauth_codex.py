@@ -15,6 +15,7 @@ import yaml
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from plugins._oauth.helpers import codex
 from plugins._oauth.helpers import routes
+from plugins._oauth.helpers.providers import codex as codex_provider
 from plugins._oauth.extensions.python._functions.models.get_api_key.end import (
     _20_oauth_account_dummy_key as oauth_dummy_key,
 )
@@ -88,6 +89,52 @@ def test_chat_messages_to_response_body_extracts_instructions():
     assert body["input"] == [{"role": "user", "content": "Hello"}]
     assert body["temperature"] == 0.2
     assert body["reasoning"] == {"effort": "high"}
+
+
+def test_chat_messages_to_response_body_uses_current_codex_default_model():
+    body = codex.chat_messages_to_response_body(
+        {
+            "messages": [
+                {"role": "user", "content": "Hello"},
+            ],
+        }
+    )
+
+    assert body["model"] == "gpt-5.5"
+
+
+def test_codex_provider_metadata_uses_upstream_models_only_by_default(monkeypatch):
+    monkeypatch.setattr(
+        codex_provider,
+        "_codex_config",
+        lambda: {
+            "models": [],
+            "proxy_base_path": "/oauth/codex",
+            "callback_path": "/auth/callback",
+        },
+    )
+
+    metadata = codex_provider.CodexOAuthProvider().metadata()
+
+    assert metadata.default_model == "gpt-5.5"
+    assert metadata.default_models == []
+
+
+def test_codex_fetch_models_omits_fake_client_version(monkeypatch):
+    calls = []
+
+    class FakeResponse:
+        ok = True
+
+        def json(self):
+            return {"models": [{"slug": "upstream-model"}]}
+
+    monkeypatch.setattr(codex, "codex_config", lambda: {"models": []})
+    monkeypatch.setattr(codex, "resolve_codex_version", lambda: "")
+    monkeypatch.setattr(codex, "request_codex", lambda path, params=None: calls.append((path, params)) or FakeResponse())
+
+    assert codex.fetch_models() == ["upstream-model"]
+    assert calls == [("/models", None)]
 
 
 def test_chat_messages_to_response_body_preserves_image_parts_for_responses():
