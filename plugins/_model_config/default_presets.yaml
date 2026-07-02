@@ -13,7 +13,7 @@
 - name: "Balance"
   chat:
     provider: "openrouter"
-    name: "anthropic/claude-sonnet-4.6"
+    name: "anthropic/claude-sonnet-5"
     api_key: ""
     api_base: ""
     ctx_length: 200000

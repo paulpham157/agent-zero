@@ -67,7 +67,7 @@ The project preset file uses the same plain YAML list schema as global presets. 
 - name: Research
   chat:
     provider: openrouter
-    name: anthropic/claude-sonnet-4.6
+    name: anthropic/claude-sonnet-5
     api_base: ""
     ctx_length: 200000
     ctx_history: 0.7
