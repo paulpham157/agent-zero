@@ -401,10 +401,10 @@ docker run -p 0:80 -v /path/to/your/work_dir:/a0/usr agent0ai/agent-zero
 
 ## Step 3: Configure Agent Zero
 
-The UI will show a welcome banner when model setup is missing. Click
-**Start Onboarding** to choose Cloud or Local, add a provider key or account
-connection, and select your main and utility models. For the screenshot
-walkthrough, see the [First-Run Onboarding guide](../guides/onboarding.md).
+The UI opens on the welcome screen. If model setup is missing, send a message
+or use the setup shortcuts to choose Cloud, AI account, or Local access, then
+select your main and utility models. For the screenshot walkthrough, see the
+[First-Run Onboarding guide](../guides/onboarding.md).
 
 ### Settings Configuration
 
