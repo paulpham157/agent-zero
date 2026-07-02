@@ -15,6 +15,7 @@ import { store as _tooltipsStore } from "/components/tooltips/tooltip-store.js";
 import { store as messageQueueStore } from "/components/chat/message-queue/message-queue-store.js";
 import { store as syncStore } from "/components/sync/sync-store.js"
 import { store as welcomeStore } from "/components/welcome/welcome-store.js";
+import { store as modelGateStore } from "/components/chat/model-gate-store.js";
 import { getUserHour12, getUserTimezone } from "/js/time-utils.js";
 
 globalThis.fetchApi = api.fetchApi; // TODO - backward compatibility for non-modular scripts, remove once refactored to alpine
@@ -39,17 +40,24 @@ let skipOneSpeech = false;
 
 // Sidebar toggle logic is now handled by sidebar-store.js
 
-export async function sendMessage() {
+export async function sendMessage(options = {}) {
   try {
-    let message = inputStore.message.trim();
-    let attachmentsWithUrls = attachmentsStore.getAttachmentsForSending();
-    const hasAttachments = attachmentsWithUrls.length > 0;
+    if (!options.bypassModelGate && modelGateStore.isBlockingSend) return;
 
-    const sendCtx = { message, attachments: attachmentsWithUrls, context, cancel: false };
-    await callJsExtensions("send_message_before", sendCtx);
+    const hasProvidedMessage = Object.prototype.hasOwnProperty.call(options, "message");
+    let message = String(hasProvidedMessage ? options.message : inputStore.message).trim();
+    let attachmentsWithUrls = options.attachments || attachmentsStore.getAttachmentsForSending();
+    let hasAttachments = attachmentsWithUrls.length > 0;
+
+    const sendCtx = { message, attachments: attachmentsWithUrls, context: options.context || context, cancel: false };
+    if (!options.skipExtensions) await callJsExtensions("send_message_before", sendCtx);
     if (sendCtx.cancel) return;
     message = sendCtx.message;
     attachmentsWithUrls = sendCtx.attachments;
+    hasAttachments = attachmentsWithUrls.length > 0;
+    const sendContext = options.context || context;
+    const messageId = options.messageId || generateGUID();
+    const shouldResetInput = !hasProvidedMessage && !options.preserveInput;
 
     // If empty input but has queued messages, send all queued
     if (!message && !hasAttachments && messageQueueStore.hasQueue) {
@@ -58,12 +66,30 @@ export async function sendMessage() {
     }
 
     if (message || hasAttachments) {
+      if (!options.bypassModelGate && !(await modelGateStore.canSendToModel())) {
+        modelGateStore.start({
+          message,
+          attachments: attachmentsWithUrls,
+          messageId,
+          context: sendContext,
+        });
+
+        if (shouldResetInput) {
+          inputStore.reset();
+          adjustTextareaHeight();
+        }
+
+        await setMessages(modelGateStore.syntheticMessages(sendContext));
+        forceScrollChatToBottom();
+        return;
+      }
+
       // Check if agent is busy - queue instead of sending
       if (chatsStore.selectedContext?.running || messageQueueStore.hasQueue) {
         const success = messageQueueStore.addToQueue(message, attachmentsWithUrls);
         // no await for the queue
         // if (success) {
-          inputStore.reset();
+          if (shouldResetInput) inputStore.reset();
           adjustTextareaHeight();
         // }
         return;
@@ -74,11 +100,12 @@ export async function sendMessage() {
       forceScrollChatToBottom();
 
       let response;
-      const messageId = generateGUID();
 
-    // Clear input and attachments
-    inputStore.reset();
-    adjustTextareaHeight();
+      // Clear input and attachments
+      if (shouldResetInput) {
+        inputStore.reset();
+        adjustTextareaHeight();
+      }
 
       // Include attachments in the user message
       if (hasAttachments) {
@@ -97,7 +124,7 @@ export async function sendMessage() {
 
         const formData = new FormData();
         formData.append("text", message);
-        formData.append("context", context);
+        formData.append("context", sendContext);
         formData.append("message_id", messageId);
 
         for (let i = 0; i < attachmentsWithUrls.length; i++) {
@@ -112,7 +139,7 @@ export async function sendMessage() {
         // For text-only messages
         const data = {
           text: message,
-          context,
+          context: sendContext,
           message_id: messageId,
         };
         response = await api.fetchApi("/message_async", {
@@ -352,7 +379,7 @@ export async function applySnapshot(snapshot, options = {}) {
       const chatHistoryEl = document.getElementById("chat-history");
       if (chatHistoryEl) chatHistoryEl.innerHTML = "";
     }
-    await setMessages(snapshot.logs);
+    await setMessages(modelGateStore.mergeSyntheticMessages(snapshot.logs, context));
     afterMessagesUpdate(snapshot.logs);
   }
 

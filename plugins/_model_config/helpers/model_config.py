@@ -671,3 +671,13 @@ def get_missing_api_key_providers(agent=None) -> list[dict]:
             missing.append({"model_type": label, "provider": provider})
 
     return missing
+
+
+def is_chat_model_configured(config: dict | None = None) -> bool:
+    cfg = config if isinstance(config, dict) else get_config()
+    chat_cfg = cfg.get("chat_model", {}) if isinstance(cfg, dict) else {}
+    provider = str(chat_cfg.get("provider") or "").strip()
+    name = str(chat_cfg.get("name") or "").strip()
+    if not provider or not name:
+        return False
+    return has_provider_api_key(provider.lower(), chat_cfg.get("api_key", ""), "chat")

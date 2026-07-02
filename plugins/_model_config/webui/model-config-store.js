@@ -158,6 +158,8 @@ export const store = createStore("modelConfig", {
   embeddingProviders: [],
   chatProviderDetails: [],
   embeddingProviderDetails: [],
+  modelConfigured: false,
+  modelConfiguredLabel: "",
   _loaded: false,
 
   // API Keys state (from mixin)
@@ -203,6 +205,8 @@ export const store = createStore("modelConfig", {
     this.chatProviderDetails = data.chat_provider_details || [];
     this.embeddingProviderDetails = data.embedding_provider_details || [];
     this.apiKeyStatus = data.api_key_status || {};
+    this.modelConfigured = !!data.model_configured;
+    this.modelConfiguredLabel = data.model_configured_label || "";
     const keys = {};
     const dirty = {};
     const seen = new Set();

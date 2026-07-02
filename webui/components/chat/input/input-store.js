@@ -5,6 +5,7 @@ import { openLatest as openLatestSurface } from "/js/surfaces.js";
 import { store as messageQueueStore } from "/components/chat/message-queue/message-queue-store.js";
 import { store as attachmentsStore } from "/components/chat/attachments/attachmentsStore.js";
 import { store as chatsStore } from "/components/sidebar/chats/chats-store.js";
+import { store as modelGateStore } from "/components/chat/model-gate-store.js";
 
 const ICON_MARKER_RE = /icon:\/\/([a-zA-Z0-9_]+)(\[(?:\\.|[^\]])*\])?/g;
 const FENCE_LINE_RE = /^```([A-Za-z0-9_-]*)?$/;
@@ -83,6 +84,7 @@ const model = {
     const hasQueue = !!messageQueueStore?.hasQueue;
     const running = !!chatsStore.selectedContext?.running;
 
+    if (modelGateStore?.isBlockingSend) return "blocked";
     if (hasQueue && !hasInput) return "all";
     if ((running || hasQueue) && hasInput) return "queue";
     return "normal";
@@ -91,6 +93,7 @@ const model = {
   get inputPlaceholder() {
     if (!chatsStore.selected) return "Ask anything to start a new chat";
     const state = this._getSendState();
+    if (state === "blocked") return "Connect a model to send";
     if (state === "all") return "Press Enter to send queued messages";
     if (this.showProgressPlaceholder) return "";
     return "Type your message here...";
@@ -99,7 +102,7 @@ const model = {
   get showProgressPlaceholder() {
     return (
       !!chatsStore.selected &&
-      this._getSendState() !== "all" &&
+      !["all", "blocked"].includes(this._getSendState()) &&
       !!this.progressText &&
       !this.message
     );
@@ -115,6 +118,7 @@ const model = {
   // Computed: send button icon type
   get sendButtonIcon() {
     const state = this._getSendState();
+    if (state === "blocked") return "settings";
     if (state === "all") return "send_and_archive";
     if (state === "queue") return "schedule_send";
     return "arrow_forward";
@@ -123,6 +127,7 @@ const model = {
   // Computed: send button CSS class
   get sendButtonClass() {
     const state = this._getSendState();
+    if (state === "blocked") return "model-gate-blocked";
     if (state === "all") return "send-queue send-all";
     if (state === "queue") return "send-queue queue";
     return "";
@@ -131,9 +136,14 @@ const model = {
   // Computed: send button title
   get sendButtonTitle() {
     const state = this._getSendState();
+    if (state === "blocked") return "Connect a model to send";
     if (state === "all") return "Send all queued messages";
     if (state === "queue") return "Add to queue";
     return "Send message";
+  },
+
+  get sendDisabled() {
+    return this._getSendState() === "blocked";
   },
 
   init() {
@@ -142,6 +152,7 @@ const model = {
   },
 
   async sendMessage() {
+    if (this.sendDisabled) return;
     this._syncMessageFromEditor();
 
     // Capture sent prompt to per-chat history (bash-style)

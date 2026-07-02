@@ -116,6 +116,14 @@ def test_oauth_model_slots_reuse_model_config_api():
     assert "if (!this.providerConnected(providerId)) return;" in store_js
     assert "const providerId = slot.provider;" in store_js
     assert "const providerId = this.isOauthProvider(this.activeModelProvider)" not in store_js
+    assert "autoApplyConnectedProviderIfNeeded(providerId)" in store_js
+    assert "currentChatModelConfigured()" in store_js
+    assert 'providerDefaultModel(providerId, "chat_model")' in store_js
+    assert 'providerDefaultModel(providerId, "utility_model")' in store_js
+    assert "this.modelSlotDirty = { chat_model: true, utility_model: true };" in store_js
+    assert 'new CustomEvent("model-configured"' in store_js
+    assert 'detail: { source: "_oauth", providerId }' in store_js
+    assert "await this.handleProviderConnected(providerId)" in store_js
 
 
 def test_browser_callback_completion_is_observed_from_modal():
@@ -124,6 +132,7 @@ def test_browser_callback_completion_is_observed_from_modal():
     assert "startCallbackPolling(providerId)" in store_js
     assert "stopCallbackPolling(providerId)" in store_js
     assert "this.providerConnected(providerId)" in store_js
+    assert "await this.handleProviderConnected(providerId, { statusLoaded: true })" in store_js
 
 
 def test_device_polling_honors_provider_interval_updates():

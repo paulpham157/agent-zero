@@ -26,10 +26,6 @@ class MissingApiKeyCheck(Extension):
                 "cta_action": f"open-modal:{self.ONBOARDING_MODAL_PATH}",
                 "dismissible": False,
                 "source": "backend",
-                "auto_modal_path": self.ONBOARDING_MODAL_PATH,
-                "auto_modal_reason": "missing-api-key",
-                "auto_modal_priority": 100,
-                "auto_modal_surfaces": ["welcome", "chat-created"],
                 # For programmatic clients (e.g. chat composer) reusing this banner pipeline
                 "missing_providers": missing_providers,
             })

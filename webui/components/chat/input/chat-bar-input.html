@@ -46,7 +46,8 @@
       <div id="chat-buttons-wrapper">
         <!-- Send button -->
         <button class="chat-button" id="send-button" aria-label="Send message" @click="$store.chatInput.sendMessage()"
-          :class="$store.chatInput.sendButtonClass" :title="$store.chatInput.sendButtonTitle">
+          :class="$store.chatInput.sendButtonClass" :title="$store.chatInput.sendButtonTitle"
+          :disabled="$store.chatInput.sendDisabled">
           <span class="material-symbols-outlined" x-text="$store.chatInput.sendButtonIcon"></span>
         </button>
       </div>
@@ -385,6 +386,14 @@
     #send-button.send-queue:hover {
       background-color: #d35400;
       filter: none;
+    }
+
+    #send-button.model-gate-blocked,
+    #send-button.model-gate-blocked:hover {
+      background-color: color-mix(in srgb, var(--color-border) 55%, transparent);
+      color: color-mix(in srgb, var(--color-text) 45%, transparent);
+      cursor: not-allowed;
+      opacity: 0.78;
     }
 
     #send-button:active {

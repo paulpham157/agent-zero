@@ -69,6 +69,25 @@ def test_model_config_api_keys_can_be_cleared_via_backend(monkeypatch, tmp_path)
     assert handler._reveal_key({"provider": "openrouter"}) == {"ok": True, "value": ""}
 
 
+def test_chat_model_configured_requires_identity_and_key(monkeypatch):
+    from plugins._model_config.helpers import model_config
+
+    monkeypatch.setattr(
+        model_config,
+        "has_provider_api_key",
+        lambda provider, configured_api_key="", model_type="chat": provider == "openrouter",
+    )
+
+    assert not model_config.is_chat_model_configured({"chat_model": {}})
+    assert not model_config.is_chat_model_configured({"chat_model": {"provider": "openrouter"}})
+    assert model_config.is_chat_model_configured(
+        {"chat_model": {"provider": "openrouter", "name": "anthropic/claude"}}
+    )
+    assert not model_config.is_chat_model_configured(
+        {"chat_model": {"provider": "openai", "name": "gpt-5"}}
+    )
+
+
 @pytest.mark.asyncio
 async def test_missing_api_key_banner_exposes_missing_providers(monkeypatch):
     from plugins._model_config.helpers import model_config
@@ -90,7 +109,7 @@ async def test_missing_api_key_banner_exposes_missing_providers(monkeypatch):
 def test_model_config_frontend_tracks_inline_api_key_edits():
     store_path = PROJECT_ROOT / "plugins" / "_model_config" / "webui" / "model-config-store.js"
     api_keys_mixin_path = PROJECT_ROOT / "plugins" / "_model_config" / "webui" / "api-keys-mixin.js"
-    composer_store_path = PROJECT_ROOT / "webui" / "components" / "chat" / "input" / "composer-banner-store.js"
+    model_gate_path = PROJECT_ROOT / "webui" / "components" / "chat" / "model-gate-store.js"
     config_path = PROJECT_ROOT / "plugins" / "_model_config" / "webui" / "config.html"
     model_field_path = PROJECT_ROOT / "plugins" / "_model_config" / "webui" / "model-field.html"
     modal_path = PROJECT_ROOT / "plugins" / "_model_config" / "webui" / "api-keys.html"
@@ -100,7 +119,7 @@ def test_model_config_frontend_tracks_inline_api_key_edits():
         + "\n"
         + api_keys_mixin_path.read_text(encoding="utf-8")
     )
-    composer_store_content = composer_store_path.read_text(encoding="utf-8")
+    model_gate_content = model_gate_path.read_text(encoding="utf-8")
     config_content = (
         config_path.read_text(encoding="utf-8")
         + "\n"
@@ -112,9 +131,9 @@ def test_model_config_frontend_tracks_inline_api_key_edits():
     assert "resetApiKeyDrafts()" in store_content
     assert "!provider || seen.has(provider) || !this.apiKeyDirty[provider]" in store_content
     assert "normalized[provider] = value.trim() ? value : '';" in store_content
-    assert '"missing-api-key"' in composer_store_content
-    assert 'callJsonApi("/banners"' in composer_store_content
-    assert "/plugins/_model_config/missing_api_key_status" not in composer_store_content
+    assert 'callJsonApi("/plugins/_model_config/model_config_get"' in model_gate_content
+    assert "dispatchPendingIfConfigured()" in model_gate_content
+    assert "/plugins/_model_config/missing_api_key_status" not in model_gate_content
     assert "$store.modelConfig.resetApiKeyDrafts();" in config_content
     assert '@input="$store.modelConfig.setApiKeyValue(_prov, $el.value)"' in config_content
     assert "persistAllDirtyApiKeys()" in modal_content
@@ -251,7 +270,7 @@ def test_ollama_cloud_provider_config_requires_key_and_base_url():
     assert "api_key_mode" not in ollama_cloud
 
 
-def test_missing_api_key_banner_includes_auto_modal_metadata(monkeypatch):
+def test_missing_api_key_banner_does_not_include_auto_modal_metadata(monkeypatch):
     from plugins._model_config.helpers import model_config
 
     fake = [{"model_type": "Chat Model", "provider": "openai"}]
@@ -267,9 +286,10 @@ def test_missing_api_key_banner_includes_auto_modal_metadata(monkeypatch):
     import asyncio
     row = asyncio.run(run())
 
-    assert row["auto_modal_path"] == "/plugins/_onboarding/webui/onboarding.html"
-    assert row["auto_modal_reason"] == "missing-api-key"
-    assert row["auto_modal_priority"] == 100
+    assert "auto_modal_path" not in row
+    assert "auto_modal_reason" not in row
+    assert "auto_modal_priority" not in row
+    assert "auto_modal_surfaces" not in row
     assert row["type"] == "warning"
     assert row["dismissible"] is False
     assert row["missing_providers"] == fake

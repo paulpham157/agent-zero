@@ -28,6 +28,8 @@
 - OAuth settings pending-auth controls such as device codes, manual callback input, and provider setup fields must render inline under the relevant provider row, not as a detached section below all providers.
 - OAuth device-code polling must honor provider `interval`, `expires_at`, and `slow_down` updates; do not poll immediately or keep a stale fixed interval after a provider asks the client to slow down.
 - OAuth settings model slots must keep provider choice editable per slot, list only connected OAuth account providers, and persist the selected provider IDs into `chat_model.provider` and `utility_model.provider`.
+- The OAuth WebUI store owns connected-provider default selection helpers reused by settings and deferred chat setup gates.
+- OAuth settings must dispatch `model-configured` when a provider connection completes. If no chat model is configured, the settings flow may apply the connected provider defaults to Main and Utility before notifying deferred send gates.
 - `helpers/providers/registry.py` is the source of truth for connectable OAuth providers.
 - OAuth provider config must not expose the dummy `oauth` API key in `conf/model_providers.yaml`; the dummy key is a runtime-only shim supplied by the `get_api_key` extension after the account provider reports connected.
 - Usage-plan metadata belongs only to connectable providers. Do not add metadata-only subscription families for providers this plugin cannot connect.

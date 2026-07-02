@@ -287,6 +287,15 @@ export const store = createStore("oauthConfig", {
     return status.display_name || providerId;
   },
 
+  providerDefaultModel(providerId, slotKey = "chat_model") {
+    const status = this.providerStatus(providerId);
+    const defaults = Array.isArray(status.default_models)
+      ? status.default_models.map((model) => String(model || "").trim()).filter(Boolean)
+      : [];
+    if (slotKey === "utility_model" && defaults[1]) return defaults[1];
+    return String(status.default_model || defaults[0] || "").trim();
+  },
+
   providerUseLabel(providerId) {
     const status = this.providerStatus(providerId);
     return status.use_label || `Use ${status.short_name || status.display_name || providerId}`;
@@ -670,6 +679,61 @@ export const store = createStore("oauthConfig", {
     }
   },
 
+  async currentChatModelConfigured() {
+    try {
+      const response = await callJsonApi(`${MODEL_CONFIG_API}/model_config_get`, {});
+      return Boolean(response?.model_configured);
+    } catch (error) {
+      console.error("Could not check model configuration:", error);
+      return true;
+    }
+  },
+
+  async autoApplyConnectedProviderIfNeeded(providerId) {
+    if (!this.providerConnected(providerId)) return false;
+    if (await this.currentChatModelConfigured()) return false;
+
+    await this.loadModelConfig();
+    if (!this.modelConfig) return false;
+
+    const chatModel = this.providerDefaultModel(providerId, "chat_model");
+    if (!chatModel) return false;
+    const utilityModel = this.providerDefaultModel(providerId, "utility_model") || chatModel;
+    const chat = this.modelSlot("chat_model");
+    const utility = this.modelSlot("utility_model");
+    chat.provider = providerId;
+    chat.name = chatModel;
+    chat.api_base = "";
+    if (!chat.kwargs || typeof chat.kwargs !== "object") chat.kwargs = {};
+    utility.provider = providerId;
+    utility.name = utilityModel;
+    utility.api_base = "";
+    if (!utility.kwargs || typeof utility.kwargs !== "object") utility.kwargs = {};
+    this.activeModelProvider = providerId;
+    this.models = this.activeProviderModels();
+    this.modelConfigDirty = true;
+    this.modelSlotDirty = { chat_model: true, utility_model: true };
+    await this.saveModelConfigIfDirty();
+    return true;
+  },
+
+  notifyModelConfigured(providerId) {
+    if (typeof document === "undefined") return;
+    document.dispatchEvent(new CustomEvent("model-configured", {
+      detail: { source: "_oauth", providerId },
+    }));
+  },
+
+  async handleProviderConnected(providerId, { statusLoaded = false } = {}) {
+    if (!statusLoaded) await this.loadStatus();
+    try {
+      await this.autoApplyConnectedProviderIfNeeded(providerId);
+    } catch (error) {
+      void toastFrontendError(messageOf(error), "OAuth Connections");
+    }
+    this.notifyModelConfigured(providerId);
+  },
+
   async loadStatus() {
     if (this.loadingStatus) return;
     this.loadingStatus = true;
@@ -788,7 +852,7 @@ export const store = createStore("oauthConfig", {
           throw new Error(response?.error || `Could not finish ${this.providerLabel(providerId)} sign-in.`);
         }
         if (response.completed) {
-          await this.loadStatus();
+          await this.handleProviderConnected(providerId);
           this.clearProviderDevice(providerId);
           this.stopPolling(providerId);
           if (this.connectingProvider === providerId) this.connectingProvider = "";
@@ -840,6 +904,7 @@ export const store = createStore("oauthConfig", {
     const tick = async () => {
       await this.loadStatus();
       if (this.providerConnected(providerId)) {
+        await this.handleProviderConnected(providerId, { statusLoaded: true });
         this.clearProviderDevice(providerId);
         this.stopCallbackPolling(providerId);
         if (this.connectingProvider === providerId) this.connectingProvider = "";
@@ -932,7 +997,7 @@ export const store = createStore("oauthConfig", {
       this.providerUiFor(providerId).manualCallback = "";
       this.clearProviderDevice(providerId);
       this.stopCallbackPolling(providerId);
-      await this.loadStatus();
+      await this.handleProviderConnected(providerId);
       void toastFrontendSuccess(`${this.providerLabel(providerId)} connected.`, "OAuth Connections");
     } catch (error) {
       void toastFrontendError(messageOf(error), "OAuth Connections");

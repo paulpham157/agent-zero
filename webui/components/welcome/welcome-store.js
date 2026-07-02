@@ -152,26 +152,8 @@ const model = {
     return this.banners.find((b) => b.id === "system-resources") || null;
   },
 
-  get blockingSetupBanner() {
-    return this.banners.find((b) => b.id === "missing-api-key") || null;
-  },
-
-  get hasBlockingSetupBanner() {
-    return Boolean(this.blockingSetupBanner);
-  },
-
   get heroSubtitle() {
-    if (this.hasBlockingSetupBanner) {
-      return "One setup step before chatting.";
-    }
     return "How can I help you today?";
-  },
-
-  openBlockingSetup() {
-    const path =
-      this.blockingSetupBanner?.auto_modal_path ||
-      "/plugins/_onboarding/webui/onboarding.html";
-    window.openModal(path);
   },
 
   executeBannerAction(action) {

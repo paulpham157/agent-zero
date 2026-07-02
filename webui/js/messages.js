@@ -119,6 +119,8 @@ export async function getMessageHandler(type) {
       return drawMessageUtil;
     case "hint":
       return drawMessageHint;
+    case "model_setup_gate":
+      return drawMessageModelSetupGate;
     default:
       return await getHandlerFromExtensions(type);
   }
@@ -962,6 +964,22 @@ export function drawMessageResponse({
   );
 
   if (group) updateProcessGroupHeader(group);
+
+  return { element: container };
+}
+
+export function drawMessageModelSetupGate({ id }) {
+  const container = getOrCreateMessageContainer(id, "left");
+  container.classList.add("model-setup-gate-container");
+  container.innerHTML = "";
+
+  const messageDiv = document.createElement("div");
+  messageDiv.className = "message message-agent-response model-setup-gate-message";
+
+  const component = document.createElement("x-component");
+  component.setAttribute("path", "chat/model-setup-gate.html");
+  messageDiv.appendChild(component);
+  container.appendChild(messageDiv);
 
   return { element: container };
 }

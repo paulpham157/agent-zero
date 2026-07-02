@@ -22,17 +22,14 @@ def test_welcome_screen_embeds_shared_new_chat_composer() -> None:
     assert 'path="chat/input/chat-bar-input.html"' in welcome
     assert "x-text=\"$store.welcomeStore.heroSubtitle\"" in welcome
     assert "Hello! I'm Agent Zero" in welcome
-    assert "'is-setup-required': $store.welcomeStore.hasBlockingSetupBanner" in welcome
-    assert 'class="welcome-setup-composer"' in welcome
-    assert "Configure your models to start chatting" in welcome
-    assert "Start Onboarding" in welcome
-    assert "openBlockingSetup()" in welcome
+    assert "is-setup-required" not in welcome
+    assert "welcome-setup-composer" not in welcome
+    assert "Configure your models to start chatting" not in welcome
+    assert "Start Onboarding" not in welcome
+    assert "openBlockingSetup()" not in welcome
     assert '.filter((b) => b.id !== "missing-api-key")' in welcome_store
-    assert "get blockingSetupBanner()" in welcome_store
     assert "get heroSubtitle()" in welcome_store
-    assert 'return "One setup step before chatting.";' in welcome_store
     assert 'return "How can I help you today?";' in welcome_store
-    assert "openBlockingSetup()" in welcome_store
     assert '<h2>Quick Actions</h2>' in welcome
     assert 'class="welcome-lower-grid"' in welcome
     assert 'x-extension id="welcome-actions-end"' in welcome
@@ -64,9 +61,6 @@ def test_welcome_screen_embeds_shared_new_chat_composer() -> None:
     assert 'action.startsWith("open-modal:")' in welcome_store
     assert 'const hashIndex = path.indexOf("#");' in welcome_store
     assert 'history.replaceState(null, "", `#${hash}`);' in welcome_store
-    assert ".welcome-banner-html .onboarding-banner-btn-container" in welcome
-    assert "justify-content: flex-end;" in welcome
-    assert "justify-content: flex-start;" in welcome
     assert ".welcome-banner-html .btn,\n        .welcome-banner-html button" in welcome
     assert "background-color: #4248f1;" in welcome
     assert 'aria-label="Dismiss Connect Channels"' in discovery_cards
@@ -79,6 +73,7 @@ def test_welcome_screen_embeds_shared_new_chat_composer() -> None:
     assert "discovery-account-header" in discovery_cards
     assert "discovery-account-cta" in discovery_cards
     assert "discovery-account-icon" not in discovery_cards
+    assert "some(b => b.id === 'missing-api-key')" not in discovery_cards
 
     assert "x-if=\"$store.welcomeStore && $store.welcomeStore.isVisible\"" in index
     assert "x-if=\"!$store.welcomeStore || !$store.welcomeStore.isVisible\"" in index
@@ -94,18 +89,60 @@ def test_welcome_screen_embeds_shared_new_chat_composer() -> None:
 def test_welcome_composer_can_create_a_chat_before_sending() -> None:
     input_store = _read("webui/components/chat/input/input-store.js")
     chats_store = _read("webui/components/sidebar/chats/chats-store.js")
+    index_js = _read("webui/index.js")
+    gate_store = _read("webui/components/chat/model-gate-store.js")
+    gate_component = _read("webui/components/chat/model-setup-gate.html")
 
     assert 'return "Ask anything to start a new chat";' in input_store
     assert "if (!chatsStore.selected" in input_store
     assert "await chatsStore.newChat()" in input_store
     assert "return response.ctxid;" in chats_store
     assert 'return "arrow_forward";' in input_store
+    assert "modelGateStore.canSendToModel()" in index_js
+    assert "modelGateStore.mergeSyntheticMessages(snapshot.logs, context)" in index_js
+    assert 'type: "model_setup_gate"' in gate_store
+    assert 'STORAGE_KEY = "a0:model-gate-pending:v1"' in gate_store
+    assert "SYNTHETIC_MESSAGE_NO_BASE = Number.MAX_SAFE_INTEGER - 2" in gate_store
+    assert "return synthetic.length ? [...(logs || []), ...synthetic] : logs;" in gate_store
+    assert "restorePending()" in gate_store
+    assert "savePending()" in gate_store
+    assert "clearSavedPending()" in gate_store
+    assert "sessionStorage.setItem(STORAGE_KEY" in gate_store
+    assert "sessionStorage.getItem(STORAGE_KEY)" in gate_store
+    assert "sessionStorage.removeItem(STORAGE_KEY)" in gate_store
+    assert 'import("/plugins/_oauth/webui/oauth-config-store.js")' in gate_store
+    assert "tryConnectedAccountDefaults()" in gate_store
+    assert "oauthConfigStore.connectedProviderCards()[0]?.provider_id" in gate_store
+    assert "oauthConfigStore.autoApplyConnectedProviderIfNeeded(providerId)" in gate_store
+    assert "const refreshed = await callJsonApi(\"/plugins/_model_config/model_config_get\", {});" in gate_store
+    assert "void this.dispatchPendingIfConfigured();" in gate_store
+    assert "this.choice = \"\";" in gate_store
+    assert 'document.addEventListener("model-configured"' in gate_store
+    assert "const currentContext = globalThis.getContext?.();" in gate_store
+    assert "bypassModelGate: true" in gate_store
+    assert 'openPluginConfig("_model_config", "Advanced model configuration")' in gate_store
+    assert 'openPluginConfig("_oauth", "OAuth Connections")' in gate_store
+    assert "Your message sends automatically once a model is connected." in gate_component
+    assert "openOnboarding('cloud')" in gate_component
+    assert "openOnboarding('local')" in gate_component
+    assert "openOauthConfiguration()" in gate_component
+    assert "Advanced model configuration" in gate_component
+    assert "Advanced settings" not in gate_component
+    assert "model-gate-fields" not in gate_component
+    assert "Connect model" not in gate_component
+    assert "accountsOpen" not in gate_store
+    assert "saveInlineSetup" not in gate_store
+    assert """.model-gate-card {
+      display: grid;
+      gap: 0.75rem;
+    }""" in gate_component
+    assert "Connect a model to send" in input_store
 
 
 def test_welcome_composer_does_not_overlap_idle_progress_placeholder() -> None:
     input_store = _read("webui/components/chat/input/input-store.js")
 
-    assert "!!chatsStore.selected &&\n      this._getSendState() !== \"all\"" in input_store
+    assert "!!chatsStore.selected &&\n      ![\"all\", \"blocked\"].includes(this._getSendState())" in input_store
 
 
 def test_welcome_composer_buttons_keep_target_geometry_without_glow() -> None:

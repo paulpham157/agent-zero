@@ -7,7 +7,7 @@
         <div class="discovery-slot"
              @modal-closed.window="$store.discoveryStore.refreshCards()"
              x-create="$store.discoveryStore.refreshCards()"
-             x-show="!($store.welcomeStore?.banners || []).some(b => b.id === 'missing-api-key') && ($store.discoveryStore.featureCards.length > 0 || $store.discoveryStore.oauthAccountCards.length > 0 || $store.discoveryStore.hasDismissedCards)">
+             x-show="$store.discoveryStore.featureCards.length > 0 || $store.discoveryStore.oauthAccountCards.length > 0 || $store.discoveryStore.hasDismissedCards">
 
             <section class="discovery-features-panel" x-show="$store.discoveryStore.featureCards.length > 0">
                 <header class="discovery-panel-header">
