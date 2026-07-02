@@ -72,6 +72,10 @@ textarea:focus {
   filter: brightness(1.2);
 }
 
+.masked-text-input {
+  -webkit-text-security: disc;
+}
+
 .light-mode input[type="text"]:focus,
 .light-mode input[type="number"]:focus,
 .light-mode input[type="password"]:focus, 
