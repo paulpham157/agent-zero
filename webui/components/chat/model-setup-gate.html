@@ -20,7 +20,19 @@
             <p class="model-gate-intro" x-text="$store.modelGate.introText"></p>
 
             <div class="model-gate-card">
-              <div class="model-gate-fork">
+              <div class="model-gate-fork is-single" x-show="$store.modelGate.accountConnected">
+                <button type="button"
+                        class="model-gate-option"
+                        @click="$store.modelGate.openAdvancedModelConfiguration()">
+                  <span class="model-gate-option-title">
+                    <span class="material-symbols-outlined" aria-hidden="true">tune</span>
+                    <span>Choose models</span>
+                  </span>
+                  <span class="model-gate-option-sub">Select Main and Utility models</span>
+                </button>
+              </div>
+
+              <div class="model-gate-fork" x-show="!$store.modelGate.accountConnected">
                 <button type="button"
                         class="model-gate-option"
                         :class="{ selected: $store.modelGate.choice === 'cloud' }"
@@ -44,7 +56,7 @@
               </div>
 
               <div class="model-gate-accounts">
-                <span>Or connect an account: Codex, Copilot, Gemini, Grok</span>
+                <span x-text="$store.modelGate.accountConnected ? `Connected account: ${$store.modelGate.accountLabel || 'ready'}` : 'Or connect an account: Codex, Copilot, Gemini, Grok'"></span>
                 <button type="button" @click="$store.modelGate.openOauthConfiguration()">
                   <span>Show accounts</span>
                 </button>
@@ -88,6 +100,10 @@
       display: grid;
       grid-template-columns: repeat(2, minmax(0, 1fr));
       gap: 0.6rem;
+    }
+
+    .model-gate-fork.is-single {
+      grid-template-columns: 1fr;
     }
 
     .model-gate-option {

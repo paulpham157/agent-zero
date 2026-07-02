@@ -13,6 +13,8 @@ export const store = createStore("modelGate", {
   active: false,
   connected: false,
   connectedLabel: "",
+  accountConnected: false,
+  accountLabel: "",
   pending: null,
   gateMessageId: "",
   choice: "",
@@ -30,6 +32,9 @@ export const store = createStore("modelGate", {
     if (this.connected) {
       return `Model connected: ${this.connectedLabel || "ready"}`;
     }
+    if (this.accountConnected) {
+      return `${this.accountLabel || "Your AI account"} is connected. Choose Main and Utility models and I'll answer right away.`;
+    }
     return "I'm ready to work on this — I just need a model to think with. Pick one and I'll answer right away.";
   },
 
@@ -41,6 +46,9 @@ export const store = createStore("modelGate", {
       void this.dispatchPendingIfConfigured();
     });
     document.addEventListener("model-configured", () => {
+      void this.dispatchPendingIfConfigured();
+    });
+    document.addEventListener("model-setup-changed", () => {
       void this.dispatchPendingIfConfigured();
     });
     document.addEventListener("modal-closed", () => {
@@ -56,25 +64,26 @@ export const store = createStore("modelGate", {
     try {
       const data = await callJsonApi("/plugins/_model_config/model_config_get", {});
       this.applyModelStatus(data);
-      if (data?.model_configured) return true;
-      if (!(await this.tryConnectedAccountDefaults())) return false;
-      const refreshed = await callJsonApi("/plugins/_model_config/model_config_get", {});
-      this.applyModelStatus(refreshed);
-      return !!refreshed?.model_configured;
+      if (!data?.model_configured) await this.refreshConnectedAccountState();
+      return !!data?.model_configured;
     } catch (error) {
       console.error("Could not check model configuration:", error);
       return true;
     }
   },
 
-  async tryConnectedAccountDefaults() {
+  async refreshConnectedAccountState() {
     try {
       const { store: oauthConfigStore } = await import("/plugins/_oauth/webui/oauth-config-store.js");
       await oauthConfigStore.loadStatus();
-      const providerId = oauthConfigStore.connectedProviderCards()[0]?.provider_id || "";
-      return providerId ? oauthConfigStore.autoApplyConnectedProviderIfNeeded(providerId) : false;
+      const account = oauthConfigStore.connectedProviderCards()[0] || null;
+      this.accountConnected = Boolean(account);
+      this.accountLabel = account?.short_name || account?.display_name || account?.provider_id || "";
+      return this.accountConnected;
     } catch (error) {
-      console.error("Could not apply connected account defaults:", error);
+      console.error("Could not check connected accounts:", error);
+      this.accountConnected = false;
+      this.accountLabel = "";
       return false;
     }
   },

@@ -23,8 +23,8 @@
 - Missing model setup is gated at send intent: the first unconfigured send renders an in-thread setup card, keeps the pending prompt in browser session storage for refresh recovery, and must not call `/message_async` until a chat model is configured.
 - While the setup gate is open, the composer remains typeable but send is blocked until setup succeeds.
 - The setup gate must delegate Cloud/Local setup, account connections, and advanced model configuration to the existing onboarding and plugin settings modals; do not duplicate provider/model/key forms inline.
-- Before blocking, the setup gate should reuse existing connected OAuth account defaults when they can make the chat model usable.
-- Model setup surfaces that make the chat model usable must notify the gate with `model-configured` or an existing modal/onboarding completion signal so the pending prompt can retry automatically.
+- A connected OAuth account without Main/Utility model selection is its own gate state; route to model configuration and do not select models automatically.
+- Model setup surfaces that change readiness must notify the gate with `model-setup-changed`, `model-configured`, or an existing modal/onboarding completion signal so the pending prompt can retry automatically.
 
 ## Work Guidance
 

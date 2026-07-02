@@ -111,13 +111,15 @@ def test_welcome_composer_can_create_a_chat_before_sending() -> None:
     assert "sessionStorage.getItem(STORAGE_KEY)" in gate_store
     assert "sessionStorage.removeItem(STORAGE_KEY)" in gate_store
     assert 'import("/plugins/_oauth/webui/oauth-config-store.js")' in gate_store
-    assert "tryConnectedAccountDefaults()" in gate_store
-    assert "oauthConfigStore.connectedProviderCards()[0]?.provider_id" in gate_store
-    assert "oauthConfigStore.autoApplyConnectedProviderIfNeeded(providerId)" in gate_store
-    assert "const refreshed = await callJsonApi(\"/plugins/_model_config/model_config_get\", {});" in gate_store
+    assert "refreshConnectedAccountState()" in gate_store
+    assert "accountConnected" in gate_store
+    assert "accountLabel" in gate_store
+    assert "oauthConfigStore.connectedProviderCards()[0] || null" in gate_store
+    assert "autoApplyConnectedProviderIfNeeded" not in gate_store
     assert "void this.dispatchPendingIfConfigured();" in gate_store
     assert "this.choice = \"\";" in gate_store
     assert 'document.addEventListener("model-configured"' in gate_store
+    assert 'document.addEventListener("model-setup-changed"' in gate_store
     assert "const currentContext = globalThis.getContext?.();" in gate_store
     assert "bypassModelGate: true" in gate_store
     assert 'openPluginConfig("_model_config", "Advanced model configuration")' in gate_store
@@ -126,6 +128,8 @@ def test_welcome_composer_can_create_a_chat_before_sending() -> None:
     assert "openOnboarding('cloud')" in gate_component
     assert "openOnboarding('local')" in gate_component
     assert "openOauthConfiguration()" in gate_component
+    assert "Choose models" in gate_component
+    assert "Connected account:" in gate_component
     assert "Advanced model configuration" in gate_component
     assert "Advanced settings" not in gate_component
     assert "model-gate-fields" not in gate_component
