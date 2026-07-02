@@ -134,29 +134,15 @@ export const store = createStore("modelGate", {
   },
 
   openOnboarding(choice) {
-    this.choice = choice === "local" ? "local" : "cloud";
+    this.choice = ["local", "account"].includes(choice) ? choice : "cloud";
     this.savePending();
+    onboardingStore.presetMode = this.choice;
     const modalPromise = window.openModal?.(ONBOARDING_MODAL_PATH);
-    void this.applyOnboardingChoice(this.choice);
     void Promise.resolve(modalPromise).then(() => this.dispatchPendingIfConfigured());
-  },
-
-  async applyOnboardingChoice(choice) {
-    for (let attempt = 0; attempt < 40; attempt += 1) {
-      if (onboardingStore.config && !onboardingStore.loading) {
-        onboardingStore.choosePath(choice);
-        return;
-      }
-      await new Promise((resolve) => setTimeout(resolve, 50));
-    }
   },
 
   async openAdvancedModelConfiguration() {
     await this.openPluginConfig("_model_config", "Advanced model configuration");
-  },
-
-  async openOauthConfiguration() {
-    await this.openPluginConfig("_oauth", "OAuth Connections");
   },
 
   async openPluginConfig(pluginName, title) {
@@ -239,7 +225,7 @@ export const store = createStore("modelGate", {
     this.connected = false;
     this.pending = { message, attachments: [], messageId, context };
     this.gateMessageId = String(saved?.gateMessageId || `model-gate-${messageId}`);
-    this.choice = saved?.choice === "local" || saved?.choice === "cloud" ? saved.choice : "";
+    this.choice = ["local", "cloud", "account"].includes(saved?.choice) ? saved.choice : "";
   },
 
   clearSavedPending() {

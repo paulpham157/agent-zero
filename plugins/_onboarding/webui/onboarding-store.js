@@ -78,16 +78,15 @@ function safeProviderName(provider) {
 }
 
 export const store = createStore("onboarding", {
-  step: "path",
-  pathChoice: "",
+  step: "connect",
+  providerMode: "cloud",
+  presetMode: "",
   loading: true,
   saving: false,
   config: null,
   providerDetails: {},
   selectedProviderId: "",
   selectedProviderOrigin: "cloud",
-  moreProviderQuery: "",
-  moreCloudOpen: false,
   sameAsMain: true,
   userTouchedModel: {
     chat_model: false,
@@ -109,7 +108,7 @@ export const store = createStore("onboarding", {
   oauthProviderUi: {},
 
   steps: [
-    { step: "path", label: "Choose path" },
+    { step: "connect", label: "Choose provider" },
     { step: "setup", label: "Connect" },
     { step: "utility", label: "Utility" },
     { step: "ready", label: "Ready" },
@@ -120,16 +119,15 @@ export const store = createStore("onboarding", {
   },
 
   resetState() {
-    this.step = "path";
-    this.pathChoice = "";
+    this.step = "connect";
+    this.providerMode = ["local", "account"].includes(this.presetMode) ? this.presetMode : "cloud";
+    this.presetMode = "";
     this.loading = true;
     this.saving = false;
     this.config = null;
     this.providerDetails = {};
     this.selectedProviderId = "";
     this.selectedProviderOrigin = "cloud";
-    this.moreProviderQuery = "";
-    this.moreCloudOpen = false;
     this.sameAsMain = true;
     this.userTouchedModel = { chat_model: false, utility_model: false };
     this.modelDropdown = {
@@ -217,22 +215,8 @@ export const store = createStore("onboarding", {
     };
   },
 
-  topCloudProviders() {
-    return TOP_CLOUD_IDS.map((id) => this.providerMeta(id));
-  },
-
-  moreCloudProviders() {
-    return MORE_CLOUD_IDS.map((id) => this.providerMeta(id));
-  },
-
-  filteredMoreCloudProviders() {
-    const query = this.moreProviderQuery.trim().toLowerCase();
-    const providers = this.moreCloudProviders();
-    if (!query) return providers;
-    return providers.filter((provider) => {
-      const haystack = `${provider.name} ${provider.short_description} ${provider.id}`.toLowerCase();
-      return haystack.includes(query);
-    });
+  cloudProviders() {
+    return [...TOP_CLOUD_IDS, ...MORE_CLOUD_IDS].map((id) => this.providerMeta(id));
   },
 
   localProviderCards() {
@@ -315,12 +299,7 @@ export const store = createStore("onboarding", {
     if (this.step === "setup") return "Choose your main model";
     if (this.step === "utility") return "Choose your utility model";
     if (this.step === "ready") return "Agent Zero is ready";
-    if (this.step === "path") return "Choose how to use AI models in Agent Zero";
-    if (this.step === "cloud") return "Choose your cloud AI provider";
-    if (this.step === "local") {
-      return "Choose your local LLM provider";
-    }
-    return "Choose how to use AI models in Agent Zero";
+    return "Choose your AI provider";
   },
 
   stepNumber(stepName) {
@@ -329,7 +308,6 @@ export const store = createStore("onboarding", {
   },
 
   currentStepNumber() {
-    if (this.step === "cloud" || this.step === "local") return 1;
     return this.stepNumber(this.step);
   },
 
@@ -337,18 +315,13 @@ export const store = createStore("onboarding", {
     return this.step === name;
   },
 
-  choosePath(path) {
-    this.pathChoice = path;
-    this.step = path === "local" ? "local" : "cloud";
+  setProviderMode(mode) {
+    this.providerMode = ["local", "account"].includes(mode) ? mode : "cloud";
   },
 
   goBack() {
-    if (this.step === "cloud" || this.step === "local") {
-      this.step = "path";
-      return;
-    }
     if (this.step === "setup") {
-      this.step = this.pathChoice === "local" ? "local" : "cloud";
+      this.step = "connect";
       return;
     }
     if (this.step === "utility") {
@@ -361,7 +334,7 @@ export const store = createStore("onboarding", {
   },
 
   showBackButton() {
-    return !["path", "ready"].includes(this.step);
+    return !["connect", "ready"].includes(this.step);
   },
 
   showPrimaryButton() {
@@ -410,7 +383,7 @@ export const store = createStore("onboarding", {
   async selectProvider(providerId, origin = "cloud") {
     this.selectedProviderId = providerId;
     this.selectedProviderOrigin = origin;
-    this.pathChoice = origin;
+    this.providerMode = ["local", "account"].includes(origin) ? origin : "cloud";
     const meta = this.providerMeta(providerId);
     this.applyProviderToSlot("chat_model", providerId, meta, { forceApiBase: origin === "local" });
     if (this.isOAuthProvider(providerId)) {
@@ -427,8 +400,7 @@ export const store = createStore("onboarding", {
   },
 
   async selectOAuthProvider(providerId) {
-    this.pathChoice = "cloud";
-    await this.selectProvider(providerId, "cloud");
+    await this.selectProvider(providerId, "account");
   },
 
   applyProviderToSlot(slotKey, providerId, meta, options = {}) {

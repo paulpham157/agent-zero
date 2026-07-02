@@ -123,13 +123,16 @@ def test_welcome_composer_can_create_a_chat_before_sending() -> None:
     assert "const currentContext = globalThis.getContext?.();" in gate_store
     assert "bypassModelGate: true" in gate_store
     assert 'openPluginConfig("_model_config", "Advanced model configuration")' in gate_store
-    assert 'openPluginConfig("_oauth", "OAuth Connections")' in gate_store
+    assert 'openPluginConfig("_oauth"' not in gate_store
     assert "Your message sends automatically once a model is connected." in gate_component
     assert "openOnboarding('cloud')" in gate_component
+    assert "openOnboarding('account')" in gate_component
     assert "openOnboarding('local')" in gate_component
-    assert "openOauthConfiguration()" in gate_component
+    assert gate_component.index("openOnboarding('cloud')") < gate_component.index("openOnboarding('account')") < gate_component.index("openOnboarding('local')")
+    assert "openOauthConfiguration" not in gate_component
+    assert "Show accounts" not in gate_component
+    assert "model-gate-accounts" not in gate_component
     assert "Choose models" in gate_component
-    assert "Connected account:" in gate_component
     assert "Advanced model configuration" in gate_component
     assert "Advanced settings" not in gate_component
     assert "model-gate-fields" not in gate_component

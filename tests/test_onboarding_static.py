@@ -5,25 +5,56 @@ import yaml
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 
-def test_onboarding_contains_guided_cloud_local_flow():
+def test_onboarding_contains_unified_provider_step():
     html = (PROJECT_ROOT / "plugins/_onboarding/webui/onboarding.html").read_text(encoding="utf-8")
     store = (PROJECT_ROOT / "plugins/_onboarding/webui/onboarding-store.js").read_text(encoding="utf-8")
+    gate_store = (PROJECT_ROOT / "webui/components/chat/model-gate-store.js").read_text(encoding="utf-8")
 
     assert "Cloud" in html
     assert "Local" in html
     assert "Welcome to Agent Zero" in html
-    assert "Choose how to use AI models in Agent Zero" in html + store
-    assert "Choose your cloud AI provider" in html + store
-    assert "Choose your local LLM provider" in html + store
-    assert "cloud-card.webp" in html
-    assert "local-card.webp" in html
+    assert "Choose your AI provider" in store
+
+    # The illustrated Cloud/Local path screen is gone: one merged provider step.
+    assert "Choose how to use AI models in Agent Zero" not in html + store
+    assert "path-card" not in html
+    assert "cloud-card.webp" not in html
+    assert "local-card.webp" not in html
+    assert not (PROJECT_ROOT / "plugins/_onboarding/webui/assets/cloud-card.webp").exists()
+    assert not (PROJECT_ROOT / "plugins/_onboarding/webui/assets/local-card.webp").exists()
+    assert "choosePath" not in html + store + gate_store
+    assert "isStep('connect')" in html
+    assert "isStep('path')" not in html
+    assert "isStep('cloud')" not in html
+    assert "isStep('local')" not in html
+
+    # Cloud/Account/Local segmented switch on the merged step.
+    assert "mode-switch" in html
+    assert "setProviderMode('cloud')" in html
+    assert "setProviderMode('account')" in html
+    assert "setProviderMode('local')" in html
+    assert "providerMode === 'cloud'" in html
+    assert "providerMode === 'account'" in html
+    assert "providerMode === 'local'" in html
+    assert html.index("setProviderMode('cloud')") < html.index("setProviderMode('account')") < html.index("setProviderMode('local')")
+    assert '{ step: "connect", label: "Choose provider" }' in store
+
+    # Cloud pane lists every provider directly and only mentions API keys;
+    # accounts live in their own pane.
+    assert "Connect with an API key" in html
+    assert "cloudProviders()" in html
+    assert "Click here if you don't see your provider" not in html
+    assert "moreCloudOpen" not in html + store
+    assert "API key or account connection" not in html
+
+    # The chat model gate presets the mode before the modal opens (no flash).
+    assert "presetMode" in store
+    assert "onboardingStore.presetMode = this.choice;" in gate_store
+    assert "applyOnboardingChoice" not in gate_store
+
     assert "oauthProviderCards()" in html + store
     assert "selectOAuthProvider(provider.provider_id)" in html
-    assert "path-oauth-account-section" in html
-    assert "or connect your AI account" in html
     assert "Connect one or more account-backed providers." not in html
-    assert ".path-oauth-account-section .oauth-account-section-head" in html
-    assert "font-weight: 760;" in html
     assert "Connect ChatGPT/Codex Account" not in html
     assert "Main model" in html
     assert "Refresh model list" in html
@@ -37,10 +68,7 @@ def test_onboarding_contains_guided_cloud_local_flow():
     assert "submitOAuthManualCallback" in html + store
     assert 'const OAUTH_START_API = "/plugins/_oauth/start_login";' in store
     assert "/plugins/_oauth/start_device_login" not in store
-    assert "Click here if you don't see your provider" in html
     assert "provider-description" not in html
-    assert "!$store.onboarding.isStep('cloud')" in html
-    assert "!$store.onboarding.isStep('local')" in html
     assert "main-model-field" in html
     assert "wide-inline-field" in html
     assert "utility-panel" in html
