@@ -10,7 +10,11 @@
   <div x-data>
     <template x-if="$store.whatsNew">
       <div class="whats-new-shell" x-init="$store.whatsNew.onOpen()" x-destroy="$store.whatsNew.cleanup()">
-        <section class="whats-new-media-panel" :aria-label="$store.whatsNew.currentSlide.mediaLabel">
+        <section
+          class="whats-new-media-panel"
+          x-show="$store.whatsNew.hasSlides()"
+          :aria-label="$store.whatsNew.currentSlide.mediaLabel"
+        >
           <template x-if="$store.whatsNew.currentSlide.mediaType === 'video'">
             <video
               class="whats-new-media"
@@ -35,7 +39,10 @@
           <div class="whats-new-eyebrow" x-text="$store.whatsNew.currentSlide.eyebrow"></div>
           <h3 x-text="$store.whatsNew.currentSlide.title"></h3>
           <p class="whats-new-summary" x-text="$store.whatsNew.currentSlide.summary"></p>
-          <ul class="whats-new-bullets">
+          <ul
+            class="whats-new-bullets"
+            x-show="$store.whatsNew.currentSlide.bullets.length"
+          >
             <template x-for="item in $store.whatsNew.currentSlide.bullets" :key="item">
               <li x-text="item"></li>
             </template>
@@ -44,7 +51,7 @@
 
         <div class="modal-footer whats-new-footer" data-modal-footer>
           <div class="whats-new-footer-left">
-            <div class="whats-new-footer-progress">
+            <div class="whats-new-footer-progress" x-show="$store.whatsNew.hasSlides()">
               <span class="whats-new-progress-label" x-text="$store.whatsNew.progressLabel()"></span>
               <div class="whats-new-progress-dots" role="tablist" aria-label="What's New slides">
                 <template x-for="(slide, index) in $store.whatsNew.slides" :key="slide.id">
@@ -60,7 +67,7 @@
                 </template>
               </div>
             </div>
-            <label class="whats-new-never-show">
+            <label class="whats-new-never-show" x-show="$store.whatsNew.hasSlides()">
               <input
                 type="checkbox"
                 :checked="$store.whatsNew.neverShowAgain"
@@ -70,7 +77,14 @@
             </label>
           </div>
           <div class="whats-new-footer-actions">
-            <button type="button" class="btn btn-cancel" @click="$store.whatsNew.skip()">Skip</button>
+            <button
+              type="button"
+              class="btn btn-cancel"
+              x-show="$store.whatsNew.hasSlides()"
+              @click="$store.whatsNew.skip()"
+            >
+              Skip
+            </button>
             <button
               type="button"
               class="btn btn-field"

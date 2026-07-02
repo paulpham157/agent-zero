@@ -5,9 +5,12 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 WHATS_NEW_PLUGIN = PROJECT_ROOT / "plugins/_whats_new"
 
 
-def test_whats_new_modal_uses_showcase_assets_and_branded_footer():
+def test_whats_new_modal_handles_empty_showcase_state():
     html = (WHATS_NEW_PLUGIN / "webui/main.html").read_text(encoding="utf-8")
     store = (WHATS_NEW_PLUGIN / "webui/whats-new-store.js").read_text(encoding="utf-8")
+    slide_data = (WHATS_NEW_PLUGIN / "webui/whats-new-slides.js").read_text(
+        encoding="utf-8"
+    )
 
     assert "What's New in Agent Zero" in html
     assert "data-modal-footer" in html
@@ -16,25 +19,19 @@ def test_whats_new_modal_uses_showcase_assets_and_branded_footer():
     assert "type=\"checkbox\"" in html
     assert "Don't show automatically again" in html
     assert "/plugins/_whats_new/webui/whats-new-store.js" in html
-    assert "/plugins/_whats_new/webui/assets" in store
+    assert "/plugins/_whats_new/webui/whats-new-slides.js" in store
     assert "a0_whats_new_never_show" in store
+    assert "No new updates right now" in store
+    assert "hasSlides()" in html + store
+    assert "export const slides = [];" in slide_data
 
-    for asset in ["parallel-subs.webm", "mcp-servers.png", "skills-scanner.png"]:
-        assert asset in html + store
-        assert (PROJECT_ROOT / "plugins/_whats_new/webui/assets" / asset).exists()
-
-    assert "Parallel tool calls and subagents" in store
-    assert (
-        "Agent Zero can now split work across parallel tool and subagents calls and combine concurrent steps results."
-        in store
-    )
-    assert "Redesigned MCP configuration UI" in store
-    assert "Skills Scanner powered by Snyk Agent Scan" in store
-    assert "Remote URL transports" in store
-    assert "Raw JSON" in store
-    assert "prompt-injection risks" in store
-    assert "Catch risky skill instructions early" in store
-    assert "Include MCP servers in the same pass" not in store
+    old_cards = html + store + slide_data
+    assert "Parallel tool calls and subagents" not in old_cards
+    assert "Redesigned MCP configuration UI" not in old_cards
+    assert "Skills Scanner powered by Snyk Agent Scan" not in old_cards
+    assert "parallel-subs.webm" not in old_cards
+    assert "mcp-servers.png" not in old_cards
+    assert "skills-scanner.png" not in old_cards
 
 
 def test_whats_new_legacy_modal_path_redirects_to_main_screen():
@@ -53,6 +50,8 @@ def test_whats_new_startup_trigger_is_version_gated_with_opt_out():
     assert "globalThis.gitinfo?.version" in content
     assert "a0_whats_new_seen_version" in content
     assert "a0_whats_new_never_show" in content
+    assert "/plugins/_whats_new/webui/whats-new-slides.js" in content
+    assert "slides.length" in content
     assert "/plugins/_whats_new/webui/main.html" in content
     assert "/plugins/_whats_new/webui/whats-new.html" in content
     assert "compareVersions" in content

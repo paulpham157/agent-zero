@@ -1,4 +1,5 @@
 import { getModalStack, isModalOpen, openModal } from "/js/modals.js";
+import { slides } from "/plugins/_whats_new/webui/whats-new-slides.js";
 
 const MODAL_PATH = "/plugins/_whats_new/webui/main.html";
 const LEGACY_MODAL_PATH = "/plugins/_whats_new/webui/whats-new.html";
@@ -109,6 +110,7 @@ function shouldNeverShow() {
 }
 
 function shouldShowWhatsNew(version = currentVersion()) {
+  if (!slides.length) return false;
   if (shouldNeverShow()) return false;
   if (!version) return false;
 
