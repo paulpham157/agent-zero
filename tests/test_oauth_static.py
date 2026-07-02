@@ -23,6 +23,7 @@ def test_oauth_settings_exposes_provider_cards_and_model_slots():
     assert "slotProviderChoices(slot.key)" in config_html
     assert "connectedProviderCards().length" in config_html
     assert "useProviderForSlot(slot.key, $event.target.value)" in config_html
+    assert ":value=\"$store.oauthConfig.slotCanUseModels(slot.key) ? $store.oauthConfig.modelSlot(slot.key).provider : ''\"" in config_html
     assert "slotCanUseModels(slot.key)" in config_html
     assert "<span>Account</span>" not in config_html
     assert "oauth-connected-panel" not in config_html

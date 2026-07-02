@@ -217,7 +217,7 @@
                     <label class="oauth-model-provider-field">
                       <span>Provider</span>
                       <select
-                        :value="$store.oauthConfig.modelSlot(slot.key).provider"
+                        :value="$store.oauthConfig.slotCanUseModels(slot.key) ? $store.oauthConfig.modelSlot(slot.key).provider : ''"
                         @change="$store.oauthConfig.useProviderForSlot(slot.key, $event.target.value)"
                         :disabled="!$store.oauthConfig.connectedProviderCards().length"
                       >
